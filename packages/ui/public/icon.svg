@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+  <!-- Ameba do MyBots: o mesmo bicho do painel, em loop. -->
+  <defs>
+    <linearGradient id="pele" x1="0.1" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="22" fill="#0f172a"/>
+  <path fill="url(#pele)" d="M50 13C67 13 87 26 87 46 87 66 69 87 50 87 31 87 13 68 13 48 13 28 33 13 50 13Z">
+    <animate attributeName="d" dur="7.5s" repeatCount="indefinite" calcMode="spline"
+      keyTimes="0;0.25;0.5;0.75;1" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1"
+      values="M50 13C67 13 87 26 87 46 87 66 69 87 50 87 31 87 13 68 13 48 13 28 33 13 50 13Z;
+              M50 16C70 16 84 30 84 50 84 70 68 84 50 84 32 84 16 69 16 49 16 29 30 16 50 16Z;
+              M50 12C68 12 86 29 86 49 86 69 67 86 50 86 33 86 14 67 14 47 14 27 32 12 50 12Z;
+              M50 15C69 15 85 28 85 48 85 68 69 85 50 85 31 85 15 70 15 50 15 30 31 15 50 15Z;
+              M50 13C67 13 87 26 87 46 87 66 69 87 50 87 31 87 13 68 13 48 13 28 33 13 50 13Z"/>
+  </path>
+  <ellipse cx="37" cy="31" rx="9" ry="5.5" fill="#fff" opacity=".2" transform="rotate(-22 37 31)"/>
+  <g>
+    <ellipse cx="41" cy="45" rx="7.2" ry="7.6" fill="#fff"/>
+    <ellipse cx="59" cy="45" rx="7.2" ry="7.6" fill="#fff"/>
+    <circle cx="41" cy="46" r="3.3" fill="#16202c"/>
+    <circle cx="59" cy="46" r="3.3" fill="#16202c"/>
+  </g>
+  <path d="M44 57q6 5.5 12 0" stroke="#16202c" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".8"/>
+</svg>

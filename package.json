@@ -1,0 +1,34 @@
+{
+  "name": "mybots",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MyBots — equipe de agentes de IA, um por PC, comandados por texto e voz",
+  "workspaces": [
+    "packages/shared",
+    "packages/hub",
+    "packages/node",
+    "packages/ui"
+  ],
+  "scripts": {
+    "hub": "npm run start -w @mybots/hub",
+    "node": "npm run start -w @mybots/node",
+    "build:ui": "npm run build -w @mybots/ui",
+    "dev:ui": "npm run dev -w @mybots/ui",
+    "test": "node --import tsx tests/cotas.test.ts && node --import tsx tests/e2e.test.ts && node --import tsx tests/diagnostico.test.ts && node --import tsx tests/sala.test.ts && node --import tsx tests/media.test.ts && node --import tsx tests/fala.test.ts && node --import tsx tests/trava.test.ts",
+    "test:opencode": "node --import tsx tests/opencode.test.ts"
+  },
+  "engines": {
+    "node": ">=20.10"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "ws": "^8.22.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.25.12": true
+  }
+}

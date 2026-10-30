@@ -1,0 +1,34 @@
+# --- dependências e build ---
+node_modules/
+dist/
+build/
+packages/ui/dist/
+
+# --- segredos: NADA disto vai para o GitHub ---
+.env
+.env.*
+!.env.example
+_chaves-guardadas.env
+*.pem
+*.key
+id_rsa*
+*_rsa
+*.p12
+*.pfx
+
+# --- dados da casa (banco, conhecimento, conversas, arquivos dos bots) ---
+dados/
+packages/hub/data/
+packages/hub/dados/
+bots/
+_bots-antigos/
+*.sqlite
+*.sqlite-*
+*.db
+
+# --- logs e lixo de execução ---
+*.log
+teste.txt
+_novo/
+.DS_Store
+Thumbs.db

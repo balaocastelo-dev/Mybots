@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tela</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0a0a0d; overflow: hidden; }
+  #tela { width: 100%; height: 100%; }
+  #aviso { position: absolute; inset: 0; display: grid; place-items: center; color: #9a9aa4;
+    font: 13px -apple-system, system-ui, sans-serif; text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+  <div id="tela"></div>
+  <div id="aviso">ligando na tela...</div>
+  <script type="module">
+    import RFB from "/novnc/rfb.js";
+    const q = new URLSearchParams(location.search);
+    const destino = q.get("destino") || "mac";
+    const senha = q.get("senha") || "";
+    const aviso = document.getElementById("aviso");
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const url = proto + "://" + location.host + "/ws/vnc?destino=" + encodeURIComponent(destino);
+    let rfb;
+    try {
+      rfb = new RFB(document.getElementById("tela"), url, { credentials: { password: senha } });
+      rfb.scaleViewport = true;
+      rfb.resizeSession = false;
+      rfb.addEventListener("connect", () => { aviso.style.display = "none"; });
+      rfb.addEventListener("securityfailure", (e) => {
+        aviso.style.display = "grid";
+        aviso.textContent = "a senha da tela nao foi aceita. Confira a senha VNC no Compartilhamento de Tela do Mac.";
+      });
+      rfb.addEventListener("disconnect", (e) => {
+        aviso.style.display = "grid";
+        aviso.textContent = e.detail && e.detail.clean
+          ? "tela desconectada."
+          : "nao consegui ligar na tela. O Mac precisa da senha VNC legada ligada no Compartilhamento de Tela.";
+      });
+    } catch (err) {
+      aviso.textContent = "erro ao iniciar a tela: " + err;
+    }
+  </script>
+</body>
+</html>

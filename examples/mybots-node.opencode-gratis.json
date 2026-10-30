@@ -1,0 +1,10 @@
+{
+  "hub": "ws://192.168.0.10:8790",
+  "token": "o-mesmo-token-do-hub",
+  "bot": { "id": "joao-videomaker", "name": "João Videomaker", "role": "Videomaker da empresa", "avatar": "🎬" },
+  "engine": "opencode",
+  "workspace": "./workspace",
+  "personaFile": "./persona.md",
+  "provider": { "kind": "opencode", "model": "big-pickle" },
+  "opencode": { "port": 4096, "spawn": true, "manageConfig": true }
+}

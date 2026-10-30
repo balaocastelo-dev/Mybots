@@ -1,0 +1,10 @@
+{
+  "hub": "ws://192.168.0.10:8790",
+  "token": "o-mesmo-token-do-hub",
+  "bot": { "id": "robertinho-auditor", "name": "Robertinho Auditor", "role": "Auditor do o ERP e das finanças", "avatar": "🧾" },
+  "engine": "direct",
+  "workspace": "./workspace",
+  "personaFile": "./persona.md",
+  "provider": { "kind": "anthropic", "model": "claude-sonnet-5-5", "maxTokens": 4096 },
+  "_comentario": "chave em ANTHROPIC_API_KEY no .env desta pasta."
+}

@@ -1,0 +1,10 @@
+{
+  "hub": "ws://192.168.0.10:8790",
+  "token": "o-mesmo-token-do-hub",
+  "bot": { "id": "malaquias-marketing", "name": "Malaquias Marketing", "role": "Marketing e redes sociais", "avatar": "📣" },
+  "engine": "direct",
+  "workspace": "./workspace",
+  "personaFile": "./persona.md",
+  "provider": { "kind": "nous", "model": "stepfun/step-3.7-flash:free" },
+  "_comentario": "Nous Portal (inference-api.nousresearch.com): chave em NOUS_API_KEY. Modelos grátis com ferramentas vistos em 29/10/2026: stepfun/step-3.7-flash:free, poolside/laguna-s-2.1:free, reflection/beam-1.0-501b-a23b:free. Baratos: z-ai/glm-5.3-flash, qwen/qwen3.8-flash. Lista completa: GET /v1/models."
+}

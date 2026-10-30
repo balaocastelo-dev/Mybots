@@ -1,0 +1,10 @@
+{
+  "hub": "ws://192.168.0.10:8790",
+  "token": "o-mesmo-token-do-hub",
+  "bot": { "id": "wendell-os", "name": "Wendell das O.S", "role": "Ordens de serviço e assistência técnica", "avatar": "🔧" },
+  "engine": "direct",
+  "workspace": "./workspace",
+  "personaFile": "./persona.md",
+  "provider": { "kind": "ollama", "model": "qwen3:30b", "baseURL": "http://192.168.0.50:11434/v1" },
+  "_comentario": "Ollama na RTX 4090: no PC dela, rode `ollama pull qwen3:30b` e libere a porta 11434 na rede (OLLAMA_HOST=0.0.0.0)."
+}

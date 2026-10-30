@@ -1,0 +1,184 @@
+import fs from "node:fs";
+import path from "node:path";
+import { execFile } from "node:child_process";
+
+/**
+ * O PC DA EMPRESA
+ *
+ * Cada empresa ganha um Linux so dela, num container, na mesma maquina onde o Hub
+ * roda. Tres motivos para ser assim, e nao um PC fisico nem uma VM na nuvem:
+ *
+ * - Fica LOGADO. O perfil do navegador mora num volume proprio, entao a sessao do
+ *   Instagram, do portal do fornecedor e do banco continua valendo amanha.
+ * - Sai do IP DA EMPRESA. O Hub ja roda dentro da empresa; uma VM na nuvem teria IP
+ *   de datacenter, e ai Instagram, Google e banco pedem verificacao toda hora e
+ *   acabam bloqueando a conta.
+ * - DA PARA VER. A imagem traz noVNC: a tela do Linux abre numa aba, entao o chefe
+ *   assiste o bot trabalhando em vez de ler um relatorio do que ele fez.
+ *
+ * Uma empresa, um container, um volume. Nada vaza de uma empresa para a outra.
+ */
+
+const IMAGEM = "lscr.io/linuxserver/chromium:latest";
+const PORTA_BASE_TELA = 7901;   // noVNC
+const PORTA_BASE_CDP = 9301;    // o navegador, para os bots
+const RAIZ = path.resolve(process.cwd(), "dados", "maquinas");
+const MAPA = path.join(RAIZ, "portas.json");
+
+export type Maquina = {
+  empresaId: string;
+  container: string;
+  portaTela: number;
+  portaCdp: number;
+  estado: "ligada" | "desligada" | "sem-docker" | "nao-criada";
+  telaUrl?: string;
+  erro?: string;
+};
+
+function docker(args: string[], msTeto = 60000): Promise<{ ok: boolean; saida: string }> {
+  return new Promise((resolve) => {
+    execFile("docker", args, { timeout: msTeto, windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (e, out, err) => {
+      resolve({ ok: !e, saida: (out || "") + (err || "") });
+    });
+  });
+}
+
+export async function temDocker(): Promise<boolean> {
+  return (await docker(["info", "--format", "{{.ServerVersion}}"], 20000)).ok;
+}
+
+
+/**
+ * O Chromium IGNORA --remote-debugging-address e so escuta em 127.0.0.1 dentro do
+ * container -- entao o Docker nao tem como publicar a porta dele. A saida e uma
+ * ponte TCP de 0.0.0.0:9223 para 127.0.0.1:9222, rodando dentro do proprio
+ * container. A imagem nao traz socat, mas traz python3: nada a instalar, nada que
+ * dependa de internet na hora de subir a maquina da empresa.
+ */
+const PONTE_PY = `import socket, threading
+
+ALVO = ("127.0.0.1", 9222)
+
+def jogar(a, b):
+    try:
+        while True:
+            d = a.recv(65536)
+            if not d:
+                break
+            b.sendall(d)
+    except Exception:
+        pass
+    finally:
+        for s in (a, b):
+            try:
+                s.close()
+            except Exception:
+                pass
+
+def atender(c):
+    try:
+        s = socket.create_connection(ALVO, 10)
+    except Exception:
+        c.close()
+        return
+    threading.Thread(target=jogar, args=(c, s), daemon=True).start()
+    threading.Thread(target=jogar, args=(s, c), daemon=True).start()
+
+srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind(("0.0.0.0", 9223))
+srv.listen(64)
+while True:
+    c, _ = srv.accept()
+    atender(c)
+`;
+
+/** Sobe a ponte dentro do container. Chamar de novo nao faz mal: a segunda nao
+ *  consegue a porta e morre sozinha. */
+async function garantirPonte(container: string, volume: string) {
+  try { fs.writeFileSync(path.join(volume, "ponte.py"), PONTE_PY); } catch { /* volume ainda montando */ }
+  await docker(["exec", "-d", container, "/lsiopy/bin/python3", "/config/ponte.py"], 20000);
+}
+function limpo(id: string) { return id.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 40); }
+export function nomeDoContainer(empresaId: string) { return "mybots-" + limpo(empresaId); }
+
+/** Portas fixas por empresa: a tela precisa do mesmo endereco amanha. */
+function portasDe(empresaId: string): { portaTela: number; portaCdp: number } {
+  fs.mkdirSync(RAIZ, { recursive: true });
+  let mapa: Record<string, number> = {};
+  try { mapa = JSON.parse(fs.readFileSync(MAPA, "utf8")); } catch { mapa = {}; }
+  if (mapa[empresaId] === undefined) {
+    const usados = new Set(Object.values(mapa));
+    let i = 0; while (usados.has(i)) i++;
+    mapa[empresaId] = i;
+    fs.writeFileSync(MAPA, JSON.stringify(mapa, null, 2));
+  }
+  const i = mapa[empresaId];
+  return { portaTela: PORTA_BASE_TELA + i, portaCdp: PORTA_BASE_CDP + i };
+}
+
+export async function estadoDa(empresaId: string): Promise<Maquina> {
+  const container = nomeDoContainer(empresaId);
+  const { portaTela, portaCdp } = portasDe(empresaId);
+  const base: Maquina = { empresaId, container, portaTela, portaCdp, estado: "nao-criada" };
+  if (!(await temDocker())) return { ...base, estado: "sem-docker", erro: "o Docker nao esta no ar nesta maquina" };
+  const r = await docker(["inspect", "-f", "{{.State.Running}}", container], 20000);
+  if (!r.ok) return base;
+  const ligada = r.saida.trim() === "true";
+  return { ...base, estado: ligada ? "ligada" : "desligada", telaUrl: ligada ? `http://127.0.0.1:${portaTela}/` : undefined };
+}
+
+export async function ligar(empresaId: string, nomeEmpresa = ""): Promise<Maquina> {
+  const atual = await estadoDa(empresaId);
+  if (atual.estado === "sem-docker") return atual;
+  if (atual.estado === "ligada") return atual;
+
+  if (atual.estado === "desligada") {
+    const r = await docker(["start", atual.container], 60000);
+    if (!r.ok) return { ...atual, erro: r.saida.slice(0, 300) };
+    setTimeout(() => void garantirPonte(atual.container, path.join(RAIZ, limpo(empresaId))), 12000);
+    return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${atual.portaTela}/` };
+  }
+
+  const volume = path.join(RAIZ, limpo(empresaId));
+  fs.mkdirSync(volume, { recursive: true });
+  const r = await docker([
+    "run", "-d",
+    "--name", atual.container,
+    "--restart", "unless-stopped",
+    // o Chrome quebra com a /dev/shm minuscula padrao do Docker
+    "--shm-size=1g",
+    "-p", `127.0.0.1:${atual.portaTela}:3000`,
+    "-p", `127.0.0.1:${atual.portaCdp}:9223`,
+    "-v", `${volume}:/config`,
+    "-e", "TZ=America/Sao_Paulo",
+    "-e", `TITLE=${nomeEmpresa || empresaId}`,
+    // o 9222 ouvindo em 0.0.0.0 e preciso para o Hub alcancar de fora do container
+    "-e", "CHROME_CLI=--remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 --remote-allow-origins=* --start-maximized",
+    IMAGEM,
+  ], 180000);
+  if (!r.ok) return { ...atual, erro: r.saida.slice(0, 400) };
+  // o Chromium leva uns segundos para abrir; a ponte so vale depois dele
+  setTimeout(() => void garantirPonte(atual.container, volume), 15000);
+  return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${atual.portaTela}/` };
+}
+
+export async function desligar(empresaId: string): Promise<Maquina> {
+  const atual = await estadoDa(empresaId);
+  if (atual.estado !== "ligada") return atual;
+  await docker(["stop", atual.container], 60000);
+  return { ...atual, estado: "desligada", telaUrl: undefined };
+}
+
+/** Apaga o container E o perfil: a empresa perde as sessoes abertas nele. */
+export async function apagar(empresaId: string): Promise<{ ok: boolean }> {
+  const container = nomeDoContainer(empresaId);
+  await docker(["rm", "-f", container], 60000);
+  try { fs.rmSync(path.join(RAIZ, limpo(empresaId)), { recursive: true, force: true }); } catch { /* ja foi */ }
+  return { ok: true };
+}
+
+export async function imagemPronta(): Promise<boolean> {
+  const r = await docker(["image", "inspect", IMAGEM, "--format", "{{.Id}}"], 20000);
+  return r.ok;
+}

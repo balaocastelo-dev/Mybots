@@ -1,0 +1,10 @@
+{
+  "hub": "ws://192.168.0.10:8790",
+  "token": "o-mesmo-token-do-hub",
+  "bot": { "id": "kenlinho-corretor", "name": "Kenlinho Corretor", "role": "Corretor de imóveis", "avatar": "🏠" },
+  "engine": "direct",
+  "workspace": "./workspace",
+  "personaFile": "./persona.md",
+  "provider": { "kind": "gemini", "model": "gemini-2.5-flash" },
+  "_comentario": "chave em GEMINI_API_KEY no .env desta pasta. Para usar o Gemini dentro do OpenCode: engine opencode + o mesmo provider."
+}

@@ -8,6 +8,7 @@
 // Isto NÃO substitui o servidor do CRM (o painel do CRM), que continua sendo o caminho
 // da loja. É a saída própria de cada empresa nova.
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import QRCode from "qrcode";
 
@@ -136,12 +137,29 @@ export class WhatsAppDasEmpresas {
   async enviarArquivo(empresaId: string, numero: string, arq: { base64: string; nome: string; mime: string; legenda?: string }): Promise<{ ok: boolean; detalhe: string }> {
     const d = await this.destino(empresaId, numero);
     if ("erro" in d) return { ok: false, detalhe: d.erro };
-    const dados = Buffer.from(arq.base64, "base64");
+    let dados = Buffer.from(arq.base64, "base64");
     const ehFoto = /^image\//i.test(arq.mime);
-    await d.sock.sendMessage(d.jid, ehFoto
-      ? { image: dados, caption: arq.legenda || undefined }
-      : { document: dados, mimetype: arq.mime || "application/octet-stream", fileName: arq.nome, caption: arq.legenda || undefined });
-    return { ok: true, detalhe: `${ehFoto ? "Foto" : "Arquivo"} ${arq.nome} enviado para ${numero} pela conta da empresa.` };
+    const ehAudio = /^audio\//i.test(arq.mime);
+    if (ehFoto) {
+      await d.sock.sendMessage(d.jid, { image: dados, caption: arq.legenda || undefined });
+      return { ok: true, detalhe: `Foto ${arq.nome} enviada para ${numero} pela conta da empresa.` };
+    }
+    if (ehAudio) {
+      // Áudio tem que chegar como MENSAGEM DE VOZ, com a bolinha de play — não como
+      // arquivo para baixar, que ninguém abre. O WhatsApp só toca assim em OGG/Opus,
+      // então o que vier em outro formato passa pelo ffmpeg. Sem ffmpeg, vai como
+      // áudio mesmo assim: tocar mal é melhor que virar anexo.
+      let mime = arq.mime;
+      if (!/ogg|opus/i.test(mime)) {
+        const convertido = await paraOpus(dados).catch(() => null);
+        if (convertido) { dados = convertido; mime = "audio/ogg; codecs=opus"; }
+      }
+      await d.sock.sendMessage(d.jid, { audio: dados, mimetype: mime, ptt: true });
+      if (arq.legenda) await d.sock.sendMessage(d.jid, { text: arq.legenda });
+      return { ok: true, detalhe: `Áudio ${arq.nome} enviado como mensagem de voz para ${numero} pela conta da empresa.` };
+    }
+    await d.sock.sendMessage(d.jid, { document: dados, mimetype: arq.mime || "application/octet-stream", fileName: arq.nome, caption: arq.legenda || undefined });
+    return { ok: true, detalhe: `Arquivo ${arq.nome} enviado para ${numero} pela conta da empresa.` };
   }
 
   /** Manda texto pela conta da empresa. numero: só dígitos, com DDD (e 55 se faltar). */
@@ -155,4 +173,27 @@ export class WhatsAppDasEmpresas {
     await s.sock.sendMessage(achou.jid, { text: texto });
     return { ok: true, detalhe: `Enviado para ${numero} pela conta da empresa.` };
   }
+}
+
+/** Converte qualquer áudio para OGG/Opus pelo ffmpeg, que é o que o WhatsApp toca como voz. */
+function paraOpus(entrada: Buffer): Promise<Buffer<ArrayBuffer>> {
+  return new Promise((ok, erro) => {
+    const p = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-c:a", "libopus", "-b:a", "32k", "-ar", "48000", "-ac", "1", "-f", "ogg", "pipe:1"], { windowsHide: true });
+    const saida: Buffer[] = [];
+    let err = "";
+    p.stdout.on("data", (d) => saida.push(Buffer.from(d)));
+    p.stderr.on("data", (d) => { err += String(d); });
+    p.on("error", (e) => erro(e));
+    p.on("close", (c) => {
+      if (c !== 0 || !saida.length) return erro(new Error(err.slice(0, 200) || ("ffmpeg código " + c)));
+      // Copiar para um Buffer novo em vez de devolver o concat: o tipo que o Baileys
+      // aceita é o do Buffer.alloc, e o do concat não casa.
+      const junto = Buffer.concat(saida);
+      const saidaFinal: Buffer<ArrayBuffer> = Buffer.alloc(junto.length);
+      junto.copy(saidaFinal);
+      ok(saidaFinal);
+    });
+    p.stdin.on("error", () => {});
+    p.stdin.end(entrada);
+  });
 }

@@ -4,7 +4,7 @@ import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
 import path from "node:path";
 import { isControlMode } from "@mybots/shared";
-import { config, tokenAllows, botForToken } from "./config.js";
+import { config, tokenAllows, botForToken, raizDoProjeto } from "./config.js";
 import { Hub } from "./hub.js";
 import { registerMcp } from "./mcp.js";
 import { sugerirEmpresa } from "./sugerirEmpresa.js";
@@ -623,6 +623,40 @@ export async function startServer(hub: Hub) {
     const liberado = hub.podeFalarComCliente((req.params as any).id);
     if (!liberado.ok) return reply.code(400).send({ error: `Esta empresa ainda não aceitou os termos de uso de dados (falta: ${liberado.falta.join(", ")}). Abra Leis e consentimentos.` });
     const r = await hub.whats.enviar((req.params as any).id, String(b.para), String(b.texto));
+    return r.ok ? r : reply.code(400).send({ error: r.detalhe });
+  });
+
+  /**
+   * Manda foto ou documento pelo WhatsApp da empresa.
+   *
+   * Aceita `base64` (o arquivo já em mãos) ou `caminho` — e o caminho só vale DENTRO da
+   * pasta do projeto: uma rota que lê qualquer arquivo do disco por nome é um buraco
+   * aberto, e esta fica exposta na LAN. A mesma trava de consentimento do texto vale
+   * aqui: foto também é falar com cliente.
+   */
+  app.post("/api/empresas/:id/whatsapp/enviar-arquivo", async (req, reply) => {
+    const b = (req.body ?? {}) as any;
+    const empresaId = String((req.params as any).id);
+    if (!b.para) return reply.code(400).send({ error: "para é obrigatório" });
+    const liberado = hub.podeFalarComCliente(empresaId);
+    if (!liberado.ok) return reply.code(400).send({ error: `Esta empresa ainda não aceitou os termos de uso de dados (falta: ${liberado.falta.join(", ")}). Abra Leis e consentimentos.` });
+
+    let dados: Buffer;
+    let nome = String(b.nome ?? "arquivo");
+    if (b.base64) {
+      dados = Buffer.from(String(b.base64), "base64");
+    } else if (b.caminho) {
+      const raiz = raizDoProjeto();
+      const abs = path.resolve(raiz, String(b.caminho));
+      if (!abs.startsWith(raiz + path.sep)) return reply.code(400).send({ error: "o caminho precisa estar dentro da pasta do projeto" });
+      try { dados = await fs.promises.readFile(abs); } catch (e) { return reply.code(400).send({ error: `não consegui ler o arquivo: ${(e as Error).message}` }); }
+      if (!b.nome) nome = path.basename(abs);
+    } else {
+      return reply.code(400).send({ error: "mande base64 ou caminho" });
+    }
+    const mime = String(b.mime ?? (/\.(jpe?g)$/i.test(nome) ? "image/jpeg" : /\.png$/i.test(nome) ? "image/png" : /\.pdf$/i.test(nome) ? "application/pdf" : "application/octet-stream"));
+    const r = await hub.whats.enviarArquivo(empresaId, String(b.para), { base64: dados.toString("base64"), nome, mime, legenda: b.legenda ? String(b.legenda) : undefined });
+    hub.db.audit(null, "whatsapp.arquivo", { empresa: empresaId, nome, mime, kb: Math.round(dados.length / 1024), ok: r.ok });
     return r.ok ? r : reply.code(400).send({ error: r.detalhe });
   });
 

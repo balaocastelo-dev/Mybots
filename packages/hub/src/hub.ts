@@ -10,9 +10,10 @@ import {
 } from "@mybots/shared";
 import { Db } from "./db.js";
 import { WhatsAppDasEmpresas } from "./whatsapp.js";
+import { PrimeirosPassos } from "./primeirospassos.js";
 import { OBRIGATORIOS, VERSAO_LEGAL } from "./legal.js";
 import { custoMilesimos, reais } from "./creditos.js";
-import { config, tokenAllows } from "./config.js";
+import { config, tokenAllows , raizDoProjeto } from "./config.js";
 import { nextRunOf, validateCron } from "./scheduler.js";
 import { voiceConfig } from "./voice.js";
 import { splitThoughts } from "./thoughts.js";
@@ -180,15 +181,47 @@ export class Hub {
   /** O WhatsApp de cada empresa: conta propria, QR propria. */
   readonly whats: WhatsAppDasEmpresas;
 
+  /** O roteiro dos primeiros passos de uma empresa nova. */
+  readonly passos: PrimeirosPassos;
+
   constructor(dbFile: string, public readonly userName = process.env.MYBOTS_USER_NAME ?? "o chefe") {
     this.db = new Db(dbFile);
     this.whats = new WhatsAppDasEmpresas(path.dirname(dbFile), (estado) => this.broadcastUi({ type: "whatsapp", estado }));
     // Sessao ja escaneada volta sozinha quando o Hub sobe: ninguem escaneia duas vezes.
     setTimeout(() => { for (const id of this.whats.salvas()) void this.whats.conectar(id).catch(() => {}); }, 1500);
+    // O roteiro dos primeiros passos fala PELO Gerente. A interface e minuscula de
+    // proposito: ele nao enxerga o Hub inteiro, so o que precisa para falar, perguntar,
+    // guardar arquivo e ler a empresa.
+    this.passos = new PrimeirosPassos({
+      falar: (botId, texto, anexos) =>
+        void this.storeMessage(dmConversation(botId), this.botSender(botId), texto, anexos?.length ? { files: anexos } : undefined),
+      perguntar: (botId, questionId, question, options) => {
+        const q: PendingQuestion = { id: questionId, botId, conversationId: dmConversation(botId), question, options, createdAt: Date.now() };
+        this.db.insertQuestion(q);
+        this.questionOwner.set(q.id, botId);
+        this.broadcastUi({ type: "question", question: q });
+      },
+      fecharPergunta: (questionId, respostaGravada) => {
+        this.db.resolveQuestion(questionId, respostaGravada);
+        this.questionOwner.delete(questionId);
+        this.broadcastUi({ type: "question.resolved", questionId, answer: respostaGravada });
+      },
+      salvarArquivo: (botId, nome, mime, data) => this.saveFile(botId, nome, mime, data),
+      empresa: (empresaId) => {
+        const e = this.db.getEmpresa(empresaId);
+        return e ? { id: e.id, nome: e.nome, regras: e.regras, resumo: String(e.regras ?? "").replace(/\s+/g, " ").slice(0, 400) } : undefined;
+      },
+      whats: this.whats,
+      lerEstado: (chave) => this.db.getSetting(chave),
+      gravarEstado: (chave, valor) => this.db.setSetting(chave, valor),
+      audit: (botId, acao, detalhe) => this.db.audit(botId, acao, detalhe as Record<string, unknown>),
+      raizDoProjeto: raizDoProjeto(),
+    });
     USER.name = this.userName;
     this.media = new MediaService(this.db, (botId, name, mime, data) => this.saveFile(botId, name, mime, data), (id) => this.db.getFile(id) ?? undefined);
     for (const a of this.db.pendingApprovals()) this.approvalOwner.set(a.id, a.botId);
     for (const q of this.db.pendingQuestions()) this.questionOwner.set(q.id, q.botId);
+    this.passos.retomar(this.db.pendingQuestions());
     this.cleanOldThoughts();
   }
 
@@ -1301,7 +1334,15 @@ export class Hub {
   apresentarEmpresa(botId: string, nomeEmpresa: string, tentativas = 30) {
     if (this.nodes.get(botId)) {
       const sender: Sender = { kind: "system", id: "abertura", name: "Abertura" };
-      this.sendUserMessage(dmConversation(botId), `[Abertura da empresa ${nomeEmpresa}] Apresente o MyBots para esta empresa, como diz a sua persona, e termine sugerindo os primeiros bots.`, undefined, sender);
+      const empresaId = this.empresaDe(botId).id;
+      if (empresaId) {
+        // O ROTEIRO, nao o modelo. A persona ja mandava fazer isto e o modelo devolveu
+        // um menu de bullets; com modelo fraco ou sem chave nenhuma, instrucao nao vira
+        // comportamento. O codigo faz, e depois entrega a conversa ao modelo.
+        void this.passos.iniciar(botId, empresaId).catch((e) => this.db.audit(botId, "primeirospassos.erro", { erro: (e as Error).message }));
+      } else {
+        this.sendUserMessage(dmConversation(botId), `[Abertura da empresa ${nomeEmpresa}] Apresente o MyBots para esta empresa, como diz a sua persona, e termine sugerindo os primeiros bots.`, undefined, sender);
+      }
       this.db.audit(botId, "empresa.apresentacao", { empresa: nomeEmpresa });
       return;
     }
@@ -1370,6 +1411,9 @@ export class Hub {
   }
 
   answerQuestion(questionId: string, answer: string) {
+    // Pergunta do roteiro de primeiros passos: quem responde e o roteiro, nao o no.
+    // (E o roteiro apaga a resposta da tabela quando ela pode ser senha ou token.)
+    if (this.passos.responder(questionId, answer)) return;
     const botId = this.questionOwner.get(questionId);
     this.db.resolveQuestion(questionId, answer);
     this.questionOwner.delete(questionId);

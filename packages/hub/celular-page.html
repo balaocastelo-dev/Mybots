@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Celular</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { margin:0; height:100%; background:#0a0a0d; color:#e9e9ee;
+    font:14px -apple-system,system-ui,"Segoe UI",sans-serif; overflow:hidden; }
+  .top { display:flex; align-items:center; gap:10px; padding:8px 12px; background:#141418; border-bottom:1px solid #222; }
+  .top b { font-size:14px; }
+  .top small { color:#8b8b95; }
+  select { background:#1c1c22; color:#e9e9ee; border:1px solid #2c2c34; border-radius:8px; padding:5px 8px; }
+  .wrap { display:flex; height:calc(100% - 46px); }
+  .tela { flex:1; display:grid; place-items:center; background:#000; overflow:hidden; }
+  .tela img { max-width:100%; max-height:100%; object-fit:contain; display:block; cursor:pointer; user-select:none; -webkit-user-drag:none; }
+  .lado { width:180px; flex:none; padding:14px 12px; display:flex; flex-direction:column; gap:8px; background:#101014; border-left:1px solid #222; }
+  button.k { background:#1c1c22; color:#e9e9ee; border:1px solid #2c2c34; border-radius:10px; padding:10px; cursor:pointer; text-align:left; }
+  button.k:hover { background:#24242c; border-color:#3a3a44; }
+  .vazia { color:#70707c; text-align:center; padding:20px; }
+  input.txt { background:#1c1c22; color:#e9e9ee; border:1px solid #2c2c34; border-radius:10px; padding:9px; width:100%; box-sizing:border-box; }
+  .nota { color:#70707c; font-size:11px; line-height:1.5; margin-top:auto; }
+  .pt { width:9px;height:9px;border-radius:50%;background:#2ecc71;display:inline-block;margin-right:5px; }
+  .pt.off { background:#e74c3c; }
+  /* modo so-tela: so o aparelho, sem barra nem botoes (os toques continuam) */
+  body.sotela .top, body.sotela .lado { display:none; }
+  body.sotela .wrap { height:100%; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="pt" id="pt"></span>
+    <b>Celular</b> <small id="sub">procurando aparelho...</small>
+    <span style="flex:1"></span>
+    <select id="sel"></select>
+  </div>
+  <div class="wrap">
+    <div class="tela"><img id="img" alt="" /><div class="vazia" id="vazia">ligando na tela do aparelho...</div></div>
+    <div class="lado">
+      <button class="k" data-t="voltar">◀  Voltar</button>
+      <button class="k" data-t="inicio">⌂  Início</button>
+      <button class="k" data-t="recentes">▢  Recentes</button>
+      <button class="k" data-t="acordar">☀  Acordar</button>
+      <input class="txt" id="txt" placeholder="escrever e Enter" />
+      <div class="nota">Clique na tela = toque. Arraste = rolar. Vai em proporção, funciona em qualquer resolução.</div>
+    </div>
+  </div>
+<script>
+if (new URLSearchParams(location.search).has("so")) document.body.classList.add("sotela");
+let serial = "";
+const img = document.getElementById("img"), vazia = document.getElementById("vazia");
+const sel = document.getElementById("sel"), sub = document.getElementById("sub"), pt = document.getElementById("pt");
+let arr = null, parar = false, urlAnt = "";
+
+async function lista() {
+  try {
+    const r = await fetch("/api/celulares"); if (!r.ok) return;
+    const d = await r.json();
+    sel.innerHTML = "";
+    (d.lista||[]).forEach(a => { const o=document.createElement("option"); o.value=a.serial; o.textContent=a.modelo+(a.viaWifi?" (wifi)":" (cabo)")+(a.estado!=="device"?" — "+a.estado:""); o.disabled=a.estado!=="device"; sel.appendChild(o); });
+    const on = (d.lista||[]).find(a=>a.estado==="device");
+    if (!serial && on) { serial = on.serial; sel.value = serial; }
+    pt.className = "pt" + (on?"":" off");
+    sub.textContent = on ? (on.modelo+" · ao vivo") : "nenhum aparelho conectado";
+  } catch {}
+}
+sel.onchange = () => { serial = sel.value; };
+
+async function laco() {
+  while (!parar) {
+    if (!serial) { await sleep(800); continue; }
+    try {
+      const r = await fetch("/api/celulares/"+encodeURIComponent(serial)+"/tela?t="+Date.now());
+      if (r.ok) { const b=await r.blob(); const u=URL.createObjectURL(b); img.src=u; img.style.display="block"; vazia.style.display="none"; if(urlAnt)URL.revokeObjectURL(urlAnt); urlAnt=u; }
+      else { vazia.style.display="block"; vazia.textContent="a tela não respondeu — reconectando..."; await sleep(1500); }
+    } catch { await sleep(1500); }
+    await sleep(120);
+  }
+}
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+function onde(e){ const r=img.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height}; }
+function mandar(rota,corpo){ return fetch("/api/celulares/"+encodeURIComponent(serial)+"/"+rota,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(corpo)}).catch(()=>{}); }
+img.addEventListener("mousedown", e => { arr={...onde(e),t:Date.now()}; });
+img.addEventListener("mouseup", e => { const f=onde(e),i=arr; arr=null; if(!i)return; const d=Math.hypot(f.x-i.x,f.y-i.y); if(d>0.04) mandar("deslizar",{x1:i.x,y1:i.y,x2:f.x,y2:f.y,ms:Math.max(120,Date.now()-i.t)}); else mandar("tocar",{x:f.x,y:f.y}); });
+document.querySelectorAll("button.k").forEach(b => b.onclick = () => b.dataset.t==="acordar"?mandar("acordar",{}):mandar("tecla",{tecla:b.dataset.t}));
+document.getElementById("txt").addEventListener("keydown", e => { if(e.key==="Enter"&&e.target.value.trim()){ mandar("digitar",{texto:e.target.value}); e.target.value=""; } });
+
+lista(); setInterval(lista, 6000); laco();
+</script>
+</body>
+</html>

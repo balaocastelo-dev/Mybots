@@ -18,6 +18,25 @@ function loadDotEnv() {
 }
 loadDotEnv();
 
+/**
+ * A raiz do repositório, achada subindo até encontrar o package.json de cima.
+ *
+ * O Hub roda com a pasta de trabalho em packages/hub (é assim que o npm workspace
+ * inicia), então `process.cwd()` NÃO é a raiz. Quem usou cwd para achar scripts/ e .env
+ * procurou em packages/hub/scripts e nunca encontrou — o PDF da demonstração ficou
+ * quebrado assim, em silêncio, até a mensagem de erro passar a dizer o caminho.
+ */
+export function raizDoProjeto(): string {
+  let dir = process.cwd();
+  for (let i = 0; i < 5; i++) {
+    if (fs.existsSync(path.join(dir, "scripts")) && fs.existsSync(path.join(dir, "packages"))) return dir;
+    const acima = path.dirname(dir);
+    if (acima === dir) break;
+    dir = acima;
+  }
+  return process.cwd();
+}
+
 export const config = {
   host: process.env.MYBOTS_HUB_HOST ?? "0.0.0.0",
   port: Number(process.env.MYBOTS_HUB_PORT ?? 8790),

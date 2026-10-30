@@ -13,6 +13,7 @@ import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { pollinationsImage } from "./media.js";
+import { raizDoProjeto } from "./config.js";
 
 export type PecaDemo = { tipo: string; titulo: string; texto: string; url?: string; nome?: string; erro?: string };
 type Dados = { nome: string; site?: string; resumo?: string; regras?: string };
@@ -131,11 +132,21 @@ function rodar(cmd: string, args: string[], entrada?: string): Promise<void> {
 }
 
 async function rodarPython(args: string[], entrada: string) {
-  const script = path.join(process.cwd(), "scripts", "documento.py");
+  const script = path.join(raizDoProjeto(), "scripts", "documento.py");
   const tentativas = [process.env.MYBOTS_PYTHON, "python", "py", "python3"].filter(Boolean) as string[];
-  let ultimo: Error | null = null;
+  const falhas: string[] = [];
+  let real: Error | null = null;   // erro DO script, que vale mais que "não achei o exe"
   for (const exe of tentativas) {
-    try { await rodar(exe, [script, ...args], entrada); return; } catch (e) { ultimo = e as Error; }
+    try { await rodar(exe, [script, ...args], entrada); return; }
+    catch (e) {
+      const err = e as Error & { code?: string };
+      falhas.push(exe + ": " + (err.code === "ENOENT" ? "não está no PATH" : err.message));
+      if (err.code !== "ENOENT") real = err;   // achou o Python, o que quebrou foi o script
+    }
   }
-  throw ultimo ?? new Error("python não encontrado");
+  // Guardar só o último erro dizia "spawn python3 ENOENT" mesmo quando o problema era
+  // outro — manda consertar o que não está quebrado. Agora a mensagem diz o que houve
+  // com CADA tentativa, e o erro do script ganha do "não encontrei".
+  if (real) throw real;
+  throw new Error("nenhum Python encontrado pelo Hub (" + falhas.join("; ") + "). Defina MYBOTS_PYTHON no .env com o caminho completo do python.exe.");
 }

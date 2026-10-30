@@ -511,6 +511,25 @@ export async function startServer(hub: Hub) {
     hub.db.audit(null, "sistema.reset", { bots: apagados.length, empresas: empresas.length, erros: erros.length });
     return { ok: erros.length === 0, bots: apagados.length, empresas: empresas.length, erros };
   });
+  /**
+   * Roda (ou roda de novo) o roteiro de primeiros passos de uma empresa.
+   *
+   * Existe por dois motivos: testar sem precisar criar empresa nova, e dar ao chefe o
+   * "fazer de novo" quando ele pulou um canal e quer voltar.
+   */
+  app.post("/api/empresas/:id/primeiros-passos", async (req, reply) => {
+    if (!uiAuthorized(req)) return reply.code(401).send({ error: "não autorizado" });
+    const empresaId = String((req.params as any).id);
+    if (!hub.db.getEmpresa(empresaId)) return reply.code(404).send({ error: "empresa não encontrada" });
+    const bot = hub.summaries().find((b) => b.empresaId === empresaId && hub.ehGerente(b.id))
+      ?? hub.summaries().find((b) => b.empresaId === empresaId);
+    if (!bot) return reply.code(400).send({ error: "esta empresa ainda não tem bot para conduzir" });
+    if (!bot.online) return reply.code(409).send({ error: `o ${bot.name} está offline; ligue ele antes` });
+    const refazer = ((req.body ?? {}) as any).refazer === true;
+    void (refazer ? hub.passos.refazer(bot.id, empresaId) : hub.passos.iniciar(bot.id, empresaId))
+      .catch((e) => hub.db.audit(bot.id, "primeirospassos.erro", { erro: (e as Error).message }));
+    return { ok: true, bot: bot.id, refazer };
+  });
   app.post("/api/empresas/demo", async (req, reply) => {
     if (!uiAuthorized(req)) return reply.code(401).send({ error: "não autorizado" });
     const b = (req.body ?? {}) as any;
@@ -911,6 +930,9 @@ export async function startServer(hub: Hub) {
     }
     const paginaVnc = fileURLToPath(new URL("../novnc-page.html", import.meta.url));
     app.get("/tela-vnc.html", async (_req, reply) => reply.type("text/html").send(fs.readFileSync(paginaVnc, "utf8")));
+    // Pagina direta do celular: so a tela do aparelho, sem abertura nem empresa.
+    const paginaCel = fileURLToPath(new URL("../celular-page.html", import.meta.url));
+    app.get("/celular.html", async (_req, reply) => reply.type("text/html").send(fs.readFileSync(paginaCel, "utf8")));
   }
 
   if (fs.existsSync(config.uiDist)) {

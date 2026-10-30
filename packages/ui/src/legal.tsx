@@ -34,7 +34,14 @@ export function TelaLegal({ empresaId, empresaNome, onClose }: { empresaId: stri
   const aceitarTodosObrigatorios = async () => {
     const itens = docs.filter((d) => d.obrigatorio).map((d) => ({ doc: d.id, aceito: true }));
     const r = await api(`/empresas/${empresaId}/consentimentos`, { method: "POST", body: JSON.stringify({ itens }) });
-    if (r.ok) { const j = await r.json(); setReg(j.registros); setLiberado(j.liberado); }
+    if (r.ok) {
+      const j = await r.json();
+      setReg(j.registros); setLiberado(j.liberado);
+      // aceitou o que precisava: nao faz sentido deixar a pessoa na pagina de novo.
+      // Fecha so quando os obrigatorios ficaram todos de pe (liberado), senao mostra
+      // o erro em vez de sumir sem explicacao.
+      if (j.liberado?.ok) onClose();
+    }
   };
 
   return (

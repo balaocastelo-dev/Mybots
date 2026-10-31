@@ -216,16 +216,42 @@ export function TelaDaEmpresa({
   );
 }
 
+function VisaoDaEmpresa({ nome, empresaId, rotinas, arquivos }: { nome: string; empresaId: string | null; rotinas: number; arquivos: number }) {
+  const [texto, setTexto] = useState("lendo a máquina…");
+  useEffect(() => {
+    let vivo = true;
+    void fetch(comChave("/api/maquina")).then(async (r) => {
+      if (!vivo || !r.ok) return;
+      const m = await r.json();
+      const ram = m?.ram ? `${m.ram.usadaGb?.toFixed?.(1) ?? m.ram.usadaGb} / ${m.ram.totalGb} GB de memória` : "";
+      setTexto(ram || "máquina sem leitura agora");
+    }).catch(() => { if (vivo) setTexto("a máquina não respondeu"); });
+    return () => { vivo = false; };
+  }, []);
+  return (
+    <div className="lado-visao">
+      <p><b>{nome || "Sem empresa"}</b></p>
+      <p className="muted">{empresaId ? "Os bots desta empresa dividem o mesmo PC e o mesmo celular." : "Bot do sistema: não tem PC nem celular próprios."}</p>
+      <p className="muted">{texto}</p>
+      <p className="muted">{rotinas} rotina(s) · {arquivos} arquivo(s) nesta conversa</p>
+    </div>
+  );
+}
+
+type AbaLado = "visao" | "pc" | "celular" | "rotinas" | "arquivos";
+
 export function PainelDoPc({
-  empresaId, nome, onFechar, onEvent, conversationId,
+  empresaId, nome, onFechar, onEvent, conversationId, rotinas = [], arquivos = [],
 }: {
   empresaId: string | null;
   nome: string;
   onFechar: () => void;
   onEvent?: (l: (m: HubToUi) => void) => () => void;
   conversationId?: string;
+  rotinas?: { id: string; nome: string; cron: string }[];
+  arquivos?: { name: string; url: string }[];
 }) {
-  const [aba, setAba] = useState<"pc" | "celular">("pc");
+  const [aba, setAba] = useState<AbaLado>("pc");
   const [largura, setLargura] = useState(() => {
     try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 300 && n <= 760 ? n : 400; } catch { return 400; }
   });
@@ -251,24 +277,36 @@ export function PainelDoPc({
   };
 
   return (
-    <aside className="pc-lado" style={{ width: largura }} aria-label="Computer, tela do PC da empresa">
+    <aside className="pc-lado" style={{ width: largura }} aria-label="Painel da empresa">
       <div className="pc-pega" role="separator" aria-orientation="vertical" title="Arraste para alargar" onPointerDown={aoPuxar} />
       <header className="pc-lado-topo">
         <div>
-          <b>Computer</b>
-          <small>{empresaId ? (nome || "da empresa") : "sem empresa"}</small>
+          <b>{nome || "Empresa"}</b>
+          <small>{empresaId ? "PC e celular desta casa" : "sem empresa"}</small>
         </div>
-        <button className="icon-btn" type="button" title="Recolher a tela" onClick={onFechar}>›</button>
+        <button className="icon-btn" type="button" title="Recolher o painel" onClick={onFechar}>›</button>
       </header>
-      {empresaId && (
-        <div className="pc-abas" role="tablist">
-          <button type="button" className={aba === "pc" ? "on" : ""} onClick={() => setAba("pc")}>PC</button>
-          <button type="button" className={aba === "celular" ? "on" : ""} onClick={() => setAba("celular")}>Celular</button>
-        </div>
-      )}
-      {!empresaId && <p className="pc-sem-empresa">Este bot não está numa empresa. O PC e o celular são um de cada, compartilhados pelos bots dela.</p>}
+      <div className="pc-abas" role="tablist">
+        {(["visao", "pc", "celular", "rotinas", "arquivos"] as const).map((id) => (
+          <button key={id} type="button" role="tab" aria-selected={aba === id} className={aba === id ? "on" : ""} onClick={() => setAba(id)}>
+            {id === "visao" ? "Geral" : id === "pc" ? "PC" : id === "celular" ? "Celular" : id === "rotinas" ? "Rotinas" : "Arquivos"}
+          </button>
+        ))}
+      </div>
+      {aba === "visao" && <VisaoDaEmpresa nome={nome} empresaId={empresaId} rotinas={rotinas.length} arquivos={arquivos.length} />}
+      {!empresaId && (aba === "pc" || aba === "celular") && <p className="pc-sem-empresa">Este bot não está numa empresa. O PC e o celular são um de cada, compartilhados pelos bots dela.</p>}
       {empresaId && aba === "pc" && <TelaDaEmpresa empresaId={empresaId} nome={nome} onEvent={onEvent} conversationId={conversationId} compacto />}
       {empresaId && aba === "celular" && <CelularDaEmpresaPainel empresaId={empresaId} nome={nome} conversationId={conversationId} onEvent={onEvent} aoVivo />}
+      {aba === "rotinas" && (
+        <ul className="pc-hist lado-lista">
+          {rotinas.length ? rotinas.map((r) => <li key={r.id}><b>{r.nome}</b><span>{r.cron}</span></li>) : <p className="muted">Nenhuma rotina neste bot.</p>}
+        </ul>
+      )}
+      {aba === "arquivos" && (
+        <ul className="pc-hist lado-lista">
+          {arquivos.length ? arquivos.map((a, i) => <li key={a.url + i}><a href={comChave(a.url)}>{a.name}</a></li>) : <p className="muted">Os arquivos desta conversa aparecem aqui.</p>}
+        </ul>
+      )}
     </aside>
   );
 }

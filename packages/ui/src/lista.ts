@@ -1,4 +1,4 @@
-/** Ordem da barra: fixados no topo, e em cada empresa o gerente antes dos outros. */
+/** Ordem da barra: fixados na grade, e em cada empresa o gerente antes dos outros. */
 
 export type BotDaLista = {
   id: string;

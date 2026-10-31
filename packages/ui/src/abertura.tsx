@@ -358,7 +358,7 @@ export function Abertura({ onFim }: { onFim: () => void }) {
   const criar = async () => {
     if (!nome.trim()) return;
     setCriando(true); setErr("");
-    const r = await api("/empresas", { method: "POST", body: JSON.stringify({ nome, regras, idioma }) });
+    const r = await api("/empresas", { method: "POST", body: JSON.stringify({ nome, regras, idioma, site, instagram: insta, resumo }) });
     setCriando(false);
     if (!r.ok) { setErr((await r.json()).error ?? "erro ao criar"); return; }
     const e = await r.json();

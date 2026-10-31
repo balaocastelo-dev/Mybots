@@ -26,7 +26,7 @@ Uso:
 
 Imprime uma linha de JSON.
 """
-import argparse, base64, datetime, io, json, os, re, subprocess, sys, tempfile, time
+import argparse, base64, datetime, io, json, os, re, shutil, signal, subprocess, sys, tempfile, time
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -249,10 +249,58 @@ def dias_por_extenso(n):
 
 
 def achar_chrome():
+    # Produção é Windows (Chrome ou Edge). No Linux o mesmo binário entra pelo PATH:
+    # é o que o Hub desta máquina já usa para prévia e PDF, sem biblioteca nova.
+    env = os.environ.get("MYBOTS_CHROME")
+    if env and os.path.exists(env):
+        return env
     for c in CHROMES:
         if os.path.exists(c):
             return c
+    for nome in ("google-chrome-stable", "google-chrome", "chromium", "chromium-browser", "microsoft-edge", "msedge"):
+        achado = shutil.which(nome)
+        if achado:
+            return achado
+    mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    if os.path.exists(mac):
+        return mac
     return None
+
+
+def esperar_pdf(proc, saida, teto=40):
+    """O Chrome grava o PDF e, em alguns ambientes, não termina o processo.
+
+    Esperar o arquivo estabilizar e só então encerrar evita os 3 minutos de
+    timeout — e no Windows, onde ele fecha sozinho, o kill não chega a agir.
+    """
+    ultimo = -1
+    estavel = 0
+    limite = time.time() + teto
+    while time.time() < limite:
+        if proc.poll() is not None:
+            break
+        if os.path.exists(saida):
+            tam = os.path.getsize(saida)
+            if tam > 800 and tam == ultimo:
+                estavel += 1
+                if estavel >= 3:
+                    break
+            else:
+                estavel = 0
+            ultimo = tam
+        time.sleep(0.2)
+    if proc.poll() is None:
+        if os.name != "nt":
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                proc.kill()
+        else:
+            proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
 
 
 def main():
@@ -298,13 +346,23 @@ def main():
     saida = os.path.abspath(a.saida)
     os.makedirs(os.path.dirname(saida) or ".", exist_ok=True)
     cmd = [chrome, "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
+           "--disable-dev-shm-usage", "--no-first-run", "--hide-scrollbars",
            "--print-to-pdf=" + saida, "--virtual-time-budget=9000",
-           "--user-data-dir=" + os.path.join(tmp, "perfil"), fonte]
-    r = subprocess.run(cmd, capture_output=True, timeout=180)
-    time.sleep(0.4)
-
+           "--user-data-dir=" + os.path.join(tmp, "perfil")]
+    # Sandbox do Chrome quebra em container; no Windows de produção ele fica ligado.
+    if os.name != "nt":
+        cmd.append("--no-sandbox")
+    cmd.append(fonte)
+    err_path = os.path.join(tmp, "chrome.err")
+    with open(err_path, "wb") as err_f:
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=err_f,
+                                start_new_session=(os.name != "nt"))
+        esperar_pdf(proc, saida)
     if not os.path.exists(saida) or os.path.getsize(saida) < 800:
-        erro = (r.stderr or b"").decode("utf-8", "replace")[-400:]
+        try:
+            erro = open(err_path, "rb").read().decode("utf-8", "replace")[-400:]
+        except OSError:
+            erro = ""
         print(json.dumps({"ok": False, "erro": "o Chrome não gerou o PDF", "detalhe": erro}, ensure_ascii=False))
         return 1
     print(json.dumps({"ok": True, "arquivo": saida, "kb": round(os.path.getsize(saida) / 1024, 1),

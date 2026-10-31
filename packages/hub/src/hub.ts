@@ -11,6 +11,7 @@ import {
 import { Db } from "./db.js";
 import { WhatsAppDasEmpresas } from "./whatsapp.js";
 import { PrimeirosPassos } from "./primeirospassos.js";
+import { logoNaPasta } from "./folha.js";
 import { OBRIGATORIOS, VERSAO_LEGAL } from "./legal.js";
 import { custoMilesimos, reais } from "./creditos.js";
 import { config, tokenAllows , raizDoProjeto } from "./config.js";
@@ -219,8 +220,25 @@ export class Hub {
       salvarArquivo: (botId, nome, mime, data) => this.saveFile(botId, nome, mime, data),
       empresa: (empresaId) => {
         const e = this.db.getEmpresa(empresaId);
-        return e ? { id: e.id, nome: e.nome, regras: e.regras, resumo: String(e.regras ?? "").replace(/\s+/g, " ").slice(0, 400) } : undefined;
+        if (!e) return undefined;
+        const f = e.ficha ?? {};
+        // O resumo NÃO é um recorte das regras: isso fazia a folha repetir a política
+        // interna como se fosse "quem somos", e ainda por cima de outra instalação.
+        return {
+          id: e.id, nome: e.nome, regras: e.regras,
+          site: f.site, instagram: f.instagram, facebook: f.facebook,
+          resumo: f.resumo, segmento: f.segmento, contatos: f.contatos,
+          logo: f.logo || logoNaPasta(path.join(raizDoProjeto(), "dados", "empresas", e.id)),
+        };
       },
+      time: (empresaId) => this.db.listBots()
+        .filter((b) => b.empresaId === empresaId && b.name)
+        .map((b) => ({ nome: b.name, funcao: b.role || undefined })),
+      anotacoes: (empresaId) => this.db.saberesDaEmpresa(empresaId)
+        .map((s) => ({ titulo: s.titulo, texto: s.conteudo, tipo: s.tipo })),
+      memoria: (empresaId) => this.db.recallPrefix("", empresaId)
+        .slice(0, 40)
+        .map((m) => ({ chave: m.key, valor: m.value })),
       whats: this.whats,
       lerEstado: (chave) => this.db.getSetting(chave),
       gravarEstado: (chave, valor) => this.db.setSetting(chave, valor),

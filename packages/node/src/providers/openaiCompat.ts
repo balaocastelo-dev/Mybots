@@ -21,6 +21,10 @@ export class OpenAICompatProvider implements Provider {
     }
     const body: any = { model: this.model, messages, temperature: req.temperature ?? 0.3 };
     if (req.maxTokens) body.max_tokens = req.maxTokens;
+    if ((this.kind === "ollama" || this.kind === "lmstudio") && req.ollama) {
+      if (req.ollama.num_ctx) body.options = { num_ctx: req.ollama.num_ctx };
+      if (req.ollama.keep_alive !== undefined) body.keep_alive = req.ollama.keep_alive;
+    }
     if (req.tools.length) {
       body.tools = req.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
       body.tool_choice = "auto";

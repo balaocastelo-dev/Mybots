@@ -69,7 +69,9 @@ export type NodeToHub =
   /** pede ao Hub para gerar imagem/vídeo (provedores + cota ficam no Hub); o resultado entra na conversa como arquivo */
   | { type: "generate_media"; callId: string; conversationId: string; kind: MediaKind; prompt: string; refFileId?: string; seconds?: number; aspect?: string }
   /** gravar a tela do PC da empresa (o Hub é quem enxerga o container) */
-  | { type: "gravar_tela"; callId: string; acao: "iniciar" | "parar" | "estado"; conversationId?: string; legenda?: string };
+  | { type: "gravar_tela"; callId: string; acao: "iniciar" | "parar" | "estado"; conversationId?: string; legenda?: string; onde?: "pc" | "celular" }
+  /** o celular da empresa do bot, via ADB no Hub. aprovado = o chefe já liberou uma ação sensível */
+  | { type: "celular"; callId: string; acao: string; conversationId?: string; x?: number; y?: number; x2?: number; y2?: number; texto?: string; tecla?: string; pacote?: string; aprovado?: boolean };
 
 /** Hub → Nó */
 export type HubToNode =
@@ -214,7 +216,8 @@ export type HubToUi =
   /** Quem usou o PC da empresa por último. Um PC por empresa, compartilhado pelos bots dela. */
   | { type: "pc.uso"; empresaId: string; uso: UsoDoPc }
   /** A gravação da tela da empresa começou ou parou. */
-  | { type: "pc.gravacao"; empresaId: string; gravando: boolean; desde?: number; nome?: string }
+  | { type: "pc.gravacao"; empresaId: string; gravando: boolean; desde?: number; nome?: string; onde?: "pc" | "celular" }
+  | { type: "celular.uso"; empresaId: string; uso: UsoDoPc }
   /** o histórico mudou (rebobinou, editou, apagou, fixou): quem está com essa conversa aberta recarrega */
   | { type: "conversation.changed"; conversationId: string }
   /** o Hub mandou parar tudo: toda janela cala a fala, fecha o microfone e esquece o que estava gerando */

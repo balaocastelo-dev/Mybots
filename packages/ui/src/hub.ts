@@ -111,6 +111,7 @@ function reducer(s: State, a: Action): State {
         case "notify": return { ...s, toasts: empilha(s.toasts, m.text, m.botId) };
         case "pc.uso": return s;
         case "pc.gravacao": return s;
+        case "celular.uso": return s;
         case "error": return { ...s, toasts: empilha(s.toasts, m.message) };
       }
       return s;

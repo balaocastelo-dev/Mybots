@@ -111,7 +111,10 @@ export class Gravacoes {
     const onFrame = (jpeg: Quadro): boolean => {
       const s = this.ativas.get(p.empresaId);
       if (!s || s.fechando) return false;
-      if (!Buffer.isBuffer(jpeg) || jpeg.length < 3 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) return true;
+      if (!Buffer.isBuffer(jpeg) || jpeg.length < 8) return true;
+      const jpegOk = jpeg[0] === 0xff && jpeg[1] === 0xd8;
+      const pngOk = jpeg[0] === 0x89 && jpeg[1] === 0x50;
+      if (!jpegOk && !pngOk) return true;
       if (s.bytes + jpeg.length > lim.maxBytes) {
         if (s.frames.length) this.dispararLimite(p.empresaId);
         return false;
@@ -144,7 +147,7 @@ export class Gravacoes {
     clearTimeout(s.timer);
     this.ativas.delete(empresaId);
     try { s.cortar(); } catch { /* a fonte já caiu */ }
-    if (!s.frames.length) return { ok: false, erro: "a gravação saiu sem imagem. O navegador do PC estava aberto?" };
+    if (!s.frames.length) return { ok: false, erro: "a gravação saiu sem imagem." };
     const chaves = quadrosChave(s.frames.length).map((i) => s.frames[i]).filter(Boolean);
     return {
       ok: true,
@@ -176,7 +179,7 @@ export function codificarMp4(frames: Buffer[], fps = 8, bin = process.env.MYBOTS
   return new Promise((resolve) => {
     const child = execFile(bin, [
       "-y", "-v", "error",
-      "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", String(fps), "-i", "pipe:0",
+      "-f", "image2pipe", "-vcodec", frames[0][0] === 0x89 ? "png" : "mjpeg", "-framerate", String(fps), "-i", "pipe:0",
       "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "28",
       "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
       "-movflags", "+faststart",

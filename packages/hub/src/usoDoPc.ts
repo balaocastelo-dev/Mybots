@@ -83,4 +83,11 @@ export class UsosDoPc {
   ver(empresaId: string): UsoDoPc {
     return montarUso(this.porEmpresa.get(empresaId) ?? []);
   }
+
+  /** Já com o resumo pronto. O texto digitado não entra aqui. */
+  registrarDireto(empresaId: string, item: AcaoNaTela): UsoDoPc {
+    const prox = registrarUso(this.porEmpresa.get(empresaId) ?? [], item);
+    this.porEmpresa.set(empresaId, prox);
+    return montarUso(prox);
+  }
 }

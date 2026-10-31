@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
-import { FAIXA_TELA_EMPRESA, idSeguro } from "./ponteVnc.js";
+import { FAIXA_TELA_EMPRESA } from "./ponteVnc.js";
 
 /**
  * O PC DA EMPRESA
@@ -14,13 +14,19 @@ import { FAIXA_TELA_EMPRESA, idSeguro } from "./ponteVnc.js";
  * - Sai do IP DA EMPRESA. O Hub ja roda dentro da empresa; uma VM na nuvem teria IP
  *   de datacenter, e ai Instagram, Google e banco pedem verificacao toda hora e
  *   acabam bloqueando a conta.
- * - DA PARA VER. A imagem traz noVNC: a tela do Linux abre numa aba, entao o chefe
- *   assiste o bot trabalhando em vez de ler um relatorio do que ele fez.
+ * - DA PARA VER. A imagem traz o Selkies: a tela do Linux abre no painel, entao o
+ *   chefe assiste o bot trabalhando em vez de ler um relatorio do que ele fez.
  *
  * Uma empresa, um container, um volume. Nada vaza de uma empresa para a outra.
  */
 
-const IMAGEM = "lscr.io/linuxserver/chromium:latest";
+/**
+ * Tag fixa, a mesma que foi testada com o Selkies 2.1.0 (Wayland, servidor em
+ * 127.0.0.1:8082). O `latest` dessa leva, com SUBFOLDER, serve "Welcome to nginx!"
+ * na raiz da porta 3000. Sem SUBFOLDER o desktop fica em /.
+ */
+const IMAGEM = "lscr.io/linuxserver/chromium:1aca5d17-ls61";
+const MARCA_RAIZ = "MYBOTS_TELA=raiz";
 const PORTA_BASE_TELA = FAIXA_TELA_EMPRESA.min;   // GUI do container (noVNC / Selkies)
 const PORTA_BASE_CDP = 9301;    // o navegador, para os bots
 const RAIZ = path.resolve(process.cwd(), "dados", "maquinas");
@@ -33,14 +39,25 @@ export type Maquina = {
   portaCdp: number;
   estado: "ligada" | "desligada" | "sem-docker" | "nao-criada";
   telaUrl?: string;
-  /** O container foi criado com a tela servida em /pc/<empresa>/, para o painel embutir. */
+  /** O painel consegue embutir esta tela. */
   telaNoPainel?: boolean;
+  /**
+   * Container antigo: a imagem foi criada com SUBFOLDER=/pc/<id>/. A raiz da porta
+   * publicada é a página "Welcome to nginx!"; o desktop só existe embaixo da subpasta.
+   */
+  subpastaAntiga?: boolean;
   erro?: string;
 };
 
-/** Caminho da tela DENTRO do container. O painel abre o mesmo caminho no Hub. */
+/** Caminho da tela no Hub. Dentro do container o desktop fica na raiz. */
 export function subpastaDa(empresaId: string) {
   return `/pc/${empresaId}/`;
+}
+
+function linhaEnv(saida: string, nome: string): string | undefined {
+  const prefixo = nome + "=";
+  const linha = saida.split(/\r?\n/).map((l) => l.trim()).find((l) => l.startsWith(prefixo));
+  return linha?.slice(prefixo.length);
 }
 
 function docker(args: string[], msTeto = 60000): Promise<{ ok: boolean; saida: string }> {
@@ -136,11 +153,14 @@ export async function estadoDa(empresaId: string): Promise<Maquina> {
   if (!r.ok) return base;
   const [linha, ...resto] = r.saida.replace(/^\uFEFF/, "").split(/\r?\n/);
   const ligada = linha.trim() === "true";
-  const telaNoPainel = resto.some((l) => l.trim() === `SUBFOLDER=${subpastaDa(empresaId)}`);
+  const env = resto.join("\n");
+  const subpastaAntiga = linhaEnv(env, "SUBFOLDER") === subpastaDa(empresaId);
+  const naRaiz = linhaEnv(env, "MYBOTS_TELA") === "raiz";
   return {
     ...base,
     estado: ligada ? "ligada" : "desligada",
-    telaNoPainel,
+    telaNoPainel: naRaiz || subpastaAntiga,
+    subpastaAntiga,
     telaUrl: ligada ? `http://127.0.0.1:${portaTela}/` : undefined,
   };
 }
@@ -148,13 +168,19 @@ export async function estadoDa(empresaId: string): Promise<Maquina> {
 export async function ligar(empresaId: string, nomeEmpresa = ""): Promise<Maquina> {
   const atual = await estadoDa(empresaId);
   if (atual.estado === "sem-docker") return atual;
-  if (atual.estado === "ligada") return atual;
+  if (atual.estado === "ligada") {
+    // A imagem nova não serve o desktop na raiz quando nasceu com SUBFOLDER.
+    if (atual.subpastaAntiga) return recriar(empresaId, nomeEmpresa);
+    return atual;
+  }
 
   if (atual.estado === "desligada") {
     const r = await docker(["start", atual.container], 60000);
     if (!r.ok) return { ...atual, erro: r.saida.slice(0, 300) };
+    const deNovo = await estadoDa(empresaId);
+    if (deNovo.subpastaAntiga) return recriar(empresaId, nomeEmpresa);
     setTimeout(() => void garantirPonte(atual.container, path.join(RAIZ, limpo(empresaId))), 12000);
-    return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${atual.portaTela}/` };
+    return { ...deNovo, estado: "ligada", telaUrl: `http://127.0.0.1:${atual.portaTela}/` };
   }
 
   const volume = path.join(RAIZ, limpo(empresaId));
@@ -170,8 +196,7 @@ export async function ligar(empresaId: string, nomeEmpresa = ""): Promise<Maquin
     "-v", `${volume}:/config`,
     "-e", "TZ=America/Sao_Paulo",
     "-e", `TITLE=${nomeEmpresa || empresaId}`,
-    // a GUI passa a viver em /pc/<empresa>/ para o Hub poder embutir com senha
-    ...(idSeguro(empresaId) ? ["-e", `SUBFOLDER=${subpastaDa(empresaId)}`] : []),
+    "-e", MARCA_RAIZ,
     // o 9222 ouvindo em 0.0.0.0 e preciso para o Hub alcancar de fora do container
     "-e", "CHROME_CLI=--remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 --remote-allow-origins=* --start-maximized",
     IMAGEM,
@@ -179,7 +204,22 @@ export async function ligar(empresaId: string, nomeEmpresa = ""): Promise<Maquin
   if (!r.ok) return { ...atual, erro: r.saida.slice(0, 400) };
   // o Chromium leva uns segundos para abrir; a ponte so vale depois dele
   setTimeout(() => void garantirPonte(atual.container, volume), 15000);
-  return { ...atual, estado: "ligada", telaNoPainel: idSeguro(empresaId), telaUrl: `http://127.0.0.1:${atual.portaTela}/` };
+  return { ...atual, estado: "ligada", telaNoPainel: true, subpastaAntiga: false, telaUrl: `http://127.0.0.1:${atual.portaTela}/` };
+}
+
+const recriando = new Set<string>();
+
+/** Sobe de novo, com o mesmo volume, um PC que ainda está na subpasta antiga. */
+export async function garantirDesktopNaRaiz(empresaId: string, nomeEmpresa = ""): Promise<Maquina> {
+  const atual = await estadoDa(empresaId);
+  if (atual.estado !== "ligada" || !atual.subpastaAntiga || recriando.has(empresaId)) return atual;
+  recriando.add(empresaId);
+  try {
+    console.log(`[maquina] ${empresaId}: a tela está na subpasta antiga (nginx na raiz). Recriando o container; os logins ficam.`);
+    return await recriar(empresaId, nomeEmpresa);
+  } finally {
+    recriando.delete(empresaId);
+  }
 }
 
 /** Apaga o container e sobe de novo com a tela no painel. O volume (os logins) fica. */

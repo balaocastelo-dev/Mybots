@@ -10,7 +10,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
-import { alvoDaPonte, caminhoDaTela, idDaTela, portaDeEmpresaPermitida } from "../packages/hub/src/ponteVnc.ts";
+import { alvoDaPonte, caminhoDaTela, caminhoNoContainer, idDaTela, portaDeEmpresaPermitida } from "../packages/hub/src/ponteVnc.ts";
 
 const MAC = { host: "192.168.15.9", porta: 5900 };
 
@@ -52,6 +52,11 @@ test("caminho da tela: tira a senha e recusa saída da pasta", () => {
   assert.equal(idDaTela("/pc/balao/"), "balao");
   assert.equal(idDaTela("/pc/balao/api/websockets?k=segredo"), "balao");
   assert.equal(caminhoDaTela("/pc/balao/api/websockets?k=segredo&x=1"), "/pc/balao/api/websockets?x=1");
+  assert.equal(caminhoNoContainer("/pc/balao/"), "/");
+  assert.equal(caminhoNoContainer("/pc/balao"), "/");
+  assert.equal(caminhoNoContainer("/pc/balao/api/websockets?k=segredo&x=1"), "/api/websockets?x=1");
+  assert.equal(caminhoNoContainer("/pc/balao/assets/app.js"), "/assets/app.js");
+  assert.equal(caminhoNoContainer("/pc/balao/../etc/passwd"), null);
   assert.equal(caminhoDaTela("/pc/balao/../etc/passwd"), null);
   assert.equal(idDaTela("/ws/vnc?destino=mac"), null);
   assert.equal(idDaTela("/pc/../mac"), null);

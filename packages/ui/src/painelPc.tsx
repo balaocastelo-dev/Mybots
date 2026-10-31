@@ -137,6 +137,8 @@ export function TelaDaEmpresa({
   const mostrarTela = pronto && ligada && noPainel;
   const quente = !!uso.usando && Date.now() - uso.usando.quando < 120_000;
   const historico = uso.historico.slice(0, compacto ? 4 : 8);
+  // O Hub tira o /pc/<empresa> e pede a raiz do container. No Selkies 2.1.0 o desktop mora aí;
+  // com SUBFOLDER a raiz era a página "Welcome to nginx!".
   const src = `/pc/${encodeURIComponent(empresaId)}/${controle ? "" : "#shared"}`;
 
   return (

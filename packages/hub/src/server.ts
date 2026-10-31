@@ -16,7 +16,7 @@ import { startScheduler } from "./scheduler.js";
 import { pecaDaDemo } from "./demo.js";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
-import { alvoDaPonte, caminhoDaTela, idDaTela, idSeguro, portaDeEmpresaPermitida } from "./ponteVnc.js";
+import { alvoDaPonte, caminhoDaTela, caminhoNoContainer, idDaTela, idSeguro, portaDeEmpresaPermitida } from "./ponteVnc.js";
 import { videoExigeSenha } from "./gravacao.js";
 import { abrirWsDaTela, encaminharHttp } from "./ponteTela.js";
 // O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
@@ -26,7 +26,7 @@ import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA } from "./botManager.js";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
-import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, imagemPronta } from "./maquinas.js";
+import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
 import * as celular from "./celular.js";
 import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
@@ -80,24 +80,26 @@ export async function startServer(hub: Hub) {
   // A GUI do container entra por /pc/<empresa>/. O upstream é sempre 127.0.0.1
   // na porta da nossa faixa — o caminho não escolhe host. HTTP passa neste hook
   // (o WebSocket da mesma URL fica na rota, senão o Fastify recusa a rota duplicada).
-  const cacheTela = new Map<string, { em: number; porta: number | null }>();
-  const portaDaTela = async (id: string): Promise<number | null> => {
+  const cacheTela = new Map<string, { em: number; porta: number | null; naRaiz: boolean }>();
+  const portaDaTela = async (id: string): Promise<{ porta: number; naRaiz: boolean } | null> => {
     if (!idSeguro(id) || !hub.db.getEmpresa(id)) return null;
     const c = cacheTela.get(id);
-    if (c && Date.now() - c.em < 2000) return c.porta;
+    if (c && Date.now() - c.em < 2000) return c.porta == null ? null : { porta: c.porta, naRaiz: c.naRaiz };
     const m = await estadoDaMaquina(id);
     const porta = m.estado === "ligada" && portaDeEmpresaPermitida(m.portaTela) ? m.portaTela : null;
-    cacheTela.set(id, { em: Date.now(), porta });
-    return porta;
+    const naRaiz = !m.subpastaAntiga;
+    cacheTela.set(id, { em: Date.now(), porta, naRaiz });
+    return porta == null ? null : { porta, naRaiz };
   };
+  const caminhoUpstream = (url: string, naRaiz: boolean) => naRaiz ? caminhoNoContainer(url) : caminhoDaTela(url);
   const proxyDaTela = async (req: any, reply: any) => {
     const url = String(req.raw?.url || req.url || "");
     const id = idDaTela(url);
-    const caminho = caminhoDaTela(url);
-    if (!id || !caminho) return reply.code(404).send({ error: "tela indisponível" });
-    const porta = await portaDaTela(id);
-    if (porta == null) return reply.code(503).send({ error: "o PC desta empresa está desligado" });
-    encaminharHttp(req, reply, porta, caminho);
+    if (!id) return reply.code(404).send({ error: "tela indisponível" });
+    const alvo = await portaDaTela(id);
+    const caminho = alvo ? caminhoUpstream(url, alvo.naRaiz) : null;
+    if (!caminho || !alvo) return reply.code(alvo ? 404 : 503).send({ error: alvo ? "tela indisponível" : "o PC desta empresa está desligado" });
+    encaminharHttp(req, reply, alvo.porta, caminho);
   };
   app.addHook("onRequest", async (req, reply) => {
     const open = req.url.startsWith("/api/files/") || req.url.startsWith("/api/upload") || req.url.startsWith("/api/import") || req.url.startsWith("/api/channels/incoming");
@@ -156,7 +158,7 @@ export async function startServer(hub: Hub) {
     };
     void (async () => {
       let porta: number | null = null;
-      if (destino.startsWith("empresa:")) porta = await portaDaTela(destino.slice("empresa:".length));
+      if (destino.startsWith("empresa:")) porta = (await portaDaTela(destino.slice("empresa:".length)))?.porta ?? null;
       if (morto) return;
       const alvo = alvoDaPonte(destino, { mac: MAC_VNC, portaDaEmpresa: () => porta });
       if (!alvo) return fim();
@@ -183,11 +185,12 @@ export async function startServer(hub: Hub) {
       const caminho = caminhoDaTela(url);
       if (morto) return;
       if (!id || !caminho) { try { socket.close(); } catch { /* ok */ } return; }
-      const porta = await portaDaTela(id);
+      const alvo = await portaDaTela(id);
+      const upstream = alvo ? caminhoUpstream(url, alvo.naRaiz) : null;
       if (morto) return;
-      if (porta == null) { try { socket.close(); } catch { /* ok */ } return; }
+      if (!alvo || !upstream) { try { socket.close(); } catch { /* ok */ } return; }
       const prot = String(req.headers["sec-websocket-protocol"] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-      enviar = abrirWsDaTela(socket, porta, caminho, fila, prot);
+      enviar = abrirWsDaTela(socket, alvo.porta, upstream, fila, prot);
     })();
   });
 
@@ -511,7 +514,8 @@ export async function startServer(hub: Hub) {
   // vai por noVNC, entao o chefe assiste o bot em vez de ler o que ele fez.
   app.get("/api/empresas/:id/maquina", async (req) => {
     const id = (req.params as any).id as string;
-    const m = await estadoDaMaquina(id);
+    const emp = hub.db.getEmpresa(id);
+    const m = await garantirDesktopNaRaiz(id, emp?.nome ?? "");
     return { ...m, imagem: await imagemPronta() };
   });
   app.get("/api/empresas/:id/maquina/uso", async (req, reply) => {

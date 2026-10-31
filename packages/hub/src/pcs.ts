@@ -17,7 +17,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { relatoDoAndroid, rotaAndroid, type EstadoRelatado } from "./android.js";
+import { avisarAndroid, relatoDoAndroid, rotaAndroid, type EstadoRelatado } from "./android.js";
 import {
   IMAGEM_PC, MARCA_RAIZ, docker, garantirPonte, limpo, nomesDeContainerEmpresa,
   portaIntocavel, portasDaChave, raizMaquinas, temDocker,
@@ -423,6 +423,7 @@ async function acordarMesmo(botId: string, agora: number): Promise<EstadoPc | nu
     const r = await docker(["start", reg.container], 60000);
     if (!r.ok) return { ...atual, erro: r.saida.slice(0, 300) };
     if (process.env.MYBOTS_PC_PONTE !== "0") setTimeout(() => void garantirPonte(reg.container, volumeAbsoluto(reg)), 12000);
+    void avisarAndroid("ligar", botId);
     return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${reg.portaTela}/` };
   }
   // Container ainda não existe. Sem a imagem local não há o que criar — e não baixamos.
@@ -434,6 +435,7 @@ async function acordarMesmo(botId: string, agora: number): Promise<EstadoPc | nu
   const r = await docker(argumentosDeSubida(reg), 180000);
   if (!r.ok) return { ...atual, erro: r.saida.slice(0, 400) };
   if (process.env.MYBOTS_PC_PONTE !== "0") setTimeout(() => void garantirPonte(reg.container, volumeAbsoluto(reg)), 15000);
+  void avisarAndroid("ligar", botId);
   return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${reg.portaTela}/` };
 }
 
@@ -443,6 +445,7 @@ export async function pararPc(botId: string): Promise<EstadoPc | null> {
   if (!atual) return null;
   if (atual.estado !== "ligada") return atual;
   await docker(["stop", atual.container], 60000);
+  void avisarAndroid("desligar", botId);
   return { ...atual, estado: "desligada", telaUrl: undefined };
 }
 

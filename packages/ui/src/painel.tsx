@@ -1,15 +1,16 @@
+import { UI_BASE } from "./api";
 // ---------------------------------------------------------------------------
-// Peças do painel que vieram do app de celular (Grok Bot), analisadas no vídeo
-// de 30/10: preferências de lista (fixar, esconder, seção, apelido), o rodapé
+// PeÃ§as do painel que vieram do app de celular (Grok Bot), analisadas no vÃ­deo
+// de 30/10: preferÃªncias de lista (fixar, esconder, seÃ§Ã£o, apelido), o rodapÃ©
 // "Mensageou N bots" embaixo da resposta, a folha "Abrir troca com" e a
 // conversa entre bots em SOMENTE LEITURA.
 //
-// Por que somente leitura: a troca entre dois bots é o trabalho deles. O chefe
-// precisa VER, não entrar no meio — se ele escrevesse ali, a conversa deixaria
-// de ser entre eles e nenhum dos dois saberia com quem está falando.
+// Por que somente leitura: a troca entre dois bots Ã© o trabalho deles. O chefe
+// precisa VER, nÃ£o entrar no meio â€” se ele escrevesse ali, a conversa deixaria
+// de ser entre eles e nenhum dos dois saberia com quem estÃ¡ falando.
 //
 // O `Avatar` chega por propriedade em vez de ser importado do App.tsx: o App
-// importa este arquivo, então importar de volta fecharia um ciclo.
+// importa este arquivo, entÃ£o importar de volta fecharia um ciclo.
 // ---------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
@@ -20,10 +21,10 @@ export type PrefDoBot = { fixado?: boolean; escondido?: boolean; secao?: string;
 export type AvatarComp = (p: { bot: BotSummary; size?: number }) => JSX.Element;
 
 const api = (path: string, init?: RequestInit) =>
-  fetch(`/api${path}${location.search}`, { headers: { "content-type": "application/json" }, ...init });
+  fetch(`${UI_BASE}/api${path}${location.search}`, { credentials: "include", headers: { "content-type": "application/json" }, ...init });
 
 // ---------------------------------------------------------------------------
-// Preferências de lista. Ficam no Hub (não no navegador) para o celular e o PC
+// PreferÃªncias de lista. Ficam no Hub (nÃ£o no navegador) para o celular e o PC
 // mostrarem a mesma lista.
 // ---------------------------------------------------------------------------
 
@@ -64,7 +65,7 @@ export function usePainelPrefs() {
 export const nomeNaTela = (b: BotSummary, prefs: Record<string, PrefDoBot>) => prefs[b.id]?.apelido || b.name;
 
 // ---------------------------------------------------------------------------
-// Rodapé "Mensageou N bots" — embaixo da resposta, como no app.
+// RodapÃ© "Mensageou N bots" â€” embaixo da resposta, como no app.
 // ---------------------------------------------------------------------------
 
 export function ChipTrocas({ trocas, bots, Avatar, onAbrir }: {
@@ -91,7 +92,7 @@ export function ChipTrocas({ trocas, bots, Avatar, onAbrir }: {
 }
 
 // ---------------------------------------------------------------------------
-// Folha "Abrir troca com" — sobe de baixo, igual à do app.
+// Folha "Abrir troca com" â€” sobe de baixo, igual Ã  do app.
 // ---------------------------------------------------------------------------
 
 export function FolhaAbrirTroca({ trocas, bots, Avatar, onEscolher, onFechar }: {
@@ -146,7 +147,7 @@ export function TrocaEntreBots({ conversationId, bots, Avatar, onFechar }: {
   };
   useEffect(() => {
     void buscar();
-    // eles continuam conversando enquanto a tela está aberta
+    // eles continuam conversando enquanto a tela estÃ¡ aberta
     const t = setInterval(() => void buscar(), 4000);
     return () => clearInterval(t);
   }, [conversationId]);
@@ -155,7 +156,7 @@ export function TrocaEntreBots({ conversationId, bots, Avatar, onFechar }: {
   return (
     <>
       <header className="chat-head">
-        <button className="icon-btn" onClick={onFechar} title="Voltar">←</button>
+        <button className="icon-btn" onClick={onFechar} title="Voltar">â†</button>
         <span className="dupla">
           {a && <Avatar bot={a} size={60} />}
           {b && <Avatar bot={b} size={60} />}
@@ -167,8 +168,8 @@ export function TrocaEntreBots({ conversationId, bots, Avatar, onFechar }: {
       </header>
 
       <div className="messages troca-lista">
-        {carregando && !msgs.length && <div className="hint">abrindo a conversa…</div>}
-        {!carregando && !msgs.length && <div className="hint">Eles ainda não trocaram nenhuma mensagem.</div>}
+        {carregando && !msgs.length && <div className="hint">abrindo a conversaâ€¦</div>}
+        {!carregando && !msgs.length && <div className="hint">Eles ainda nÃ£o trocaram nenhuma mensagem.</div>}
         {msgs.map((m) => {
           const quem = bots.find((x) => x.id === m.sender.id);
           const daEsquerda = m.sender.id === ids[0];
@@ -184,13 +185,13 @@ export function TrocaEntreBots({ conversationId, bots, Avatar, onFechar }: {
         <div ref={fim} />
       </div>
 
-      <footer className="composer somente-leitura">🔒 Somente leitura</footer>
+      <footer className="composer somente-leitura">ðŸ”’ Somente leitura</footer>
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Caixinha de texto para "Renomear bot" e "Nova Seção".
+// Caixinha de texto para "Renomear bot" e "Nova SeÃ§Ã£o".
 // ---------------------------------------------------------------------------
 
 export function DialogoTexto({ titulo, rotulo, valor, placeholder, onOk, onFechar }: {
@@ -219,3 +220,5 @@ export function DialogoTexto({ titulo, rotulo, valor, placeholder, onOk, onFecha
     </div>
   );
 }
+
+

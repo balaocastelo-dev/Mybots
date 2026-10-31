@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type TouchEvent } from "react";
 import type { PendingApproval, PendingQuestion, StoredMessage } from "@mybots/shared";
 import { useToqueLongo } from "./ContextMenu";
 import type { ToolInfo } from "./hub";
@@ -21,7 +21,7 @@ export function Thought({ text }: { text: string }) {
   );
 }
 
-export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, onAbrirTela, onMenu, editando, onSalvarEdicao, onCancelarEdicao }: { m: StoredMessage; tools?: ToolInfo[]; answer?: string; showName: boolean; onSpeak?: () => void; onAbrirArquivo?: (f: ArquivoDoChat) => void; onAbrirTela?: () => void; onMenu?: (m: StoredMessage, x: number, y: number) => void; editando?: boolean; onSalvarEdicao?: (texto: string) => void; onCancelarEdicao?: () => void }) {
+export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, onAbrirTela, onMenu, editando, onSalvarEdicao, onCancelarEdicao }: { m: StoredMessage; tools?: ToolInfo[]; answer?: string; showName: boolean; onSpeak?: () => void; onAbrirArquivo?: (f: ArquivoDoChat, todos?: ArquivoDoChat[]) => void; onAbrirTela?: () => void; onMenu?: (m: StoredMessage, x: number, y: number) => void; editando?: boolean; onSalvarEdicao?: (texto: string) => void; onCancelarEdicao?: () => void }) {
   if (m.sender.kind === "system" && !m.sender.id.startsWith("routine:")) return <div className={"sys" + (m.meta?.error ? " err" : "")}>{m.text}</div>;
   const mine = m.sender.kind === "user" && m.sender.id === "user";
   const files = (m.meta?.files as Array<{ id: string; name: string; url: string; mime: string }> | undefined) ?? [];
@@ -38,7 +38,9 @@ export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, o
           {(showName && !mine) || routine || (m.sender.kind === "user" && !mine) ? <div className="who">{routine ? "⏰ " : ""}{m.sender.name}</div> : null}
           {m.meta?.thought ? <Thought text={String(m.meta.thought)} /> : null}
           {!(files.length && (m.text === files[0].name || m.text === `Enviou ${files[0].name}`)) && (m.text || m.meta?.streaming === true) && <Markdownish text={m.text} aoVivo={m.meta?.streaming === true} />}
-          {files.map((f) => <Arquivo key={f.id} f={f} tela={!!m.meta?.tela} onAbrir={onAbrirArquivo} onAbrirTela={onAbrirTela} />)}
+          {files.length >= 2
+            ? <PilhaArquivos files={files} onAbrir={onAbrirArquivo} onAbrirTela={onAbrirTela} tela={!!m.meta?.tela} />
+            : files.map((f) => <Arquivo key={f.id} f={f} tela={!!m.meta?.tela} onAbrir={onAbrirArquivo} onAbrirTela={onAbrirTela} />)}
           {answer && <div className="answered">Você respondeu: <b>{answer}</b></div>}
           {onSpeak && m.text ? <button className="speak-btn" title="Ler a mensagem inteira em voz alta" onClick={onSpeak}>🔊</button> : null}
           {onMenu && (
@@ -150,7 +152,7 @@ export const ehAudio = (f: ArquivoDoChat) => f.mime.startsWith("audio/");
 /** Um arquivo dentro da conversa. Documento se vê, não se clica para ver:
  *  o PDF já aparece aberto na primeira página, a imagem já aparece. Link solto
  *  obriga o chefe a abrir outra janela só para saber o que o bot mandou. */
-export function Arquivo({ f, tela, onAbrir, onAbrirTela }: { f: ArquivoDoChat; tela?: boolean; onAbrir?: (f: ArquivoDoChat) => void; onAbrirTela?: () => void }) {
+export function Arquivo({ f, tela, onAbrir, onAbrirTela }: { f: ArquivoDoChat; tela?: boolean; onAbrir?: (f: ArquivoDoChat, todos?: ArquivoDoChat[]) => void; onAbrirTela?: () => void }) {
   const src = f.url + location.search;
   const abrir = () => onAbrir?.(f);
   if (ehImagem(f) && tela && onAbrirTela) {
@@ -193,29 +195,158 @@ export function Arquivo({ f, tela, onAbrir, onAbrirTela }: { f: ArquivoDoChat; t
   return <div className="arq outro"><a href={src} target="_blank" rel="noopener">📎 {f.name}</a></div>;
 }
 
-/** Tela cheia: o PDF com as miniaturas e a busca do próprio navegador, a imagem
- *  inteira. Esc fecha, clicar no fundo fecha. */
-export function Visualizador({ f, onFechar }: { f: ArquivoDoChat; onFechar: () => void }) {
+/** Prévia de um arquivo no leque: imagem, 1ª página de PDF, ou ícone. */
+function PreviaCard({ f }: { f: ArquivoDoChat }) {
   const src = f.url + location.search;
+  if (ehImagem(f)) return <img src={src} alt={f.name} draggable={false} />;
+  if (ehPdf(f)) {
+    return (
+      <div className="pilha-doc pdf">
+        <iframe src={src + "#page=1&view=FitH&toolbar=0&navpanes=0"} title={f.name} tabIndex={-1} />
+        <span className="pilha-selo">PDF</span>
+      </div>
+    );
+  }
+  const planilha = /\.(xlsx?|csv|ods)$/i.test(f.name) || /sheet|csv|excel/i.test(f.mime);
+  const ext = (f.name.split(".").pop() || "?").slice(0, 4).toUpperCase();
+  return (
+    <div className={"pilha-doc" + (planilha ? " planilha" : " outro")}>
+      <span className="pilha-ext" aria-hidden>{planilha ? "XL" : ext}</span>
+      <span className="pilha-nome">{f.name}</span>
+    </div>
+  );
+}
+
+function rotuloPilha(files: ArquivoDoChat[]): string {
+  const n = files.length;
+  const soImg = files.every(ehImagem);
+  if (soImg) return n === 1 ? "1 imagem" : `${n} imagens`;
+  return n === 1 ? "1 arquivo" : `${n} arquivos`;
+}
+
+/** Leque de anexos: cartas levemente giradas atrás da da frente. Toque abre o carrossel. */
+export function PilhaArquivos({ files, onAbrir, onAbrirTela, tela }: {
+  files: ArquivoDoChat[];
+  onAbrir?: (f: ArquivoDoChat, todos?: ArquivoDoChat[]) => void;
+  onAbrirTela?: () => void;
+  tela?: boolean;
+}) {
+  const [topo, setTopo] = useState(0);
+  const visiveis = files.slice(0, 4);
+  const atual = files[((topo % files.length) + files.length) % files.length];
+  const abrir = () => {
+    if (tela && onAbrirTela && ehImagem(atual)) { onAbrirTela(); return; }
+    onAbrir?.(atual, files);
+  };
+  const girar = (e: MouseEvent | TouchEvent, dir: 1 | -1) => {
+    e.stopPropagation();
+    setTopo((t) => t + dir);
+  };
+  return (
+    <div className="pilha-arq">
+      <button type="button" className="pilha-stack" onClick={abrir} title={rotuloPilha(files)} aria-label={rotuloPilha(files)}>
+        {visiveis.map((_, i) => {
+          const idx = (topo + i) % files.length;
+          const f = files[idx];
+          const atras = i;
+          const rot = atras === 0 ? 0 : atras === 1 ? 4 : atras === 2 ? 8 : 11;
+          const dx = atras === 0 ? 0 : atras * 6;
+          const dy = atras === 0 ? 0 : atras * 5;
+          const z = visiveis.length - atras;
+          return (
+            <span
+              key={f.id + "-" + i}
+              className={"pilha-carta" + (atras === 0 ? " frente" : "")}
+              style={{
+                zIndex: z,
+                transform: `translate(${dx}px, ${dy}px) rotate(${rot}deg)`,
+              }}
+              aria-hidden={atras !== 0}
+            >
+              <PreviaCard f={f} />
+            </span>
+          );
+        }).reverse()}
+      </button>
+      <div className="pilha-rodape">
+        <button type="button" className="pilha-label" onClick={abrir}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="8.5" cy="10" r="1.5" fill="currentColor" stroke="none" />
+            <path d="M3 16l5-5 4 4 3-3 6 6" />
+          </svg>
+          <span>{rotuloPilha(files)}</span>
+        </button>
+        {files.length > 1 && (
+          <span className="pilha-nav" aria-hidden="true">
+            <button type="button" className="pilha-seta" onClick={(e) => girar(e, -1)} aria-label="Anterior">‹</button>
+            <button type="button" className="pilha-seta" onClick={(e) => girar(e, 1)} aria-label="Próximo">›</button>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Tela cheia: um arquivo ou carrossel (setas / swipe). Esc e fundo fecham. */
+export function Visualizador({ f, files, index = 0, onFechar }: {
+  f?: ArquivoDoChat;
+  files?: ArquivoDoChat[];
+  index?: number;
+  onFechar: () => void;
+}) {
+  const lista = files && files.length ? files : (f ? [f] : []);
+  const [i, setI] = useState(Math.min(Math.max(0, index), Math.max(0, lista.length - 1)));
+  useEffect(() => { setI(Math.min(Math.max(0, index), Math.max(0, lista.length - 1))); }, [index, lista.length]);
+  const atual = lista[i] ?? f;
+  const src = atual ? atual.url + location.search : "";
+  const varios = lista.length > 1;
   useEffect(() => {
-    const t = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
+    const t = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onFechar();
+      if (!varios) return;
+      if (e.key === "ArrowRight") setI((n) => (n + 1) % lista.length);
+      if (e.key === "ArrowLeft") setI((n) => (n - 1 + lista.length) % lista.length);
+    };
     window.addEventListener("keydown", t);
     return () => window.removeEventListener("keydown", t);
-  }, [onFechar]);
+  }, [onFechar, varios, lista.length]);
+  const toque = useRef<{ x: number; y: number } | null>(null);
+  if (!atual) return null;
   return (
-    <div className={"visor-fundo" + (ehPdf(f) ? " cheio" : "")} onClick={onFechar}>
-      <div className="visor" onClick={(e) => e.stopPropagation()}>
+    <div className={"visor-fundo" + (ehPdf(atual) || varios ? " cheio" : "")} onClick={onFechar}>
+      <div className="visor" onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => { const t = e.changedTouches[0]; toque.current = { x: t.clientX, y: t.clientY }; }}
+        onTouchEnd={(e) => {
+          if (!varios || !toque.current) return;
+          const t = e.changedTouches[0];
+          const dx = t.clientX - toque.current.x;
+          const dy = t.clientY - toque.current.y;
+          toque.current = null;
+          if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
+          setI((n) => dx < 0 ? (n + 1) % lista.length : (n - 1 + lista.length) % lista.length);
+        }}
+      >
         <header>
-          <span className="visor-nome" title={f.name}>{f.name}</span>
-          <a className="btn fraco" href={src} download={f.name}>Baixar</a>
+          <span className="visor-nome" title={atual.name}>{atual.name}</span>
+          {varios && <span className="visor-cont">{i + 1}/{lista.length}</span>}
+          <a className="btn fraco" href={src} download={atual.name}>Baixar</a>
           <button className="btn ok" onClick={onFechar} aria-label="Fechar">✓</button>
         </header>
         <div className="visor-corpo">
-          {ehImagem(f) ? <img src={src} alt={f.name} />
-            : ehVideo(f) ? <video src={src} controls autoPlay />
-            : ehAudio(f) ? <audio src={src} controls autoPlay />
-            : <iframe src={src} title={f.name} />}
+          {ehImagem(atual) ? <img src={src} alt={atual.name} />
+            : ehVideo(atual) ? <video key={atual.id} src={src} controls autoPlay />
+            : ehAudio(atual) ? <audio key={atual.id} src={src} controls autoPlay />
+            : <iframe key={atual.id} src={src} title={atual.name} />}
         </div>
+        {varios && (
+          <>
+            <button type="button" className="visor-seta esq" aria-label="Anterior"
+              onClick={() => setI((n) => (n - 1 + lista.length) % lista.length)}>‹</button>
+            <button type="button" className="visor-seta dir" aria-label="Próximo"
+              onClick={() => setI((n) => (n + 1) % lista.length)}>›</button>
+          </>
+        )}
       </div>
     </div>
   );

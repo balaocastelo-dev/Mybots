@@ -21,7 +21,7 @@ import { videoExigeSenha } from "./gravacao.js";
 import { abrirWsDaTela, encaminharHttp, quadroWs, type QuadroWs } from "./ponteTela.js";
 import { idDoAndroid, listarProvedoresAndroid, resolverAlvoAndroid, tratadorAndroid } from "./android.js";
 import { acordarPc, acessoAberto, atualizarEmpresaDoPc, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, abrirTela, fecharTela, iniciarVarreduraOciosa, lerRegistro, ligarPc, listarMaquinas, pararPc, registrarPc, type BotParaPc } from "./pcs.js";
-// O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
+// O Mac continua num host fixo (variÃ¡vel do Hub, nunca o que o navegador pedir).
 const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900 };
 import { PROVEDORES } from "@mybots/shared";
 import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
@@ -40,10 +40,25 @@ import { estadoDaChave } from "./chaves.js";
 import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
+import { authOnlineAtivo, cookieDe, hubTokenLoopbackOk, registrarAuthOnline, rotaPublicaOnline, sessaoValida, SESSION_COOKIE } from "./authOnline.js";
 
 export async function startServer(hub: Hub) {
   instalarRedacao();
-  const app = Fastify({ logger: false, bodyLimit: 60 * 1024 * 1024 });
+  const app = Fastify({
+    logger: false,
+    bodyLimit: 60 * 1024 * 1024,
+    trustProxy: true,
+    // /mybots e /mybots/* (Vercel + acesso direto no tunel) viram / e /* antes do roteamento.
+    rewriteUrl: (req) => {
+      const bruto = req.url || "/";
+      const q = bruto.indexOf("?");
+      const caminho = q >= 0 ? bruto.slice(0, q) : bruto;
+      const query = q >= 0 ? bruto.slice(q) : "";
+      if (caminho === "/mybots" || caminho === "/mybots/") return "/" + query.replace(/^\?/, "?");
+      if (caminho.startsWith("/mybots/")) return caminho.slice("/mybots".length) + query;
+      return bruto;
+    },
+  });
   let atenderAndroidHttp: ((req: any, reply: any) => Promise<void>) | null = null;
   let atenderAndroidWs: ((socket: any, req: any) => void) | null = null;
   app.addHook("onSend", async (_req, reply, payload) => {
@@ -51,8 +66,8 @@ export async function startServer(hub: Hub) {
     return redigir(payload);
   });
   await app.register(fastifyWebsocket, { options: { maxPayload: 60 * 1024 * 1024 } });
-  // áudio e uploads chegam como binário cru
-  // Corpo vazio com "content-type: application/json" é erro de cliente comum (DELETE e
+  // Ã¡udio e uploads chegam como binÃ¡rio cru
+  // Corpo vazio com "content-type: application/json" Ã© erro de cliente comum (DELETE e
   // POST sem dados). Recusar com 400 esconde a rota verdadeira; aqui vira objeto vazio.
   app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
     const s = String(body ?? "").trim();
@@ -63,25 +78,16 @@ export async function startServer(hub: Hub) {
   app.addContentTypeParser("*", { parseAs: "buffer" }, (_req, body, done) => done(null, body));
 
   // --- senha opcional da interface ---
-  // A tela (ponte VNC, proxy do PC e a página noVNC) passa pelo MESMO hook.
+  // A tela (ponte VNC, proxy do PC e a pÃ¡gina noVNC) passa pelo MESMO hook.
   // Sem MYBOTS_UI_PASSWORD a interface inteira segue aberta, como o resto do painel.
   const SENHA_COOKIE = "mybots_k";
-  const cookieDe = (req: any, nome: string): string => {
-    const raw = String(req.headers?.cookie ?? "");
-    for (const parte of raw.split(";")) {
-      const i = parte.indexOf("=");
-      if (i < 0) continue;
-      if (parte.slice(0, i).trim() !== nome) continue;
-      const v = parte.slice(i + 1).trim();
-      try { return decodeURIComponent(v); } catch { return v; }
-    }
-    return "";
-  };
-  const uiAuthorized = (req: any) => {
+      const uiAuthorized = (req: any) => {
+    if (authOnlineAtivo()) return sessaoValida(req);
     if (!config.uiPassword) return true;
     const key = req.headers["x-mybots-key"] ?? (req.query as any)?.k ?? cookieDe(req, SENHA_COOKIE);
     return key === config.uiPassword;
   };
+
   const nodeAuthorized = (req: any): string | null => {
     const token = String(req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
     const bot = String(req.headers["x-mybots-bot"] ?? "").trim();
@@ -93,9 +99,9 @@ export async function startServer(hub: Hub) {
       || caminho.startsWith("/pc/") || caminho.startsWith("/android/") || caminho === "/tela-vnc.html";
   };
   // A GUI do container entra por /pc/<botId>/ (e /pc/<empresa>/ continua, apontando
-  // para o bot padrão ou para o container antigo). O upstream é sempre 127.0.0.1
-  // na porta da nossa faixa — o caminho não escolhe host. HTTP passa neste hook
-  // (o WebSocket da mesma URL fica na rota, senão o Fastify recusa a rota duplicada).
+  // para o bot padrÃ£o ou para o container antigo). O upstream Ã© sempre 127.0.0.1
+  // na porta da nossa faixa â€” o caminho nÃ£o escolhe host. HTTP passa neste hook
+  // (o WebSocket da mesma URL fica na rota, senÃ£o o Fastify recusa a rota duplicada).
   const cacheTela = new Map<string, { em: number; porta: number | null; naRaiz: boolean; botId?: string }>();
   const botsParaPc = (): BotParaPc[] => {
     const managed = new Map(hub.db.listManaged().map((d: { id: string; name?: string; gerente?: boolean; createdAt?: number }) => [d.id, d]));
@@ -143,7 +149,7 @@ export async function startServer(hub: Hub) {
     const porta = m.estado === "ligada" && portaDeEmpresaPermitida(m.portaTela) ? m.portaTela : null;
     return guardar(porta, !m.subpastaAntiga);
   };
-  // O celular não assume container. Sem provedor, 503. Ninguém liga Android aqui.
+  // O celular nÃ£o assume container. Sem provedor, 503. NinguÃ©m liga Android aqui.
   const responderAndroid = async (req: any, reply: any, id: string) => {
     const alvo = await resolverAlvoAndroid(id);
     const provedores = listarProvedoresAndroid();
@@ -153,7 +159,7 @@ export async function startServer(hub: Hub) {
       if (r && typeof r === "object" && "status" in r) return reply.code(r.status).send(r.corpo);
     }
     if (!alvo) return reply.code(503).send({ error: "nenhum provedor de celular resolveu este bot", botId: id, provedores });
-    if (!atenderAndroidHttp) return reply.code(503).send({ ok: false, erro: "tela do Android ainda não subiu" });
+    if (!atenderAndroidHttp) return reply.code(503).send({ ok: false, erro: "tela do Android ainda nÃ£o subiu" });
     await atenderAndroidHttp(req, reply);
   };
   iniciarVarreduraOciosa({
@@ -164,19 +170,29 @@ export async function startServer(hub: Hub) {
   const proxyDaTela = async (req: any, reply: any) => {
     const url = String(req.raw?.url || req.url || "");
     const id = idDaTela(url);
-    if (!id) return reply.code(404).send({ error: "tela indisponível" });
+    if (!id) return reply.code(404).send({ error: "tela indisponÃ­vel" });
     const alvo = await portaDaTela(id);
-    if (alvo && "bloqueada" in alvo) return reply.code(403).send({ error: "o acesso a esta tela está fechado" });
+    if (alvo && "bloqueada" in alvo) return reply.code(403).send({ error: "o acesso a esta tela estÃ¡ fechado" });
     const caminho = alvo ? caminhoUpstream(url, alvo.naRaiz) : null;
-    if (!caminho || !alvo) return reply.code(alvo ? 404 : 503).send({ error: alvo ? "tela indisponível" : "o PC desta empresa está desligado" });
+    if (!caminho || !alvo) return reply.code(alvo ? 404 : 503).send({ error: alvo ? "tela indisponÃ­vel" : "o PC desta empresa estÃ¡ desligado" });
     encaminharHttp(req, reply, alvo.porta, caminho);
   };
   app.addHook("onRequest", async (req, reply) => {
     const open = req.url.startsWith("/api/files/") || req.url.startsWith("/api/upload") || req.url.startsWith("/api/import") || req.url.startsWith("/api/channels/incoming");
-    if (!rotaComSenha(req.url) || open) return;
-    if (!(uiAuthorized(req) || nodeAuthorized(req))) {
-      reply.code(401).send({ error: "senha da interface inválida" });
-      return;
+    if (authOnlineAtivo()) {
+      if (rotaPublicaOnline(req.url) || open) return;
+      if (rotaComSenha(req.url) || req.url.split("?")[0].startsWith("/api/") || req.url.split("?")[0].startsWith("/ws/")) {
+        if (!(uiAuthorized(req) || nodeAuthorized(req) || hubTokenLoopbackOk(req))) {
+          reply.code(401).send({ error: "nao autenticado" });
+          return;
+        }
+      }
+    } else {
+      if (!rotaComSenha(req.url) || open) return;
+      if (!(uiAuthorized(req) || nodeAuthorized(req))) {
+        reply.code(401).send({ error: "senha da interface invalida" });
+        return;
+      }
     }
     const apresentou = req.headers["x-mybots-key"] === config.uiPassword || (req.query as any)?.k === config.uiPassword;
     if (config.uiPassword && apresentou) {
@@ -201,7 +217,7 @@ export async function startServer(hub: Hub) {
     if (caminho.startsWith("/pc/")) {
       const idPc = idDaTela(req.url);
       if (idPc && telaBloqueada(idPc)) {
-        reply.code(403).send({ error: "o acesso a esta tela está fechado" });
+        reply.code(403).send({ error: "o acesso a esta tela estÃ¡ fechado" });
         return;
       }
     }
@@ -219,7 +235,7 @@ export async function startServer(hub: Hub) {
   app.get("/ws/ui", { websocket: true }, (socket) => hub.handleUiConnection(socket as any));
   // Ponte VNC: o navegador fala noVNC por este WebSocket e o Hub repassa os bytes.
   // Destinos: "mac" (host fixo) ou "empresa:<id>" (127.0.0.1 na porta que o Hub
-  // publicou). Qualquer outro destino fecha. A senha da interface já passou no hook.
+  // publicou). Qualquer outro destino fecha. A senha da interface jÃ¡ passou no hook.
   app.get("/ws/vnc", { websocket: true }, (socket: any, req: any) => {
     const destino = String(req.query?.destino ?? "mac");
     const fila: Buffer[] = [];
@@ -278,8 +294,8 @@ export async function startServer(hub: Hub) {
       contou = false;
       fecharTela(botDaTela);
     };
-    // O segundo argumento é o tipo do quadro. Sem ele, SETTINGS vira binário
-    // e o Selkies 2.1 não registra o display — a tela fica preta.
+    // O segundo argumento Ã© o tipo do quadro. Sem ele, SETTINGS vira binÃ¡rio
+    // e o Selkies 2.1 nÃ£o registra o display â€” a tela fica preta.
     socket.on("message", (m: unknown, isBinary: boolean) => {
       if (morto) return;
       const q = quadroWs(m, isBinary);
@@ -310,6 +326,7 @@ export async function startServer(hub: Hub) {
   });
 
   // --- API REST ---
+  registrarAuthOnline(app);
   app.get("/api/health", async () => ({ ok: true, version: config.version, online: hub.onlineBots(), chaveDaCasa: estadoDaChave() }));
   // o painel mostra a reserva do sistema (percentual desta maquina): numero real, lido na hora
   app.get("/api/maquina", async () => ({ ...(await lerMaquina()), saberes: hub.db.contarSaberes() }));
@@ -339,61 +356,61 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/send", async (req, reply) => {
     const body = req.body as { conversationId?: string; text?: string; attachments?: Array<{ name: string; mime: string; dataBase64: string }> };
-    if (!body?.conversationId) return reply.code(400).send({ error: "conversationId é obrigatório" });
+    if (!body?.conversationId) return reply.code(400).send({ error: "conversationId Ã© obrigatÃ³rio" });
     if (!body?.text?.trim() && !body?.attachments?.length) return reply.code(400).send({ error: "informe text ou attachments" });
     return hub.sendUserMessage(body.conversationId, (body.text ?? "").trim(), body.attachments?.length ? body.attachments : undefined);
   });
   // Registro de chamada de voz na conversa. Guarda a mensagem SEM mandar o bot
   // responder: um "Chamada de voz - 0:05" e um marcador, nao um pedido.
-  // --- menu do chat (botão direito) ---
+  // --- menu do chat (botÃ£o direito) ---
   app.post("/api/conversations/:id/rewind", async (req, reply) => {
     const id = (req.params as any).id as string;
     const b = req.body as { messageId?: string; include?: "this" | "after" };
-    if (!b?.messageId) return reply.code(400).send({ error: "messageId é obrigatório" });
+    if (!b?.messageId) return reply.code(400).send({ error: "messageId Ã© obrigatÃ³rio" });
     const r = hub.rewind(id, b.messageId, b.include === "this" ? "this" : "after");
-    if (!r.afetadas && !r.token) return reply.code(404).send({ error: "mensagem não encontrada" });
+    if (!r.afetadas && !r.token) return reply.code(404).send({ error: "mensagem nÃ£o encontrada" });
     return { ...r, messages: hub.db.getMessages(id) };
   });
   app.post("/api/conversations/:id/unrewind", async (req, reply) => {
     const id = (req.params as any).id as string;
     const token = Number((req.body as any)?.token);
-    if (!token) return reply.code(400).send({ error: "token é obrigatório" });
+    if (!token) return reply.code(400).send({ error: "token Ã© obrigatÃ³rio" });
     return { voltaram: hub.unrewind(id, token), messages: hub.db.getMessages(id) };
   });
   app.get("/api/conversations/:id/export", async (req, reply) => {
     const id = (req.params as any).id as string;
     const msgs = hub.db.getMessages(id, 1000);
     if ((req.query as any).format === "json") return msgs;
-    const md = [`# ${id}`, "", ...msgs.map((m) => `**${m.sender.name}** · ${new Date(m.createdAt).toLocaleString("pt-BR")}\n\n${m.text}\n`)].join("\n");
+    const md = [`# ${id}`, "", ...msgs.map((m) => `**${m.sender.name}** Â· ${new Date(m.createdAt).toLocaleString("pt-BR")}\n\n${m.text}\n`)].join("\n");
     reply.header("content-type", "text/markdown; charset=utf-8");
     return md;
   });
   app.post("/api/messages/:id/edit", async (req, reply) => {
     const texto = String((req.body as any)?.text ?? "").trim();
-    if (!texto) return reply.code(400).send({ error: "text é obrigatório" });
+    if (!texto) return reply.code(400).send({ error: "text Ã© obrigatÃ³rio" });
     const r = hub.editMessage((req.params as any).id, texto);
-    return r ?? reply.code(404).send({ error: "mensagem não encontrada (ou não é um pedido seu)" });
+    return r ?? reply.code(404).send({ error: "mensagem nÃ£o encontrada (ou nÃ£o Ã© um pedido seu)" });
   });
   app.post("/api/messages/:id/retry", async (req, reply) => {
     const r = hub.retryMessage((req.params as any).id);
-    return r ?? reply.code(404).send({ error: "não achei o pedido que gerou essa resposta" });
+    return r ?? reply.code(404).send({ error: "nÃ£o achei o pedido que gerou essa resposta" });
   });
   app.post("/api/messages/:id/pin", async (req, reply) => {
     const r = hub.pinMessage((req.params as any).id, (req.body as any)?.pinned !== false);
-    return r ?? reply.code(404).send({ error: "mensagem não encontrada" });
+    return r ?? reply.code(404).send({ error: "mensagem nÃ£o encontrada" });
   });
   app.delete("/api/messages/:id", async (req, reply) => {
     const r = hub.deleteMessage((req.params as any).id);
-    return r ? { ok: true } : reply.code(404).send({ error: "mensagem não encontrada" });
+    return r ? { ok: true } : reply.code(404).send({ error: "mensagem nÃ£o encontrada" });
   });
   app.post("/api/messages/:id/remember", async (req, reply) => {
     const m = hub.db.getMessage((req.params as any).id);
-    if (!m) return reply.code(404).send({ error: "mensagem não encontrada" });
+    if (!m) return reply.code(404).send({ error: "mensagem nÃ£o encontrada" });
     const titulo = String((req.body as any)?.titulo ?? m.text.slice(0, 60).replace(/\s+/g, " ")).trim() || "Trecho da conversa";
     const id = `chat-${m.id}`.toLowerCase().slice(0, 60);
     const v = hub.db.saveSaber({
       id, titulo, resumo: m.text.slice(0, 280), conteudo: m.text, tipo: "conhecimento", tags: ["chat"],
-      origem: `conversa ${m.conversationId} · ${new Date(m.createdAt).toLocaleDateString("pt-BR")}`,
+      origem: `conversa ${m.conversationId} Â· ${new Date(m.createdAt).toLocaleDateString("pt-BR")}`,
     });
     hub.broadcastKnowledge();
     hub.db.audit(m.sender.kind === "bot" ? m.sender.id : null, "chat.remember", { messageId: m.id, saber: id });
@@ -402,7 +419,7 @@ export async function startServer(hub: Hub) {
 
   app.post("/api/conversations/:id/marcador", async (req, reply) => {
     const texto = String((req.body as any)?.texto ?? "").trim();
-    if (!texto) return reply.code(400).send({ error: "texto obrigatório" });
+    if (!texto) return reply.code(400).send({ error: "texto obrigatÃ³rio" });
     const m = hub.marcador(String((req.params as any).id), texto, (req.body as any)?.meta);
     return m;
   });
@@ -424,7 +441,7 @@ export async function startServer(hub: Hub) {
 
   registerColabRoutes(app, hub, nodeAuthorized);
 
-  // --- automode: nível de controle global (sobrescreve o de cada bot) ---
+  // --- automode: nÃ­vel de controle global (sobrescreve o de cada bot) ---
   app.get("/api/control", async () => ({ ...hub.control(), bots: Object.fromEntries(hub.summaries().filter((b) => b.online).map((b) => [b.id, hub.effectiveModeFor(b.id)])) }));
   app.put("/api/control", async (req, reply) => {
     const b = req.body as { global?: unknown; confirm?: string };
@@ -435,17 +452,17 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/control/panic", async () => hub.panic());
 
-  // --- mídia: cota e consumo de imagens/vídeos gerados ---
+  // --- mÃ­dia: cota e consumo de imagens/vÃ­deos gerados ---
   app.get("/api/media/budget", async () => ({ budget: hub.media.budget(), usage: hub.media.usage() }));
   app.put("/api/media/budget", async (req, reply) => {
     const b = req.body as any;
-    if (!b || typeof b !== "object") return reply.code(400).send({ error: "corpo inválido" });
+    if (!b || typeof b !== "object") return reply.code(400).send({ error: "corpo invÃ¡lido" });
     return { budget: hub.media.setBudget(b), usage: hub.media.usage() };
   });
   app.get("/api/media/usage", async (req) => hub.media.usage((req.query as any).day));
   app.post("/api/media/generate", async (req, reply) => {
     const b = req.body as { botId?: string; conversationId?: string; kind?: string; prompt?: string; refFileId?: string; seconds?: number; aspect?: string };
-    if (!b?.botId || !b?.prompt || (b.kind !== "image" && b.kind !== "video")) return reply.code(400).send({ error: "botId, kind (image|video) e prompt são obrigatórios" });
+    if (!b?.botId || !b?.prompt || (b.kind !== "image" && b.kind !== "video")) return reply.code(400).send({ error: "botId, kind (image|video) e prompt sÃ£o obrigatÃ³rios" });
     return hub.generateMedia(b.botId, b.conversationId ?? "", b.kind, b.prompt, { refFileId: b.refFileId, seconds: b.seconds, aspect: b.aspect });
   });
 
@@ -453,8 +470,8 @@ export async function startServer(hub: Hub) {
   const manager = new BotManager(hub);
   hub.managedIds = () => new Set(manager.list().map((b) => b.id));
   hub.protegidosIds = () => new Set(manager.list().filter((b) => b.protegido).map((b) => b.id));
-  // mesma regra que o nó usa no prompt: a persona diz se o bot fala outro idioma
-  const ENSINA_IDIOMAS = /poliglota|professor(a)? de idiomas|professor(a)? de (ingl[eê]s|espanhol|franc[eê]s|italiano|alem[aã]o)|language (tutor|teacher|coach)|tutor de idiomas/i;
+  // mesma regra que o nÃ³ usa no prompt: a persona diz se o bot fala outro idioma
+  const ENSINA_IDIOMAS = /poliglota|professor(a)? de idiomas|professor(a)? de (ingl[eÃª]s|espanhol|franc[eÃª]s|italiano|alem[aÃ£]o)|language (tutor|teacher|coach)|tutor de idiomas/i;
   hub.falamOutroIdioma = () => new Set(manager.list().filter((b) => ENSINA_IDIOMAS.test(b.persona ?? "")).map((b) => b.id));
   hub.managesOf = (botId) => manager.get(botId)?.manages;
   hub.ehGerente = (botId) => !!manager.get(botId)?.gerente;
@@ -468,14 +485,14 @@ export async function startServer(hub: Hub) {
   atenderAndroidWs = (socket, req) => android.ws(socket, req);
   app.post("/api/bots/:id/android/pair", async (req, reply) => {
     const id = String((req.params as any).id ?? "");
-    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
-    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id invÃ¡lido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot nÃ£o encontrado" });
     return android.parear(id, (req.body ?? {}) as any);
   });
   app.get("/api/bots/:id/android/status", async (req, reply) => {
     const id = String((req.params as any).id ?? "");
-    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
-    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id invÃ¡lido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot nÃ£o encontrado" });
     return android.status(id);
   });
   {
@@ -485,9 +502,9 @@ export async function startServer(hub: Hub) {
     if (cofres.length) console.log(`[hub] cofre das empresas: ${cofres.join(", ")}`);
   }
   hub.restartBot = (botId) => { if (!manager.get(botId)) return false; manager.restart(botId); return true; };
-  // O caminho certo para um bot cuidar da equipe. Antes não existia: o Médico tentava
-  // adivinhar a rota com curl, errava, e caía no PowerShell — matando processo e
-  // escrevendo .removido na mão, o que nunca tirava o bot do banco do Hub.
+  // O caminho certo para um bot cuidar da equipe. Antes nÃ£o existia: o MÃ©dico tentava
+  // adivinhar a rota com curl, errava, e caÃ­a no PowerShell â€” matando processo e
+  // escrevendo .removido na mÃ£o, o que nunca tirava o bot do banco do Hub.
   // O gerente monta a propria equipe. O bot nasce na empresa DELE, com o motor
   // padrao da casa, ja ligado e com ele como dono -- e nao no limbo sem empresa.
   hub.criarBot = async ({ nome, funcao, persona, empresaId, gerenteId }) => {
@@ -505,7 +522,7 @@ export async function startServer(hub: Hub) {
     if ("error" in r) return { ok: false, msg: r.error };
     if (empresaId) hub.db.setEmpresaDoBot(r.id, r.name, empresaId, false);
     try { registrarPc({ botId: r.id, empresaId: empresaId ?? null, nome: r.name }); }
-    catch (e) { console.error(`[pc] não registrei o PC de ${r.id}: ${(e as Error).message}`); }
+    catch (e) { console.error(`[pc] nÃ£o registrei o PC de ${r.id}: ${(e as Error).message}`); }
     const dono = manager.get(gerenteId);
     if (dono) manager.update(gerenteId, { manages: [...(dono.manages ?? []), r.id] } as any);
     manager.start(r.id);
@@ -516,12 +533,12 @@ export async function startServer(hub: Hub) {
     const d = manager.get(botId);
     if (!d) {
       const existem = manager.list().map((b) => `${b.id} (${b.name})`).join(", ") || "nenhum";
-      return { ok: false, msg: `Não existe bot com id "${botId}" neste Hub. Os que existem: ${existem}. Confira o id antes de tentar de novo — e não tente pelo terminal.` };
+      return { ok: false, msg: `NÃ£o existe bot com id "${botId}" neste Hub. Os que existem: ${existem}. Confira o id antes de tentar de novo â€” e nÃ£o tente pelo terminal.` };
     }
     if (acao === "excluir") {
       const r = await manager.remove(botId, apagarArquivos);
       if (r?.error) return { ok: false, msg: r.error };
-      return { ok: true, msg: `Bot "${d.name}" (${botId}) excluído: processo encerrado, tirado do painel e do banco.${apagarArquivos ? " A pasta dele também foi apagada." : " A pasta com o workspace continua no disco."}` };
+      return { ok: true, msg: `Bot "${d.name}" (${botId}) excluÃ­do: processo encerrado, tirado do painel e do banco.${apagarArquivos ? " A pasta dele tambÃ©m foi apagada." : " A pasta com o workspace continua no disco."}` };
     }
     if (acao === "parar") { await manager.stop(botId); return { ok: true, msg: `Bot "${d.name}" desligado. Continua no painel; use ligar para subir de novo.` }; }
     if (acao === "ligar") return { ok: manager.start(botId), msg: `Bot "${d.name}" ligado.` };
@@ -539,7 +556,7 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/empresas/:id/consentimentos", async (req, reply) => {
     const id = (req.params as any).id;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     const b = (req.body ?? {}) as any;
     const itens: Array<{ doc: string; aceito: boolean }> = Array.isArray(b.itens) ? b.itens : [{ doc: b.doc, aceito: !!b.aceito }];
     for (const it of itens) {
@@ -550,8 +567,8 @@ export async function startServer(hub: Hub) {
     return { versao: VERSAO_LEGAL, registros: hub.db.listConsentimentos(id), liberado: hub.podeFalarComCliente(id) };
   });
 
-  // --- créditos: plano, consumo e recarga por Pix ---
-  /** Dados do recebedor do Pix (você). Ficam em settings, não no código. */
+  // --- crÃ©ditos: plano, consumo e recarga por Pix ---
+  /** Dados do recebedor do Pix (vocÃª). Ficam em settings, nÃ£o no cÃ³digo. */
   const pixDaCasa = () => {
     const v = (k: string, d = "") => { try { return hub.db.getSetting?.(k) ?? d; } catch { return d; } };
     return { chave: String(v("pix.chave")), nome: String(v("pix.nome", hub.userName)), cidade: String(v("pix.cidade", "CAMPINAS")) };
@@ -577,7 +594,7 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/empresas/:id/plano", async (req, reply) => {
     const id = (req.params as any).id;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     const b = (req.body ?? {}) as any;
     const p = hub.db.salvarPlano(id, {
       mensalidadeCentavos: b.mensalidadeCentavos, franquiaMensagens: b.franquiaMensagens,
@@ -586,7 +603,7 @@ export async function startServer(hub: Hub) {
     hub.db.audit(null, "plano.salvo", { empresa: id, ...b });
     return p;
   });
-  /** Carência: você concede a quem está em dia. Não é oferecida sozinha. */
+  /** CarÃªncia: vocÃª concede a quem estÃ¡ em dia. NÃ£o Ã© oferecida sozinha. */
   app.post("/api/empresas/:id/carencia", async (req) => {
     const id = (req.params as any).id;
     const horas = Number((req.body as any)?.horas ?? 0);
@@ -599,9 +616,9 @@ export async function startServer(hub: Hub) {
   app.post("/api/empresas/:id/recarga", async (req, reply) => {
     const id = (req.params as any).id;
     const valor = Math.round(Number((req.body as any)?.valorCentavos ?? 0));
-    if (!valor || valor < 100) return reply.code(400).send({ error: "valor mínimo de R$ 1,00" });
+    if (!valor || valor < 100) return reply.code(400).send({ error: "valor mÃ­nimo de R$ 1,00" });
     const pix = pixDaCasa();
-    if (!pix.chave) return reply.code(400).send({ error: "Falta cadastrar a sua chave Pix na tela de Créditos." });
+    if (!pix.chave) return reply.code(400).send({ error: "Falta cadastrar a sua chave Pix na tela de CrÃ©ditos." });
     const rid = `R${Date.now().toString(36).toUpperCase()}`;
     const copiaECola = pixCopiaECola({ ...pix, valorCentavos: valor, txid: rid });
     hub.db.novaRecarga({ id: rid, empresaId: id, valorCentavos: valor, metodo: "pix-estatico", txid: rid });
@@ -609,20 +626,20 @@ export async function startServer(hub: Hub) {
     const qr = await QRCode.toDataURL(copiaECola, { margin: 1, width: 300 }).catch(() => undefined);
     return { id: rid, valorCentavos: valor, copiaECola, qr };
   });
-  /** Hoje você confirma o Pix que caiu. Amanhã, um provedor chama esta mesma rota. */
+  /** Hoje vocÃª confirma o Pix que caiu. AmanhÃ£, um provedor chama esta mesma rota. */
   app.post("/api/recargas/:id/confirmar", async (req, reply) => {
     const r = hub.db.confirmarRecarga((req.params as any).id);
-    if (!r.ok) return reply.code(400).send({ error: "recarga não encontrada ou já confirmada" });
+    if (!r.ok) return reply.code(400).send({ error: "recarga nÃ£o encontrada ou jÃ¡ confirmada" });
     hub.db.audit(null, "recarga.confirmada", { id: (req.params as any).id, empresa: r.empresaId, valor: r.valor });
     return { ok: true, plano: hub.db.plano(r.empresaId!) };
   });
 
   app.get("/api/empresas", async () => hub.db.listEmpresas());
-  /** Lê o site e as redes da empresa e SUGERE nome, resumo e regras. Não grava nada. */
-  /** A demonstração do Gerente, gerada na hora com os dados do site da empresa.
-   *  Um passo por chamada: é isso que dá o ritmo de "ele está montando agora"
-   *  na tela, em vez de um silêncio longo e tudo aparecendo de uma vez. */
-  /** ── Configuracao da casa: motor, contas e IA local ─────────────────────────
+  /** LÃª o site e as redes da empresa e SUGERE nome, resumo e regras. NÃ£o grava nada. */
+  /** A demonstraÃ§Ã£o do Gerente, gerada na hora com os dados do site da empresa.
+   *  Um passo por chamada: Ã© isso que dÃ¡ o ritmo de "ele estÃ¡ montando agora"
+   *  na tela, em vez de um silÃªncio longo e tudo aparecendo de uma vez. */
+  /** â”€â”€ Configuracao da casa: motor, contas e IA local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    *  Uma tela so para o que decide SE o sistema consegue pensar. Antes disto a
    *  unica forma de saber qual provedor estava ligado era ler o .env na mao. */
   const ARQ_PREF = "dados/preferencia.json";
@@ -659,22 +676,22 @@ export async function startServer(hub: Hub) {
   app.get("/api/maquinas", async () => listarMaquinas());
   app.post("/api/maquinas/:botId/ligar", async (req, reply) => {
     const id = String((req.params as any).botId ?? "");
-    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc não registrado" });
+    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc nÃ£o registrado" });
     await ligarPc(id);
     const linha = (await listarMaquinas()).find((m) => m.botId === id && m.tipo === "pc");
-    return linha ?? reply.code(404).send({ error: "pc não registrado" });
+    return linha ?? reply.code(404).send({ error: "pc nÃ£o registrado" });
   });
   app.post("/api/maquinas/:botId/desligar", async (req, reply) => {
     const id = String((req.params as any).botId ?? "");
-    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc não registrado" });
+    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc nÃ£o registrado" });
     await pararPc(id);
     const linha = (await listarMaquinas()).find((m) => m.botId === id && m.tipo === "pc");
-    return linha ?? reply.code(404).send({ error: "pc não registrado" });
+    return linha ?? reply.code(404).send({ error: "pc nÃ£o registrado" });
   });
   app.put("/api/maquinas/:botId/acesso", async (req, reply) => {
     const id = String((req.params as any).botId ?? "");
     const liberado = (req.body as { liberado?: unknown } | null)?.liberado;
-    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc não registrado" });
+    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc nÃ£o registrado" });
     if (typeof liberado !== "boolean") return reply.code(400).send({ error: "liberado deve ser true ou false" });
     definirAcessoPc(id, liberado);
     cacheTela.clear();
@@ -689,22 +706,22 @@ export async function startServer(hub: Hub) {
   });
   app.get("/api/empresas/:id/maquina/uso", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     return hub.usoDoPc(id);
   });
   app.get("/api/empresas/:id/maquina/gravacao", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     const onde = (req.query as any).onde === "celular" ? "celular" : "pc";
     return hub.estadoGravacao(id, onde);
   });
   app.post("/api/empresas/:id/maquina/gravacao", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     const b = (req.body ?? {}) as { acao?: string; conversationId?: string; legenda?: string; onde?: string };
     const onde = b.onde === "celular" ? "celular" as const : "pc" as const;
     if (b.acao === "iniciar") {
-      return await hub.iniciarGravacao({ empresaId: id, por: "chefe", nome: "você", conversationId: b.conversationId, onde });
+      return await hub.iniciarGravacao({ empresaId: id, por: "chefe", nome: "vocÃª", conversationId: b.conversationId, onde });
     }
     if (b.acao === "parar") return await hub.pararGravacao(id, b.legenda, onde);
     return reply.code(400).send({ error: "acao deve ser iniciar ou parar" });
@@ -712,59 +729,59 @@ export async function startServer(hub: Hub) {
   app.get("/api/celulares/descobrir", async () => hub.descobrirCelulares());
   app.get("/api/empresas/:id/celular", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     const v = hub.vinculoDoCelular(id);
     const online = v ? (await celular.listar()).some((a) => a.serial === v.serial && a.estado === "device") : false;
     return { vinculo: v, online, trava: hub.travaCelular.ver(id) };
   });
   app.post("/api/empresas/:id/celular", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     return hub.vincularCelular(id, String((req.body as any)?.serial ?? ""));
   });
   app.delete("/api/empresas/:id/celular", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     hub.esquecerCelular(id);
     return { ok: true };
   });
   app.post("/api/empresas/:id/celular/parear", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     return hub.parearCelular(id, (req.body ?? {}) as any);
   });
   app.post("/api/empresas/:id/celular/assumir", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     return hub.assumirCelular(id, (req.body as any)?.assumir !== false);
   });
   app.get("/api/empresas/:id/celular/uso", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     return hub.usoDoCelular(id);
   });
   app.get("/api/empresas/:id/celular/tela", async (req, reply) => {
     const id = (req.params as any).id as string;
     const v = hub.vinculoDoCelular(id);
-    if (!v) return reply.code(404).send({ error: "celular não vinculado" });
+    if (!v) return reply.code(404).send({ error: "celular nÃ£o vinculado" });
     const png = await celular.tela(v.serial);
-    if (!png) return reply.code(503).send({ error: "não consegui ver a tela" });
+    if (!png) return reply.code(503).send({ error: "nÃ£o consegui ver a tela" });
     return reply.type("image/png").header("cache-control", "no-store").send(png);
   });
   app.post("/api/empresas/:id/celular/tocar", async (req, reply) => {
     const id = (req.params as any).id as string;
     const v = hub.vinculoDoCelular(id);
-    if (!v) return reply.code(404).send({ error: "celular não vinculado" });
+    if (!v) return reply.code(404).send({ error: "celular nÃ£o vinculado" });
     const trava = hub.travaCelular.ver(id);
     if (!trava || trava.id !== "chefe") {
-      return reply.code(409).send({ error: trava ? `${trava.nome} está no celular` : "assuma o celular antes de tocar" });
+      return reply.code(409).send({ error: trava ? `${trava.nome} estÃ¡ no celular` : "assuma o celular antes de tocar" });
     }
     const b = req.body as { x?: number; y?: number };
     return { ok: await celular.tocar(v.serial, Number(b?.x), Number(b?.y)) };
   });
   app.post("/api/empresas/:id/celular/janela", async (req, reply) => {
     const id = (req.params as any).id as string;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     const r = hub.abrirJanelaDoCelular(id);
     return r.ok ? r : reply.code(400).send(r);
   });
@@ -861,7 +878,7 @@ export async function startServer(hub: Hub) {
     return { ordem: v };
   });
 
-  /** Reset de fabrica: apaga empresas, bots e preferencias — a casa volta a tela de
+  /** Reset de fabrica: apaga empresas, bots e preferencias â€” a casa volta a tela de
    *  cadastro. Exige a frase por extenso porque isto NAO tem volta: nao ha lixeira, e
    *  os bots levam junto as conversas e os arquivos deles. */
   app.post("/api/config/reset", async (req, reply) => {
@@ -890,20 +907,20 @@ export async function startServer(hub: Hub) {
    * "fazer de novo" quando ele pulou um canal e quer voltar.
    */
   app.post("/api/empresas/:id/primeiros-passos", async (req, reply) => {
-    if (!uiAuthorized(req)) return reply.code(401).send({ error: "não autorizado" });
+    if (!uiAuthorized(req)) return reply.code(401).send({ error: "nÃ£o autorizado" });
     const empresaId = String((req.params as any).id);
-    if (!hub.db.getEmpresa(empresaId)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(empresaId)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     const bot = hub.summaries().find((b) => b.empresaId === empresaId && hub.ehGerente(b.id))
       ?? hub.summaries().find((b) => b.empresaId === empresaId);
-    if (!bot) return reply.code(400).send({ error: "esta empresa ainda não tem bot para conduzir" });
-    if (!bot.online) return reply.code(409).send({ error: `o ${bot.name} está offline; ligue ele antes` });
+    if (!bot) return reply.code(400).send({ error: "esta empresa ainda nÃ£o tem bot para conduzir" });
+    if (!bot.online) return reply.code(409).send({ error: `o ${bot.name} estÃ¡ offline; ligue ele antes` });
     const refazer = ((req.body ?? {}) as any).refazer === true;
     void (refazer ? hub.passos.refazer(bot.id, empresaId) : hub.passos.iniciar(bot.id, empresaId))
       .catch((e) => hub.db.audit(bot.id, "primeirospassos.erro", { erro: (e as Error).message }));
     return { ok: true, bot: bot.id, refazer };
   });
   app.post("/api/empresas/demo", async (req, reply) => {
-    if (!uiAuthorized(req)) return reply.code(401).send({ error: "não autorizado" });
+    if (!uiAuthorized(req)) return reply.code(401).send({ error: "nÃ£o autorizado" });
     const b = (req.body ?? {}) as any;
     const passo = String(b.passo ?? "");
     if (!passo) return reply.code(400).send({ error: "diga o passo: imagem, pdf, video ou link" });
@@ -932,10 +949,10 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/empresas", async (req, reply) => {
     const b = req.body as any;
-    if (!b?.nome?.trim()) return reply.code(400).send({ error: "nome é obrigatório" });
+    if (!b?.nome?.trim()) return reply.code(400).send({ error: "nome Ã© obrigatÃ³rio" });
     const id = String(b.id ?? b.nome).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
-    if (!id) return reply.code(400).send({ error: "nome inválido" });
+    if (!id) return reply.code(400).send({ error: "nome invÃ¡lido" });
     const e = hub.db.saveEmpresa({
       id, nome: b.nome.trim(), regras: b.regras ?? "", cor: b.cor, idioma: b.idioma ?? "pt",
       ficha: {
@@ -948,19 +965,19 @@ export async function startServer(hub: Hub) {
     // Empresa nasce com o WhatsApp dela subindo: o QR aparece no painel em segundos.
     void hub.whats.conectar(id).catch(() => {});
     // ...e com o Gerente Geral dela, que recebe o chefe e apresenta o sistema.
-    // comGerente/comMedico false é o atalho dos testes: não sobe Gerente nem Cofre.
+    // comGerente/comMedico false Ã© o atalho dos testes: nÃ£o sobe Gerente nem Cofre.
     if (b.comGerente === false || b.comMedico === false) return { ...e, gerente: null };
     const cofreBot = manager.criarCofreDaEmpresa(id, e.nome);
     if ("error" in cofreBot) hub.db.audit(null, "empresa.cofre.falhou", { id, erro: cofreBot.error });
-    else hub.db.setEmpresaDoBot(cofreBot.id, `Cofre — ${e.nome}`, id, false);
+    else hub.db.setEmpresaDoBot(cofreBot.id, `Cofre â€” ${e.nome}`, id, false);
     const gerente = manager.criarGerenteDaEmpresa(id, e.nome);
     if ("error" in gerente) {
       hub.db.audit(null, "empresa.gerente.falhou", { id, erro: gerente.error });
-      return { ...e, gerente: null, aviso: `empresa criada, mas o Gerente Geral não subiu: ${gerente.error}` };
+      return { ...e, gerente: null, aviso: `empresa criada, mas o Gerente Geral nÃ£o subiu: ${gerente.error}` };
     }
-    hub.db.setEmpresaDoBot(gerente.id, `Gerente Geral — ${e.nome}`, id, false);
-    try { registrarPc({ botId: gerente.id, empresaId: id, nome: `Gerente Geral — ${e.nome}` }); }
-    catch (e) { console.error(`[pc] não registrei o PC de ${gerente.id}: ${(e as Error).message}`); }
+    hub.db.setEmpresaDoBot(gerente.id, `Gerente Geral â€” ${e.nome}`, id, false);
+    try { registrarPc({ botId: gerente.id, empresaId: id, nome: `Gerente Geral â€” ${e.nome}` }); }
+    catch (e) { console.error(`[pc] nÃ£o registrei o PC de ${gerente.id}: ${(e as Error).message}`); }
     hub.broadcastKnowledge();
     hub.apresentarEmpresa(gerente.id, e.nome);
     return { ...e, gerente: gerente.id };
@@ -968,7 +985,7 @@ export async function startServer(hub: Hub) {
   app.patch("/api/empresas/:id", async (req, reply) => {
     const id = (req.params as any).id;
     const atual = hub.db.getEmpresa(id);
-    if (!atual) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!atual) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     const b = req.body as any;
     const fichaPatch: FichaEmpresa = {};
     for (const k of ["site", "instagram", "facebook", "resumo", "segmento", "logo"] as const) {
@@ -980,7 +997,7 @@ export async function startServer(hub: Hub) {
       ...(Object.keys(fichaPatch).length ? { ficha: fichaPatch } : {}),
     });
     hub.db.audit(null, "empresa.salva", { id });
-    hub.broadcastKnowledge();   // as regras da empresa vão no prompt: todo bot dela recebe agora
+    hub.broadcastKnowledge();   // as regras da empresa vÃ£o no prompt: todo bot dela recebe agora
     return e;
   });
   app.delete("/api/empresas/:id", async (req, reply) => {
@@ -993,13 +1010,13 @@ export async function startServer(hub: Hub) {
   app.post("/api/bots/:id/empresa", async (req, reply) => {
     const id = (req.params as any).id;
     const bot = hub.db.listBots().find((b) => b.id === id);
-    if (!bot) return reply.code(404).send({ error: "bot não encontrado" });
+    if (!bot) return reply.code(404).send({ error: "bot nÃ£o encontrado" });
     const b = req.body as any;
     hub.db.setEmpresaDoBot(id, bot.name, b.empresa ?? null, !!b.ponte);
     try {
       if (lerRegistro(id)) atualizarEmpresaDoPc(id, b.empresa ?? null, bot.name);
       else registrarPc({ botId: id, empresaId: b.empresa ?? null, nome: bot.name });
-    } catch (e) { console.error(`[pc] não atualizei o PC de ${id}: ${(e as Error).message}`); }
+    } catch (e) { console.error(`[pc] nÃ£o atualizei o PC de ${id}: ${(e as Error).message}`); }
     hub.db.audit(id, "bot.empresa", { empresa: b.empresa ?? null, ponte: !!b.ponte });
     hub.broadcastKnowledge();
     hub.botUpdate(id);
@@ -1011,7 +1028,7 @@ export async function startServer(hub: Hub) {
   app.get("/api/empresas/:id/whatsapp", async (req) => hub.whats.estado((req.params as any).id));
   app.post("/api/empresas/:id/whatsapp/conectar", async (req, reply) => {
     const id = (req.params as any).id;
-    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa nÃ£o encontrada" });
     hub.db.audit(null, "whatsapp.conectar", { empresa: id });
     return hub.whats.conectar(id);
   });
@@ -1023,9 +1040,9 @@ export async function startServer(hub: Hub) {
   /** Teste do chefe: manda uma mensagem pela conta da empresa. */
   app.post("/api/empresas/:id/whatsapp/enviar", async (req, reply) => {
     const b = (req.body ?? {}) as any;
-    if (!b.para || !b.texto) return reply.code(400).send({ error: "para e texto são obrigatórios" });
+    if (!b.para || !b.texto) return reply.code(400).send({ error: "para e texto sÃ£o obrigatÃ³rios" });
     const liberado = hub.podeFalarComCliente((req.params as any).id);
-    if (!liberado.ok) return reply.code(400).send({ error: `Esta empresa ainda não aceitou os termos de uso de dados (falta: ${liberado.falta.join(", ")}). Abra Leis e consentimentos.` });
+    if (!liberado.ok) return reply.code(400).send({ error: `Esta empresa ainda nÃ£o aceitou os termos de uso de dados (falta: ${liberado.falta.join(", ")}). Abra Leis e consentimentos.` });
     const r = await hub.whats.enviar((req.params as any).id, String(b.para), String(b.texto));
     return r.ok ? r : reply.code(400).send({ error: r.detalhe });
   });
@@ -1033,17 +1050,17 @@ export async function startServer(hub: Hub) {
   /**
    * Manda foto ou documento pelo WhatsApp da empresa.
    *
-   * Aceita `base64` (o arquivo já em mãos) ou `caminho` — e o caminho só vale DENTRO da
-   * pasta do projeto: uma rota que lê qualquer arquivo do disco por nome é um buraco
+   * Aceita `base64` (o arquivo jÃ¡ em mÃ£os) ou `caminho` â€” e o caminho sÃ³ vale DENTRO da
+   * pasta do projeto: uma rota que lÃª qualquer arquivo do disco por nome Ã© um buraco
    * aberto, e esta fica exposta na LAN. A mesma trava de consentimento do texto vale
-   * aqui: foto também é falar com cliente.
+   * aqui: foto tambÃ©m Ã© falar com cliente.
    */
   app.post("/api/empresas/:id/whatsapp/enviar-arquivo", async (req, reply) => {
     const b = (req.body ?? {}) as any;
     const empresaId = String((req.params as any).id);
-    if (!b.para) return reply.code(400).send({ error: "para é obrigatório" });
+    if (!b.para) return reply.code(400).send({ error: "para Ã© obrigatÃ³rio" });
     const liberado = hub.podeFalarComCliente(empresaId);
-    if (!liberado.ok) return reply.code(400).send({ error: `Esta empresa ainda não aceitou os termos de uso de dados (falta: ${liberado.falta.join(", ")}). Abra Leis e consentimentos.` });
+    if (!liberado.ok) return reply.code(400).send({ error: `Esta empresa ainda nÃ£o aceitou os termos de uso de dados (falta: ${liberado.falta.join(", ")}). Abra Leis e consentimentos.` });
 
     let dados: Buffer;
     let nome = String(b.nome ?? "arquivo");
@@ -1053,7 +1070,7 @@ export async function startServer(hub: Hub) {
       const raiz = raizDoProjeto();
       const abs = path.resolve(raiz, String(b.caminho));
       if (!abs.startsWith(raiz + path.sep)) return reply.code(400).send({ error: "o caminho precisa estar dentro da pasta do projeto" });
-      try { dados = await fs.promises.readFile(abs); } catch (e) { return reply.code(400).send({ error: `não consegui ler o arquivo: ${(e as Error).message}` }); }
+      try { dados = await fs.promises.readFile(abs); } catch (e) { return reply.code(400).send({ error: `nÃ£o consegui ler o arquivo: ${(e as Error).message}` }); }
       if (!b.nome) nome = path.basename(abs);
     } else {
       return reply.code(400).send({ error: "mande base64 ou caminho" });
@@ -1065,16 +1082,16 @@ export async function startServer(hub: Hub) {
   });
 
   app.get("/api/managed", async () => manager.list());
-  app.get("/api/managed/:id", async (req, reply) => manager.get((req.params as any).id) ?? reply.code(404).send({ error: "bot não encontrado" }));
+  app.get("/api/managed/:id", async (req, reply) => manager.get((req.params as any).id) ?? reply.code(404).send({ error: "bot nÃ£o encontrado" }));
   app.post("/api/managed", async (req, reply) => {
     const b = req.body as any;
-    if (!b?.name?.trim()) return reply.code(400).send({ error: "name é obrigatório" });
-    // U+FFFD é texto que já chegou quebrado (acento perdido no caminho). Barrar aqui
+    if (!b?.name?.trim()) return reply.code(400).send({ error: "name Ã© obrigatÃ³rio" });
+    // U+FFFD Ã© texto que jÃ¡ chegou quebrado (acento perdido no caminho). Barrar aqui
     // evita um bot que vai se chamar "Bal?o" para sempre, inclusive no id.
     if (/\uFFFD/.test(`${b.name}${b.role ?? ""}${b.persona ?? ""}`)) {
-      return reply.code(400).send({ error: "O texto chegou com caracteres quebrados (acentuação perdida). Mande o nome e a função em UTF-8 — se você é um bot criando outro, use o painel em vez da linha de comando." });
+      return reply.code(400).send({ error: "O texto chegou com caracteres quebrados (acentuaÃ§Ã£o perdida). Mande o nome e a funÃ§Ã£o em UTF-8 â€” se vocÃª Ã© um bot criando outro, use o painel em vez da linha de comando." });
     }
-    // Todo bot tem dono: não existe bot sem empresa. Quem cria herda — bot criado por
+    // Todo bot tem dono: nÃ£o existe bot sem empresa. Quem cria herda â€” bot criado por
     // outro bot nasce na empresa de quem o criou.
     const criador = nodeAuthorized(req);
     const empresa = (b.empresa || (criador ? hub.empresaDe(criador).id : null)) ?? null;
@@ -1082,36 +1099,36 @@ export async function startServer(hub: Hub) {
       const empresas = hub.db.listEmpresas();
       return reply.code(400).send({
         error: empresas.length
-          ? "Diga de qual empresa é este bot: todo bot pertence a uma."
+          ? "Diga de qual empresa Ã© este bot: todo bot pertence a uma."
           : "Crie a primeira empresa antes: todo bot pertence a uma empresa.",
       });
     }
-    if (!hub.db.getEmpresa(empresa)) return reply.code(400).send({ error: `Empresa "${empresa}" não existe.` });
+    if (!hub.db.getEmpresa(empresa)) return reply.code(400).send({ error: `Empresa "${empresa}" nÃ£o existe.` });
     const r = manager.create(b);
     if ("error" in r) return reply.code(400).send(r);
     hub.db.setEmpresaDoBot(r.id, r.name, empresa ?? null, !!b.ponte);
     try { registrarPc({ botId: r.id, empresaId: empresa, nome: r.name }); }
-    catch (e) { console.error(`[pc] não registrei o PC de ${r.id}: ${(e as Error).message}`); }
+    catch (e) { console.error(`[pc] nÃ£o registrei o PC de ${r.id}: ${(e as Error).message}`); }
     hub.broadcastKnowledge();
     return r;
   });
   app.patch("/api/managed/:id", async (req, reply) => {
     const r = manager.update((req.params as any).id, req.body as any);
-    if (!r) return reply.code(404).send({ error: "bot não encontrado" });
+    if (!r) return reply.code(404).send({ error: "bot nÃ£o encontrado" });
     return "error" in r ? reply.code(400).send(r) : r;
   });
   app.post("/api/managed/:id/start", async (req) => ({ ok: manager.start((req.params as any).id) }));
   app.post("/api/managed/:id/stop", async (req) => ({ ok: true, ...(await manager.stop((req.params as any).id)) }));
   app.post("/api/managed/:id/restart", async (req) => { void manager.restart((req.params as any).id); return { ok: true }; });
-  // PARAR TUDO: o ⏹ grande, o Esc e o fechar da janela chamam aqui. Cala todos os bots,
-  // limpa os cartões pendentes e manda todas as janelas (e o celular) pararem também.
-  app.post("/api/stop", async (req) => ({ ok: true, ...hub.pararTudo(String((req.body as any)?.reason ?? "⏹ no painel")) }));
+  // PARAR TUDO: o â¹ grande, o Esc e o fechar da janela chamam aqui. Cala todos os bots,
+  // limpa os cartÃµes pendentes e manda todas as janelas (e o celular) pararem tambÃ©m.
+  app.post("/api/stop", async (req) => ({ ok: true, ...hub.pararTudo(String((req.body as any)?.reason ?? "â¹ no painel")) }));
 
-  // Parar ESTE bot (só ele): interrompe o que ele está fazendo, sem desligar o processo
-  // e sem tocar nos outros. Desligar o processo é /api/managed/:id/stop.
+  // Parar ESTE bot (sÃ³ ele): interrompe o que ele estÃ¡ fazendo, sem desligar o processo
+  // e sem tocar nos outros. Desligar o processo Ã© /api/managed/:id/stop.
   app.post("/api/bots/:id/parar", async (req, reply) => {
     const id = String((req.params as any).id);
-    if (!hub.db.listBots().some((b) => b.id === id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (!hub.db.listBots().some((b) => b.id === id)) return reply.code(404).send({ error: "bot nÃ£o encontrado" });
     return { ok: true, ...hub.pararBot(id, "pedido pelo painel") };
   });
   app.get("/api/managed/:id/logs", async (req) => ({ log: manager.logs((req.params as any).id, Number((req.query as any).lines ?? 200)) }));
@@ -1120,21 +1137,21 @@ export async function startServer(hub: Hub) {
     return r?.error ? reply.code(400).send(r) : { ok: true };
   });
   app.get("/api/voice/voices", async () => [
-    // as vozes clonadas do o chefe e do João vêm primeiro: são as da casa
+    // as vozes clonadas do o chefe e do JoÃ£o vÃªm primeiro: sÃ£o as da casa
     ...Object.entries(VOZES_CLONADAS).map(([chave, v]) => ({ valor: `clone:${chave}`, nome: v.nome, clonada: true })),
-    ...EDGE_PT_BR_VOICES.map((v) => ({ valor: v, nome: v.replace(/^pt-BR-|Neural$/g, "").replace("Multilingual", " multilíngue"), clonada: false })),
+    ...EDGE_PT_BR_VOICES.map((v) => ({ valor: v, nome: v.replace(/^pt-BR-|Neural$/g, "").replace("Multilingual", " multilÃ­ngue"), clonada: false })),
   ]);
 
   // --- grupos ---
   app.get("/api/groups", async () => hub.db.listGroups());
   app.post("/api/groups", async (req, reply) => {
     const b = req.body as { name?: string; members?: string[] };
-    if (!b?.members?.length) return reply.code(400).send({ error: "members é obrigatório" });
+    if (!b?.members?.length) return reply.code(400).send({ error: "members Ã© obrigatÃ³rio" });
     return hub.createGroup(b.name ?? "Grupo", b.members);
   });
   app.patch("/api/groups/:id", async (req, reply) => {
     const g = hub.updateGroup((req.params as any).id, req.body as any);
-    return g ?? reply.code(404).send({ error: "grupo não encontrado" });
+    return g ?? reply.code(404).send({ error: "grupo nÃ£o encontrado" });
   });
   app.delete("/api/groups/:id", async (req) => { hub.deleteGroup((req.params as any).id); return { ok: true }; });
 
@@ -1143,7 +1160,7 @@ export async function startServer(hub: Hub) {
   app.post("/api/salas", async (req, reply) => {
     const b = req.body as { groupId?: string; assunto?: string; voltas?: number; pausaSeg?: number; name?: string; members?: string[] };
     let groupId = b?.groupId;
-    // Sem grupo pronto, cria um na hora com os membros informados — assim dá
+    // Sem grupo pronto, cria um na hora com os membros informados â€” assim dÃ¡
     // para abrir uma sala numa linha, sem ter de montar o grupo antes.
     if (!groupId && b?.members?.length) groupId = hub.createGroup(b.name ?? b.assunto ?? "Sala", b.members).id;
     if (!groupId) return reply.code(400).send({ error: "informe groupId, ou members para eu criar o grupo" });
@@ -1152,25 +1169,25 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/salas/:id/parar", async (req, reply) => {
     const ok = hub.sala.parar(String((req.params as any).id));
-    return ok ? { ok: true } : reply.code(404).send({ error: "essa sala não está aberta" });
+    return ok ? { ok: true } : reply.code(404).send({ error: "essa sala nÃ£o estÃ¡ aberta" });
   });
 
   // --- rotinas ---
   app.get("/api/routines", async (req) => hub.db.listRoutines((req.query as any).bot));
   app.post("/api/routines", async (req, reply) => {
     const b = req.body as { botId?: string; name?: string; cron?: string; prompt?: string };
-    if (!b?.botId || !b?.cron || !b?.prompt) return reply.code(400).send({ error: "botId, cron e prompt são obrigatórios" });
+    if (!b?.botId || !b?.cron || !b?.prompt) return reply.code(400).send({ error: "botId, cron e prompt sÃ£o obrigatÃ³rios" });
     const r = hub.createRoutine(b.botId, b.name ?? "", b.cron, b.prompt);
     return "error" in r ? reply.code(400).send(r) : r;
   });
   app.patch("/api/routines/:id", async (req, reply) => {
     const r = hub.updateRoutine((req.params as any).id, req.body as any);
-    if (!r) return reply.code(404).send({ error: "rotina não encontrada" });
+    if (!r) return reply.code(404).send({ error: "rotina nÃ£o encontrada" });
     return "error" in r ? reply.code(400).send(r) : r;
   });
   app.post("/api/routines/:id/run", async (req, reply) => {
     const r = hub.db.listRoutines().find((x) => x.id === (req.params as any).id);
-    if (!r) return reply.code(404).send({ error: "rotina não encontrada" });
+    if (!r) return reply.code(404).send({ error: "rotina nÃ£o encontrada" });
     hub.fireRoutine(r, "manual");
     hub.db.updateRoutine(r.id, { lastRun: Date.now() });
     hub.broadcastRoutines();
@@ -1181,10 +1198,10 @@ export async function startServer(hub: Hub) {
   // --- arquivos ---
   app.get("/api/files/:id/:name?", async (req, reply) => {
     const f = hub.db.getFile((req.params as any).id);
-    if (!f || !fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo não encontrado" });
-    // Foto e PDF seguem abertos (o chat já embute). Vídeo pede a senha da interface.
+    if (!f || !fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo nÃ£o encontrado" });
+    // Foto e PDF seguem abertos (o chat jÃ¡ embute). VÃ­deo pede a senha da interface.
     if (videoExigeSenha(f.mime) && config.uiPassword && !uiAuthorized(req) && !nodeAuthorized(req)) {
-      return reply.code(401).send({ error: "senha da interface inválida" });
+      return reply.code(401).send({ error: "senha da interface invÃ¡lida" });
     }
     const stat = fs.statSync(f.path);
     reply.header("accept-ranges", "bytes").header("content-type", f.mime);
@@ -1203,10 +1220,10 @@ export async function startServer(hub: Hub) {
     reply.header("content-length", String(stat.size));
     return reply.send(fs.createReadStream(f.path));
   });
-  /** Upload por um nó/bot (token do nó) ou pela interface: corpo binário + cabeçalhos X-File-Name / X-Conversation. */
+  /** Upload por um nÃ³/bot (token do nÃ³) ou pela interface: corpo binÃ¡rio + cabeÃ§alhos X-File-Name / X-Conversation. */
   app.post("/api/upload", async (req, reply) => {
     const botId = nodeAuthorized(req) ?? (uiAuthorized(req) ? "user" : null);
-    if (!botId) return reply.code(401).send({ error: "não autorizado" });
+    if (!botId) return reply.code(401).send({ error: "nÃ£o autorizado" });
     const name = decodeURIComponent(String(req.headers["x-file-name"] ?? "arquivo"));
     const mime = String(req.headers["content-type"] ?? "application/octet-stream").split(";")[0];
     const conversationId = String(req.headers["x-conversation"] ?? "");
@@ -1217,9 +1234,9 @@ export async function startServer(hub: Hub) {
     return { ...f, publicUrl: `${config.publicUrl}${f.url}` };
   });
 
-  /** Arquivo largado no atalho da Área de Trabalho: entra por aqui e o painel pergunta a qual bot entregar. */
+  /** Arquivo largado no atalho da Ãrea de Trabalho: entra por aqui e o painel pergunta a qual bot entregar. */
   app.post("/api/import", async (req, reply) => {
-    if (!nodeAuthorized(req) && !uiAuthorized(req)) return reply.code(401).send({ error: "não autorizado" });
+    if (!nodeAuthorized(req) && !uiAuthorized(req)) return reply.code(401).send({ error: "nÃ£o autorizado" });
     const name = decodeURIComponent(String(req.headers["x-file-name"] ?? "arquivo"));
     const mime = String(req.headers["content-type"] ?? "application/octet-stream").split(";")[0];
     const data = Buffer.isBuffer(req.body) ? req.body : typeof req.body === "string" ? Buffer.from(req.body, "utf8") : Buffer.from(JSON.stringify(req.body ?? ""));
@@ -1233,7 +1250,7 @@ export async function startServer(hub: Hub) {
 
   // --- trabalhos feitos: tudo que os bots produziram, separado por tipo ---
 
-  /** O tipo é decidido pelo mime e, quando ele é genérico demais, pela extensão. */
+  /** O tipo Ã© decidido pelo mime e, quando ele Ã© genÃ©rico demais, pela extensÃ£o. */
   function tipoDoArquivo(nome: string, mime: string): string {
     const ext = (nome.split(".").pop() ?? "").toLowerCase();
     if (mime.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"].includes(ext)) return "imagem";
@@ -1249,7 +1266,7 @@ export async function startServer(hub: Hub) {
     return "outro";
   }
 
-  /** Lista o que os bots produziram. Filtra por tipo, por bot e por pedaço do nome. */
+  /** Lista o que os bots produziram. Filtra por tipo, por bot e por pedaÃ§o do nome. */
   app.get("/api/trabalhos", async (req) => {
     const q = String((req.query as any).q ?? "").trim().toLowerCase();
     const tipo = String((req.query as any).tipo ?? "").trim();
@@ -1271,12 +1288,12 @@ export async function startServer(hub: Hub) {
   });
 
   /**
-   * Copia os trabalhos para uma pasta de verdade na Área de Trabalho, em subpastas
-   * por tipo e com nome legível (no disco do Hub os arquivos têm o id no nome).
+   * Copia os trabalhos para uma pasta de verdade na Ãrea de Trabalho, em subpastas
+   * por tipo e com nome legÃ­vel (no disco do Hub os arquivos tÃªm o id no nome).
    * Depois abre a pasta, para ele pegar o que quiser sem passar pelo painel.
    */
   app.post("/api/trabalhos/pasta", async (req, reply) => {
-    if (!uiAuthorized(req)) return reply.code(401).send({ error: "não autorizado" });
+    if (!uiAuthorized(req)) return reply.code(401).send({ error: "nÃ£o autorizado" });
     const corpo = (req.body ?? {}) as { tipo?: string; ids?: string[]; abrir?: boolean };
     const os = await import("node:os");
     const raiz = path.join(os.homedir(), "Desktop", "MyBots - Trabalhos");
@@ -1300,8 +1317,8 @@ export async function startServer(hub: Hub) {
       const base = path.basename(f.name, ext);
       let destino = path.join(destinoDir, limpo(`${quando} ${f.bot_id} ${f.name}`));
       // Dois arquivos diferentes podem ter o mesmo nome, do mesmo bot, no mesmo
-      // minuto. Antes um apagava o outro em silêncio; agora o que já está lá só
-      // é considerado "o mesmo" se tiver o tamanho igual — senão ganha sufixo.
+      // minuto. Antes um apagava o outro em silÃªncio; agora o que jÃ¡ estÃ¡ lÃ¡ sÃ³
+      // Ã© considerado "o mesmo" se tiver o tamanho igual â€” senÃ£o ganha sufixo.
       if (fs.existsSync(destino)) {
         if (fs.statSync(destino).size === f.size) { pulados++; continue; }
         destino = path.join(destinoDir, limpo(`${quando} ${f.bot_id} ${base} (${f.id.slice(-6)})${ext}`));
@@ -1314,7 +1331,7 @@ export async function startServer(hub: Hub) {
         const { spawn } = await import("node:child_process");
         if (process.platform === "win32") spawn("explorer.exe", [raiz], { detached: true, stdio: "ignore" }).unref();
         else spawn(process.platform === "darwin" ? "open" : "xdg-open", [raiz], { detached: true, stdio: "ignore" }).unref();
-      } catch { /* abrir a pasta é conveniência; copiar é o que importa */ }
+      } catch { /* abrir a pasta Ã© conveniÃªncia; copiar Ã© o que importa */ }
     }
     hub.db.audit(null, "trabalhos.pasta", { copiados, pulados, tipo: corpo.tipo ?? "todos" });
     return { pasta: raiz, copiados, pulados };
@@ -1325,12 +1342,12 @@ export async function startServer(hub: Hub) {
     const q = String((req.query as any).q ?? "").trim();
     return q ? hub.db.searchSaberes(q, undefined, 30) : hub.db.listSaberesTodos();
   });
-  /** O bloco de herança que um bot recebe. Serve para conferir o que ele realmente sabe de cabeça. */
+  /** O bloco de heranÃ§a que um bot recebe. Serve para conferir o que ele realmente sabe de cabeÃ§a. */
   app.get("/api/knowledge/heranca/:botId", async (req) => ({ botId: (req.params as any).botId, bloco: hub.knowledgeIndex((req.params as any).botId) }));
-  app.get("/api/knowledge/:id", async (req, reply) => hub.db.getSaber((req.params as any).id) ?? reply.code(404).send({ error: "não existe" }));
+  app.get("/api/knowledge/:id", async (req, reply) => hub.db.getSaber((req.params as any).id) ?? reply.code(404).send({ error: "nÃ£o existe" }));
   app.post("/api/knowledge", async (req, reply) => {
     const b = req.body as any;
-    if (!b?.titulo?.trim() || !b?.conteudo?.trim()) return reply.code(400).send({ error: "titulo e conteudo são obrigatórios" });
+    if (!b?.titulo?.trim() || !b?.conteudo?.trim()) return reply.code(400).send({ error: "titulo e conteudo sÃ£o obrigatÃ³rios" });
     const id = String(b.id ?? b.titulo).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
     const v = hub.db.saveSaber({ id, titulo: b.titulo.trim(), resumo: (b.resumo ?? "").trim(), conteudo: b.conteudo, tipo: b.tipo ?? "conhecimento", tags: b.tags ?? [], bots: undefined, origem: b.origem, empresaId: b.empresa ?? undefined } as any);  // bots: a base e comum, saber com dono nao existe mais
     hub.broadcastKnowledge();
@@ -1342,9 +1359,9 @@ export async function startServer(hub: Hub) {
   app.post("/api/channels/incoming", async (req, reply) => {
     const key = String(req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
     const expected = config.channelInboundKey || config.hubToken;
-    if (expected && key !== expected) return reply.code(401).send({ error: "chave do canal inválida" });
+    if (expected && key !== expected) return reply.code(401).send({ error: "chave do canal invÃ¡lida" });
     const b = req.body as { channel?: string; from?: string; botId?: string; text?: string };
-    if (!b?.channel || !b?.from || !b?.botId || !b?.text) return reply.code(400).send({ error: "channel, from, botId e text são obrigatórios" });
+    if (!b?.channel || !b?.from || !b?.botId || !b?.text) return reply.code(400).send({ error: "channel, from, botId e text sÃ£o obrigatÃ³rios" });
     return hub.channelMessage(b.channel, b.from, b.botId, b.text);
   });
 
@@ -1353,8 +1370,8 @@ export async function startServer(hub: Hub) {
   app.post("/api/stt", async (req, reply) => {
     try {
       const mime = String(req.headers["content-type"] ?? "audio/webm").split(";")[0];
-      // Áudio curto demais é clique, tosse ou porta batendo. Mandar isso ao Whisper
-      // não dá silêncio de volta: dá uma frase inventada, que vira pedido ao bot.
+      // Ãudio curto demais Ã© clique, tosse ou porta batendo. Mandar isso ao Whisper
+      // nÃ£o dÃ¡ silÃªncio de volta: dÃ¡ uma frase inventada, que vira pedido ao bot.
       if (!Buffer.isBuffer(req.body) || (req.body as Buffer).length < 2000) return { text: "" };
       const text = await transcribe(req.body as Buffer, mime, mime.includes("wav") ? "audio.wav" : mime.includes("mp4") ? "audio.m4a" : "audio.webm", String((req.query as any).lang ?? "pt"));
       return { text };
@@ -1364,7 +1381,7 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/tts", async (req, reply) => {
     const b = req.body as { text?: string; botId?: string; voice?: string; vel?: number };
-    if (!b?.text) return reply.code(400).send({ error: "text é obrigatório" });
+    if (!b?.text) return reply.code(400).send({ error: "text Ã© obrigatÃ³rio" });
     const bot = hub.summaries().find((x) => x.id === b.botId);
     try {
       const { audio, mime, vel } = await synthesize(b.text, b.voice ?? pickVoice(b.botId ?? "bot", bot?.voice), b.vel);
@@ -1381,7 +1398,7 @@ export async function startServer(hub: Hub) {
   // --- MCP (ferramentas para os Bots, usado pelo engine opencode) ---
   await registerMcp(app, hub);
 
-  // --- interface estática ---
+  // --- interface estÃ¡tica ---
   // --- tela VNC (noVNC) ---
   {
     const novncDir = path.join(fileURLToPath(new URL("../../..", import.meta.url)), "node_modules", "@novnc", "novnc", "lib");
@@ -1398,11 +1415,11 @@ export async function startServer(hub: Hub) {
   if (fs.existsSync(config.uiDist)) {
     await app.register(fastifyStatic, { root: config.uiDist, prefix: "/" });
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith("/api/") || req.url.startsWith("/mcp")) return reply.code(404).send({ error: "não encontrado" });
+      if (req.url.startsWith("/api/") || req.url.startsWith("/mcp")) return reply.code(404).send({ error: "nÃ£o encontrado" });
       return reply.sendFile("index.html");
     });
   } else {
-    app.get("/", async () => ({ ok: true, aviso: `Interface não compilada: rode "npm run build:ui". UI esperada em ${config.uiDist}` }));
+    app.get("/", async () => ({ ok: true, aviso: `Interface nÃ£o compilada: rode "npm run build:ui". UI esperada em ${config.uiDist}` }));
   }
 
   await app.listen({ host: config.host, port: config.port });
@@ -1413,3 +1430,5 @@ export async function startServer(hub: Hub) {
   process.on("SIGTERM", shutdown);
   return app;
 }
+
+

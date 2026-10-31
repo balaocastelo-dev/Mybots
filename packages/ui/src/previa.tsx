@@ -1,3 +1,4 @@
+import { UI_BASE } from "./api";
 import { useEffect, useState } from "react";
 
 /**
@@ -26,7 +27,7 @@ export function PreviaNavegador({ valor, tipo }: { valor: string; tipo: "site" |
     const quando = setTimeout(async () => {
       try {
         const q = tipo === "insta" ? `insta=${encodeURIComponent(t)}` : `url=${encodeURIComponent(t)}`;
-        const r = await fetch(`/api/previa?${q}`, { signal: parar.signal });
+        const r = await fetch(`${UI_BASE}/api/previa?${q}`, { signal: parar.signal });
         setP(r.ok ? await r.json() : { ok: false, url: t, erro: "nao consegui abrir" });
       } catch { /* trocou o texto; o proximo pedido manda */ }
       finally { setIndo(false); }

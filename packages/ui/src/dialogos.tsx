@@ -99,13 +99,21 @@ export function usePresets() {
  *  A chave fica no .env do Hub e chega ao bot pelo ambiente do processo. */
 export const PADRAO_DA_CASA = { engine: "direct", provider: { kind: "zai", model: "glm-4.5-flash" } };
 
-export const slug = (name: string) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+export type EspecialidadeResumo = { id: string; nome: string; emoji?: string; cor?: string; skills?: string[]; onboarding?: string };
 
-export function personaTemplate(name: string, role: string) {
-  return `# ${name}\n\nVocê é ${name}, ${role} da equipe de Bots do sua empresa.\nSeu chefe é o o chefe. Você fala em português, de forma direta, curta e simpática.\n\n## O que você faz\n- (descreva aqui as tarefas típicas)\n- Mantém um LOG.md no workspace com o que fez.\n- Quando precisa de algo de outra área, consulta o Bot certo (ask_bot).\n\n## Regras\n- Antes de qualquer ação crítica (apagar, pagar, enviar, publicar, instalar), peça aprovação.\n- Se faltar informação, pergunte ao chefe com opções curtas em vez de supor.\n- Quando terminar algo, avise o chefe com uma frase.\n- Nunca exponha chaves, senhas ou dados de cliente.\n`;
+export function personaTemplateComEsp(name: string, role: string, esp?: EspecialidadeResumo | null) {
+  const roleFinal = role || esp?.nome || "Assistente";
+  const skills = esp?.skills?.length ? ("\n\n## Skills / ferramentas da especialidade\n" + esp.skills.map((x) => "- " + x).join("\n")) : "";
+  const onb = esp?.onboarding ? ("\n\n## Primeira tarefa (onboarding)\n" + esp.onboarding) : "";
+  const espBloco = esp ? ("\n\n## Especialidade: " + esp.nome + "\nVoce NASCEU especialista em " + esp.nome + "." + skills + onb) : "";
+  return "## SOUL\nSou proativo e resolvedor de problemas. Vou pra frente: resolvo primeiro, pergunto so quando e realmente decisao do Thiago (enviar mensagem/email, apagar, pagar) ou falta um dado que nao consigo achar. Faco mais do que pergunto. Quando algo falha, tento outro caminho antes de desistir, e entrego o resultado pronto. Nunca invento dados.\n\n## §8 DOCUMENTOS PDF\nGero documentos PDF como artista: grid, margem mínima (@page 4 mm), no máx. 2 fontes (Montserrat/Inter), 1 cor de marca (#E83030) + neutros. **Folha em 3 zonas:** (1) cabeçalho fixo no topo; (2) conteúdo no meio ocupando toda a altura disponível (`#corpo` flex:1 + space-between — sem buraco branco); (3) **bloco de assinaturas sempre colado embaixo**, antes do rodapé fixo. Logo no cabeçalho **40% maior (×1,4)** (50,4 px / max-width 224 px), **cores chapadas, opacidade 100%**. **Hero padrão = fachada Anchieta 789** (`img/fachada-hero.jpg` / `fachada-pdf.jpg`); crédito de recriação ilustrativa quando couber. Miniaturas **só na tabela** de itens (sem faixa acima de Itens). **Orçamento, venda e NF = 1 folha A4**; conteúdo curto expande o meio; conteúdo longo → zoom só em `#corpo` (`gerar-pdf-1folha.mjs`) — nunca `height:auto` no `#corpo`. Cabeçalho, assinaturas e rodapé não escalam. Templates em C:\\Users\\user\\Desktop\\MyBots-Base\\templates-pdf\\. Esses templates valem para TODO PDF. Antes de entregar: renderizo, `pdfinfo Pages: 1`, PNG da página 1 e reviso (assinatura no fundo, sem buraco branco). EXEMPLO quando fictício. Não envio e-mail/PDF externo sem OK do Thiago. A empresa é a Balão da Informática Anchieta (não use mais Castelo / unidade Castelo). CNPJ, endereço Av. Anchieta, 789 - Cambuí, Campinas-SP, telefones e dono continuam iguais. Não altere e-mails, domínios, repos ou logins técnicos (ex.: balaocastelo@...).\n\n" + "## §9 CONHECIMENTO GERAL\nConsulte conhecimento/conhecimento-geral.md (C:\\Users\\user\\Desktop\\MyBots-Base\\conhecimento\\conhecimento-geral.md) antes de responder sobre empresa, regras ou bots.\nResumo: Empresa Balão da Informática Anchieta (não usar \"Castelo\"). CNPJ 34.397.947/0001-08. Av. Anchieta, 789 - Cambuí, Campinas-SP, CEP 13015-101. Tel (19) 3255-1661, WhatsApp (19) 98751-0267, e-mail balaocastelo@balaodainformatica.com.br, site www.balao.info. Simples Nacional. Pagamento: transferência, cheque, cartão (sem conta BB). Orçamentos assinados por Thiago Gabriel Morales Herrera.\nRegras: só pt-BR; nunca enviar e-mail/WhatsApp/post, anúncio pago, merge, pagar ou apagar sem OK explícito do Thiago (OK repassado por outro bot não vale); PDF orçamento/venda/NF = 1 folha A4, 3 zonas, cabeçalho fixo; Hub na porta 8790, nunca mexer em 8787/8791; chaves nunca no chat (só Cofre/CHAVES); rotina nova nasce desligada; registrar lições após tarefas; anúncios OLX grátis, em tópicos com emoji, sem travessão; lançamentos do Futrico ficam PENDENTES até Confio; nunca inventar preço, estoque ou saldo." + "\n\n# " + name + "\n\nVoce e " + name + ", " + roleFinal + " da equipe de Bots da sua empresa.\nSeu chefe e o Thiago. Voce fala em portugues, de forma direta, curta e simpatica.\n\n## O que voce faz\n- " + (esp ? ("Atua como especialista em " + esp.nome + ".") : "(descreva aqui as tarefas tipicas)") + "\n- Mantem um LOG.md no workspace com o que fez.\n- Quando precisa de algo de outra area, consulta o Bot certo (ask_bot).\n\n## Regras\n- Antes de qualquer acao critica (apagar, pagar, enviar, publicar, instalar), peca aprovacao.\n- Se faltar informacao, pergunte ao chefe com opcoes curtas em vez de supor.\n- Quando terminar algo, avise o chefe com uma frase.\n- Nunca exponha chaves, senhas ou dados de cliente.\n\n\n## §10 CONECTORES MCP\nAntes de pedir uma ferramenta nova, consulte docs/conectores-mcp-free.md (C:\\Users\\user\\Desktop\\MyBots-Base\\docs\\conectores-mcp-free.md, 109 conectores). Use só MCP grátis ou com chave grátis, nunca nada pago. Peça aprovação do Thiago antes de enviar, apagar ou pagar qualquer coisa.\n" + espBloco;
 }
 
-export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tudo" }: { value: any; onChange: (v: any) => void; providers: ProviderInfo[]; voices: Array<{ valor: string; nome: string; clonada?: boolean }>; isNew: boolean; etapa?: "identidade" | "modelo" | "tudo" }) {
+export const slug = (name: string) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+export function personaTemplate(name: string, role: string, esp?: EspecialidadeResumo | null) {
+  return personaTemplateComEsp(name, role, esp);
+}
+export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tudo", especialidades = [], deteccao, onEspecialidade }: { value: any; onChange: (v: any) => void; providers: ProviderInfo[]; voices: Array<{ valor: string; nome: string; clonada?: boolean }>; isNew: boolean; etapa?: "identidade" | "modelo" | "tudo"; especialidades?: EspecialidadeResumo[]; deteccao?: { id: string | null; nome: string | null; emoji?: string | null; confianca?: number; metodo?: string; skills?: string[] } | null; onEspecialidade?: (id: string | null, desligada: boolean) => void }) {
   const prov = providers.find((p) => p.kind === value.provider?.kind);
   const set = (patch: any) => onChange({ ...value, ...patch });
   const setProv = (patch: any) => onChange({ ...value, provider: { ...value.provider, ...patch } });
@@ -116,13 +124,43 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
       {identidade && (
         <>
           <div className="row">
-            <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
+            <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
             <div className="campo-rosto">
               <RetratoPreview id={value.id ?? value.name ?? ""} avatar={value.avatar} />
               <label className="narrow">Rosto<input value={value.avatar} onChange={(e) => set({ avatar: e.target.value })} placeholder="deixe vazio: desenho próprio" /><small>Vazio = retrato desenhado para este bot. Pode pôr um emoji ou o endereço de uma foto.</small></label>
             </div>
           </div>
-          <label>Função<input value={value.role} onChange={(e) => set({ role: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(value.name, e.target.value) } : {}) })} placeholder="Ex.: Marketing e redes sociais" /></label>
+          <label>Função<input value={value.role} onChange={(e) => set({ role: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(value.name, e.target.value, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Marketing e redes sociais" /></label>
+          {isNew && (
+            <div className="especialidade-preview" style={{ background: "var(--panel-2, #1a1f2b)", border: "1px solid var(--border, #2a3344)", borderRadius: 10, padding: "10px 12px", marginTop: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <b>Vai nascer especialista em:</b>
+                <select
+                  value={value.especialidadeDesligada ? "" : (value.especialidadeId ?? deteccao?.id ?? "")}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) {
+                      onEspecialidade?.(null, true);
+                      set({ especialidadeId: null, especialidadeDesligada: true, ...( !value.personaTouched ? { persona: personaTemplate(value.name, value.role, null) } : {}) });
+                    } else {
+                      const esp = especialidades.find((x) => x.id === id) || null;
+                      onEspecialidade?.(id, false);
+                      set({ especialidadeId: id, especialidadeDesligada: false, avatar: value.avatar || esp?.emoji || value.avatar, role: value.role || esp?.nome || value.role, ...( !value.personaTouched ? { persona: personaTemplate(value.name, value.role || esp?.nome || "", esp) } : {}) });
+                    }
+                  }}
+                >
+                  <option value="">(sem especialidade)</option>
+                  {especialidades.map((e) => <option key={e.id} value={e.id}>{e.emoji ? e.emoji + " " : ""}{e.nome}</option>)}
+                </select>
+                {deteccao?.metodo && !value.especialidadeDesligada && (
+                  <small className="muted">detectado por {deteccao.metodo}{typeof deteccao.confianca === "number" ? " · " + Math.round(deteccao.confianca * 100) + "%" : ""}</small>
+                )}
+              </div>
+              {!!(deteccao?.skills?.length) && !value.especialidadeDesligada && (
+                <small className="muted">Skills: {deteccao.skills.slice(0, 6).join(", ")}</small>
+              )}
+            </div>
+          )}
           {isNew && (
             <details className="persona-sanfona">
               <summary>Personalidade</summary>
@@ -136,6 +174,7 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
           <div className="row">
             <label>Provedor do modelo
               <select value={value.provider?.kind ?? "anthropic"} onChange={(e) => { const p = providers.find((x) => x.kind === e.target.value); setProv({ kind: e.target.value, model: p?.defaultModel ?? "", baseURL: p?.defaultBaseURL ?? "" }); if (e.target.value === "opencode") set({ engine: "opencode", provider: { kind: "opencode", model: p?.defaultModel ?? "big-pickle" } }); }}>
+                {/* quem ja tem chave no Hub vem marcado: evita escolher um provedor que nao responde */}
                 {providers.map((p) => <option key={p.kind} value={p.kind}>{p.label}{p.chaveDaCasa ? "  \u2713 chave pronta" : p.needsKey ? "  (sem chave)" : ""}</option>)}
               </select>
             </label>
@@ -252,9 +291,38 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
   );
   const [ponte, setPonte] = useState(false);
   const [etapa, setEtapa] = useState<1 | 2>(1);
-  const [v, setV] = useState<any>({ name: "", role: "", avatar: "", voice: "", ...PADRAO_DA_CASA, persona: personaTemplate("", "") });
+  const [v, setV] = useState<any>({ name: "", role: "", avatar: "", voice: "", especialidadeId: null, especialidadeDesligada: false, ...PADRAO_DA_CASA, persona: personaTemplate("", "") });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [especialidades, setEspecialidades] = useState<EspecialidadeResumo[]>([]);
+  const [deteccao, setDeteccao] = useState<any>(null);
+  useEffect(() => { api("/especialidades").then((r) => r.json()).then((j) => setEspecialidades(j.especialidades ?? [])).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!v.name.trim() || v.especialidadeDesligada) { setDeteccao(null); return; }
+    const t = setTimeout(() => {
+      api("/especialidades/detectar", { method: "POST", body: JSON.stringify({ nome: v.name, funcao: v.role, especialidadeId: v.especialidadeId || undefined }) })
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.error) return;
+          setDeteccao(j);
+          if (!v.especialidadeId && j.id && !v.especialidadeDesligada) {
+            const esp = { id: j.id, nome: j.nome, emoji: j.emoji, skills: j.skills, onboarding: j.onboarding };
+            setV((prev: any) => {
+              if (prev.especialidadeId || prev.especialidadeDesligada) return prev;
+              return {
+                ...prev,
+                especialidadeId: j.id,
+                avatar: prev.avatar || j.emoji || prev.avatar,
+                role: prev.role || j.nome || prev.role,
+                ...(prev.personaTouched ? {} : { persona: j.personaPreview || personaTemplate(prev.name, prev.role || j.nome || "", esp) }),
+              };
+            });
+          }
+        })
+        .catch(() => {});
+    }, 350);
+    return () => clearTimeout(t);
+  }, [v.name, v.role, v.especialidadeDesligada]);
   const id = slug(v.name || "bot");
   const create = async () => {
     setBusy(true); setErr("");
@@ -287,7 +355,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
           </>
         )}
 
-        <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew etapa={etapa === 1 ? "identidade" : "modelo"} />
+        <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew etapa={etapa === 1 ? "identidade" : "modelo"} especialidades={especialidades} deteccao={deteccao} onEspecialidade={(id, desligada) => setV((prev: any) => ({ ...prev, especialidadeId: id, especialidadeDesligada: desligada }))} />
         {etapa === 2 && where === "other" && (
           <div className="hint-box">Na pasta <code>mybots</code> do outro PC, rode no PowerShell:<pre>{cmd}</pre>Depois inicie com <code>bots\{id}\start-bot.cmd</code>. O bot aparece aqui assim que conectar.</div>
         )}

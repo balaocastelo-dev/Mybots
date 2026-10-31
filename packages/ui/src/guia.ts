@@ -1,12 +1,13 @@
+import { UI_BASE } from "./api";
 // A voz que recebe a empresa nos primeiros passos, no idioma que ela escolher.
 //
-// POR QUE EDGE E NAO A VOZ DO NAVEGADOR: o speechSynthesis do Chrome varia de máquina
-// para máquina — às vezes é uma voz robótica, às vezes nem existe no idioma. O Edge
-// soa igual em qualquer PC, é gratuito e já está no Hub. Se o Hub não responder,
-// caímos na voz do navegador: guia mudo é pior que guia com voz feia.
+// POR QUE EDGE E NAO A VOZ DO NAVEGADOR: o speechSynthesis do Chrome varia de mÃ¡quina
+// para mÃ¡quina â€” Ã s vezes Ã© uma voz robÃ³tica, Ã s vezes nem existe no idioma. O Edge
+// soa igual em qualquer PC, Ã© gratuito e jÃ¡ estÃ¡ no Hub. Se o Hub nÃ£o responder,
+// caÃ­mos na voz do navegador: guia mudo Ã© pior que guia com voz feia.
 //
-// REGRA: fala uma vez por passo. Repetir a mesma frase a cada render é o jeito mais
-// rápido de fazer alguém desligar o som — e quem desliga perde o guia inteiro.
+// REGRA: fala uma vez por passo. Repetir a mesma frase a cada render Ã© o jeito mais
+// rÃ¡pido de fazer alguÃ©m desligar o som â€” e quem desliga perde o guia inteiro.
 
 export type Idioma = "pt" | "en" | "es" | "fr";
 
@@ -14,7 +15,7 @@ export type Idioma = "pt" | "en" | "es" | "fr";
  *  voz brasileira falando ingles soa pior do que trocar de voz. */
 function vozDaCasa(): string { const v = vozAtual(); return v.startsWith("pt-") ? VOZ_FRASE : v; }
 
-const VELOCIDADE = 1.4; // instrução arrastada faz a pessoa pular o guia
+const VELOCIDADE = 1.4; // instruÃ§Ã£o arrastada faz a pessoa pular o guia
 
 /** Uma voz limpa e com energia por idioma. Todas do Edge. */
 const VOZES: Record<Idioma, string> = {
@@ -25,10 +26,10 @@ const VOZES: Record<Idioma, string> = {
 };
 
 export const IDIOMAS: { id: Idioma; nome: string; bandeira: string; cod: string }[] = [
-  { id: "pt", nome: "Português", bandeira: "🇧🇷", cod: "BR" },
-  { id: "en", nome: "English", bandeira: "🇺🇸", cod: "EN" },
-  { id: "es", nome: "Español", bandeira: "🇪🇸", cod: "ES" },
-  { id: "fr", nome: "Français", bandeira: "🇫🇷", cod: "FR" },
+  { id: "pt", nome: "PortuguÃªs", bandeira: "ðŸ‡§ðŸ‡·", cod: "BR" },
+  { id: "en", nome: "English", bandeira: "ðŸ‡ºðŸ‡¸", cod: "EN" },
+  { id: "es", nome: "EspaÃ±ol", bandeira: "ðŸ‡ªðŸ‡¸", cod: "ES" },
+  { id: "fr", nome: "FranÃ§ais", bandeira: "ðŸ‡«ðŸ‡·", cod: "FR" },
 ];
 
 let idioma: Idioma = "pt";
@@ -40,10 +41,10 @@ export function definirIdioma(l: Idioma) {
   try { localStorage.setItem("mybots.idioma", l); document.documentElement.lang = l; } catch { /* ignora */ }
 }
 export const VOZES_PADRAO: { id: string; nome: string }[] = [
-  { id: "pt-BR-ThalitaNeural", nome: "Thalita · português" },
-  { id: "en-US-AriaNeural", nome: "Aria · English" },
-  { id: "es-ES-ElviraNeural", nome: "Elvira · español" },
-  { id: "fr-FR-DeniseNeural", nome: "Denise · français" },
+  { id: "pt-BR-ThalitaNeural", nome: "Thalita Â· portuguÃªs" },
+  { id: "en-US-AriaNeural", nome: "Aria Â· English" },
+  { id: "es-ES-ElviraNeural", nome: "Elvira Â· espaÃ±ol" },
+  { id: "fr-FR-DeniseNeural", nome: "Denise Â· franÃ§ais" },
 ];
 
 /** Voz da casa. Sem escolha guardada, segue o idioma. */
@@ -64,14 +65,14 @@ export function definirVozPadrao(id: string) {
 const vozAtual = () => vozPadrao();
 const tagDeFala = () => (idioma === "pt" ? "pt-BR" : idioma === "en" ? "en-US" : idioma === "es" ? "es-ES" : "fr-FR");
 
-/** Dito na explosão, quando ainda não há idioma escolhido: por isso vai nos quatro. */
+/** Dito na explosÃ£o, quando ainda nÃ£o hÃ¡ idioma escolhido: por isso vai nos quatro. */
 export const ESCOLHA_IDIOMA = "Escolha o seu idioma. Choose your language. Elige tu idioma. Choisissez votre langue.";
 
 const BEM_VINDO: Record<Idioma, string> = {
-  pt: "Vamos começar cadastrando a sua empresa. Digite o nome e, se tiver, o site e o Instagram: eu leio tudo e já sugiro as regras da casa. Depois a gente conecta o WhatsApp pelo QR code e a sua conta do Google, e aí o Gerente Geral monta a sua equipe.",
+  pt: "Vamos comeÃ§ar cadastrando a sua empresa. Digite o nome e, se tiver, o site e o Instagram: eu leio tudo e jÃ¡ sugiro as regras da casa. Depois a gente conecta o WhatsApp pelo QR code e a sua conta do Google, e aÃ­ o Gerente Geral monta a sua equipe.",
   en: "Let's start by registering your company. Type the name and, if you have them, your website and Instagram: I'll read everything and suggest the house rules. Then we connect WhatsApp through the QR code and your Google account, and the General Manager builds your team.",
-  es: "Vamos a empezar registrando tu empresa. Escribe el nombre y, si los tienes, el sitio web y el Instagram: yo leo todo y ya sugiero las reglas de la casa. Después conectamos WhatsApp por el código QR y tu cuenta de Google, y el Gerente General arma tu equipo.",
-  fr: "Commençons par enregistrer votre entreprise. Saisissez le nom et, si vous les avez, votre site web et votre Instagram : je lis tout et je propose les règles de la maison. Ensuite nous connectons WhatsApp par le code QR et votre compte Google, et le Directeur Général constitue votre équipe.",
+  es: "Vamos a empezar registrando tu empresa. Escribe el nombre y, si los tienes, el sitio web y el Instagram: yo leo todo y ya sugiero las reglas de la casa. DespuÃ©s conectamos WhatsApp por el cÃ³digo QR y tu cuenta de Google, y el Gerente General arma tu equipo.",
+  fr: "CommenÃ§ons par enregistrer votre entreprise. Saisissez le nom et, si vous les avez, votre site web et votre Instagram : je lis tout et je propose les rÃ¨gles de la maison. Ensuite nous connectons WhatsApp par le code QR et votre compte Google, et le Directeur GÃ©nÃ©ral constitue votre Ã©quipe.",
 };
 export const boasVindas = (): string => BEM_VINDO[idioma] ?? BEM_VINDO.pt;
 
@@ -96,12 +97,12 @@ export function alternarMudo(): boolean {
   return novo;
 }
 
-/** Sintetiza antes da hora e guarda. Não toca nada — sintetizar leva um ou dois
- *  segundos, e guia que começa a falar depois de a tela trocar chega atrasado. */
+/** Sintetiza antes da hora e guarda. NÃ£o toca nada â€” sintetizar leva um ou dois
+ *  segundos, e guia que comeÃ§a a falar depois de a tela trocar chega atrasado. */
 export async function preparar(texto: string, chave: string) {
   if (prontos.has(chave) || mudo()) return;
   try {
-    const r = await fetch("/api/tts", {
+    const r = await fetch(`${UI_BASE}/api/tts`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: texto, voice: vozDaCasa(), vel: VELOCIDADE }),
     });
@@ -109,7 +110,7 @@ export async function preparar(texto: string, chave: string) {
   } catch { /* sem adiantamento: falar() sintetiza na hora */ }
 }
 
-/** Fala uma vez. `chave` identifica o passo: a mesma chave não repete. */
+/** Fala uma vez. `chave` identifica o passo: a mesma chave nÃ£o repete. */
 export async function falar(texto: string, chave?: string) {
   const k = chave ?? texto;
   if (ditos.has(k) || mudo()) return;
@@ -123,7 +124,7 @@ export async function falar(texto: string, chave?: string) {
     try { await a.play(); return; } catch { /* cai no caminho normal */ }
   }
   try {
-    const r = await fetch("/api/tts", {
+    const r = await fetch(`${UI_BASE}/api/tts`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: texto, voice: vozDaCasa(), vel: VELOCIDADE }),
     });
@@ -141,12 +142,12 @@ export async function falar(texto: string, chave?: string) {
   }
 }
 
-/* ── O convite das quatro línguas ──────────────────────────────────────────
-   Antes era UMA frase com as quatro, dita pela voz brasileira: o inglês e o
-   francês saíam com sotaque de robô. Agora são quatro clipes curtos, cada um
-   sintetizado com a voz NATIVA daquele idioma, tocados em sequência. É mais
-   trabalho e é a diferença entre soar como um produto e soar como um tradutor
-   automático — que é a primeira coisa que o cliente ouve da casa. */
+/* â”€â”€ O convite das quatro lÃ­nguas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   Antes era UMA frase com as quatro, dita pela voz brasileira: o inglÃªs e o
+   francÃªs saÃ­am com sotaque de robÃ´. Agora sÃ£o quatro clipes curtos, cada um
+   sintetizado com a voz NATIVA daquele idioma, tocados em sequÃªncia. Ã‰ mais
+   trabalho e Ã© a diferenÃ§a entre soar como um produto e soar como um tradutor
+   automÃ¡tico â€” que Ã© a primeira coisa que o cliente ouve da casa. */
 const CONVITE: Record<Idioma, string> = {
   pt: "Escolha o seu idioma.",
   en: "Choose your language.",
@@ -164,7 +165,7 @@ export function aoConvidar(cb: ((l: Idioma | null) => void) | null) { ouvinte = 
  *  cadencia aqui e tocam em 1.0, sem multiplicar nada. */
 async function sintetizar(texto: string, voz: string, vel: number = VEL_CONVITE): Promise<string | null> {
   try {
-    const r = await fetch("/api/tts", {
+    const r = await fetch(`${UI_BASE}/api/tts`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: texto, voice: voz, vel }),
     });
@@ -172,7 +173,7 @@ async function sintetizar(texto: string, voz: string, vel: number = VEL_CONVITE)
   } catch { return null; }
 }
 
-/** Adianta os quatro clipes enquanto as partículas ainda estão na tela. */
+/** Adianta os quatro clipes enquanto as partÃ­culas ainda estÃ£o na tela. */
 export async function prepararConvite() {
   if (mudo() || clipes.size) return;
   await Promise.all(IDIOMAS.map(async (i) => {
@@ -197,17 +198,17 @@ export async function falarConvite() {
       await a.play();
       await new Promise<void>((pronto) => { a.onended = () => pronto(); a.onerror = () => pronto(); });
       ouvinte?.(null);
-      await new Promise((r) => setTimeout(r, 140)); // respiro entre as línguas
+      await new Promise((r) => setTimeout(r, 140)); // respiro entre as lÃ­nguas
     } catch { /* som bloqueado pelo navegador: a tela continua */ }
   }
 }
-/* ── Os dois sussurros da abertura ────────────────────────────────────────
-   Entram por cima das partículas, em inglês, no espírito da abertura do Need
-   for Speed: baixo, lento e grave, como alguém falando perto do microfone.
-   COMO SE FAZ SUSSURRO SEM SSML: o Edge não expõe o estilo "whispering" pela
-   biblioteca que o Hub usa, então o efeito é construído na reprodução —
-   volume baixo, velocidade reduzida (o que também baixa o tom) e um filtro
-   que corta os agudos, deixando o ar e tirando o brilho da locução. */
+/* â”€â”€ Os dois sussurros da abertura â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   Entram por cima das partÃ­culas, em inglÃªs, no espÃ­rito da abertura do Need
+   for Speed: baixo, lento e grave, como alguÃ©m falando perto do microfone.
+   COMO SE FAZ SUSSURRO SEM SSML: o Edge nÃ£o expÃµe o estilo "whispering" pela
+   biblioteca que o Hub usa, entÃ£o o efeito Ã© construÃ­do na reproduÃ§Ã£o â€”
+   volume baixo, velocidade reduzida (o que tambÃ©m baixa o tom) e um filtro
+   que corta os agudos, deixando o ar e tirando o brilho da locuÃ§Ã£o. */
 const SUSSURROS: Record<string, { texto: string; voz: string }> = {
   // as duas metades de UMA frase: "esse e o futuro, sendo reescrito por Thiago Herrera"
   futuro: { texto: "This is the future,", voz: "en-US-AriaNeural" },
@@ -234,7 +235,7 @@ export async function sussurrar(chave: "futuro" | "autor") {
   a.playbackRate = 0.82;   // mais lento e mais grave
   a.volume = 0.55;
   try {
-    // corta os agudos: a voz perde o brilho de locução e vira ar
+    // corta os agudos: a voz perde o brilho de locuÃ§Ã£o e vira ar
     const ctx = new AudioContext();
     const fonte = ctx.createMediaElementSource(a);
     const corte = ctx.createBiquadFilter();
@@ -244,15 +245,15 @@ export async function sussurrar(chave: "futuro" | "autor") {
   } catch { /* sem Web Audio: toca seco, ainda baixo e lento */ }
   try { await a.play(); } catch { /* som bloqueado */ }
 }
-/* ── As palavras da abertura ────────────────────────────────────────────────
+/* â”€â”€ As palavras da abertura â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Uma palavra, um clipe. E assim que o som acompanha as letras nascendo: cada
    palavra e dita no instante em que as particulas dela chegam ao lugar. Frase
-   inteira num clipe so NUNCA sincroniza — o Edge devolve o audio pronto, sem
+   inteira num clipe so NUNCA sincroniza â€” o Edge devolve o audio pronto, sem
    dizer onde cada palavra comeca, entao o maximo que da e casar o inicio.
    O sussurro continua sendo feito na reproducao: mais devagar (o que tambem
    baixa o tom), volume baixo e os agudos cortados. */
 const VOZ_ABERTURA = "pt-BR-AntonioNeural";
-export const FRASE_1 = ["isso", "é", "o", "futuro"];
+export const FRASE_1 = ["isso", "Ã©", "o", "futuro"];
 export const FRASE_2 = ["escrito", "por", "Thiago", "Herrera"];
 const ditas = new Map<string, string>();
 let somCtx: AudioContext | null = null;
@@ -282,14 +283,14 @@ export async function dizerPalavra(p: string) {
   } catch { /* sem Web Audio: toca seco, ainda baixo e devagar */ }
   try { await a.play(); } catch { /* som bloqueado pelo navegador */ }
 }
-/* ── A frase da abertura, inteira e medida ─────────────────────────────────
+/* â”€â”€ A frase da abertura, inteira e medida â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Palavra sintetizada sozinha NUNCA soa real: sai sem entonacao, cada uma
    comecando do zero, com silencio em volta. Voz natural exige a frase inteira
-   num clipe so — e dai o problema vira sincronizar.
+   num clipe so â€” e dai o problema vira sincronizar.
    A saida: depois de sintetizar, a gente MEDE a duracao do audio e reparte
    esse tempo entre as palavras, proporcional ao tamanho de cada uma. Nao e
    marcacao exata (o Edge nao diz onde cada palavra comeca), mas e a frase de
-   verdade, no ritmo de verdade — e a leitura acompanha. */
+   verdade, no ritmo de verdade â€” e a leitura acompanha. */
 const VOZ_FRASE = "pt-BR-FranciscaNeural";
 const VEL_FRASE = 0.96;
 const frases = new Map<string, HTMLAudioElement>();

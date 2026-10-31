@@ -1,13 +1,14 @@
+import { UI_BASE } from "./api";
 /**
  * Trabalhos feitos.
  *
- * Tudo que os bots produziram num lugar só, separado por tipo. A ideia é que ele
- * não precise caçar arquivo dentro de conversa antiga: entra aqui, escolhe o
- * tipo, e pega. Imagem e site mostram prévia; o resto mostra ícone, tamanho,
+ * Tudo que os bots produziram num lugar sÃ³, separado por tipo. A ideia Ã© que ele
+ * nÃ£o precise caÃ§ar arquivo dentro de conversa antiga: entra aqui, escolhe o
+ * tipo, e pega. Imagem e site mostram prÃ©via; o resto mostra Ã­cone, tamanho,
  * quem fez e quando.
  *
- * O botão "Abrir a pasta no Windows" copia tudo para a Área de Trabalho com
- * nome legível — no disco do Hub os arquivos têm o identificador colado no nome.
+ * O botÃ£o "Abrir a pasta no Windows" copia tudo para a Ãrea de Trabalho com
+ * nome legÃ­vel â€” no disco do Hub os arquivos tÃªm o identificador colado no nome.
  */
 import { useEffect, useMemo, useState } from "react";
 import type { BotSummary } from "@mybots/shared";
@@ -19,18 +20,18 @@ export type Trabalho = {
 };
 
 const TIPOS: Array<{ id: string; nome: string; icone: string }> = [
-  { id: "", nome: "Tudo", icone: "📦" },
-  { id: "imagem", nome: "Imagens", icone: "🖼️" },
-  { id: "video", nome: "Vídeos", icone: "🎬" },
-  { id: "audio", nome: "Áudios", icone: "🎵" },
-  { id: "pdf", nome: "PDFs", icone: "📕" },
-  { id: "site", nome: "Sites HTML", icone: "🌐" },
-  { id: "texto", nome: "Textos e .md", icone: "📝" },
-  { id: "planilha", nome: "Planilhas", icone: "📊" },
-  { id: "documento", nome: "Documentos", icone: "📄" },
-  { id: "pacote", nome: "Zips", icone: "🗜️" },
-  { id: "codigo", nome: "Código", icone: "⌨️" },
-  { id: "outro", nome: "Outros", icone: "📎" },
+  { id: "", nome: "Tudo", icone: "ðŸ“¦" },
+  { id: "imagem", nome: "Imagens", icone: "ðŸ–¼ï¸" },
+  { id: "video", nome: "VÃ­deos", icone: "ðŸŽ¬" },
+  { id: "audio", nome: "Ãudios", icone: "ðŸŽµ" },
+  { id: "pdf", nome: "PDFs", icone: "ðŸ“•" },
+  { id: "site", nome: "Sites HTML", icone: "ðŸŒ" },
+  { id: "texto", nome: "Textos e .md", icone: "ðŸ“" },
+  { id: "planilha", nome: "Planilhas", icone: "ðŸ“Š" },
+  { id: "documento", nome: "Documentos", icone: "ðŸ“„" },
+  { id: "pacote", nome: "Zips", icone: "ðŸ—œï¸" },
+  { id: "codigo", nome: "CÃ³digo", icone: "âŒ¨ï¸" },
+  { id: "outro", nome: "Outros", icone: "ðŸ“Ž" },
 ];
 
 const ICONE: Record<string, string> = Object.fromEntries(TIPOS.map((t) => [t.id, t.icone]));
@@ -69,7 +70,7 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
     if (tipo) p.set("tipo", tipo);
     if (bot) p.set("bot", bot);
     if (busca.trim()) p.set("q", busca.trim());
-    const r = await fetch("/api/trabalhos?" + p.toString());
+    const r = await fetch(`${UI_BASE}/api/trabalhos?` + p.toString());
     if (!r.ok) { setItens([]); return; }
     const d = await r.json();
     setItens(d.itens); setContagem(d.contagem ?? {}); setTotal(d.total ?? 0);
@@ -78,19 +79,19 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
   useEffect(() => { try { localStorage.setItem("mybots.trab-tipo", tipo); } catch { /* privado */ } }, [tipo]);
 
   const nomeDoBot = useMemo(() => {
-    const m: Record<string, string> = { user: "você" };
+    const m: Record<string, string> = { user: "vocÃª" };
     for (const b of bots) m[b.id] = b.name;
     return m;
   }, [bots]);
 
   const levarParaAPasta = async () => {
-    setRecado("Copiando…");
-    const r = await fetch("/api/trabalhos/pasta", {
+    setRecado("Copiandoâ€¦");
+    const r = await fetch(`${UI_BASE}/api/trabalhos/pasta`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ tipo: tipo || undefined, abrir: true }),
     });
     const d = await r.json().catch(() => ({}));
-    setRecado(r.ok ? `${d.copiados} copiados para ${d.pasta}${d.pulados ? ` · ${d.pulados} já estavam lá` : ""}` : (d.error ?? "não deu"));
+    setRecado(r.ok ? `${d.copiados} copiados para ${d.pasta}${d.pulados ? ` Â· ${d.pulados} jÃ¡ estavam lÃ¡` : ""}` : (d.error ?? "nÃ£o deu"));
     setTimeout(() => setRecado(""), 9000);
   };
 
@@ -98,12 +99,12 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
     <div className={"trabalhos" + (embutido ? " embutido" : "")}>
       <header className="trab-head">
         <div>
-          <h2>📂 Trabalhos feitos</h2>
+          <h2>ðŸ“‚ Trabalhos feitos</h2>
           <small>{total} {total === 1 ? "arquivo produzido" : "arquivos produzidos"} pelos bots</small>
         </div>
         <div className="trab-acoes">
-          <button className="btn primary" onClick={() => void levarParaAPasta()} title="Copia com nome legível para a Área de Trabalho e abre a pasta">
-            📁 Abrir a pasta no Windows
+          <button className="btn primary" onClick={() => void levarParaAPasta()} title="Copia com nome legÃ­vel para a Ãrea de Trabalho e abre a pasta">
+            ðŸ“ Abrir a pasta no Windows
           </button>
           {onClose && <button className="link" onClick={onClose}>fechar</button>}
         </div>
@@ -125,14 +126,14 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
           <option value="">Qualquer bot</option>
           {bots.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
-        <input className="trab-busca" placeholder="Buscar pelo nome…" aria-label="Buscar trabalho pelo nome" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <input className="trab-busca" placeholder="Buscar pelo nomeâ€¦" aria-label="Buscar trabalho pelo nome" value={busca} onChange={(e) => setBusca(e.target.value)} />
       </div>
 
-      {itens === null && <div className="hint">Carregando…</div>}
+      {itens === null && <div className="hint">Carregandoâ€¦</div>}
       {itens?.length === 0 && (
         <div className="trab-vazio">
-          <span className="trab-vazio-icone" aria-hidden>📂</span>
-          <p>Nada aqui ainda{tipo || bot || busca ? " com esse filtro" : ""}. O que os bots gerarem — imagem, vídeo, PDF, .md, zip, página — aparece nesta tela sozinho.</p>
+          <span className="trab-vazio-icone" aria-hidden>ðŸ“‚</span>
+          <p>Nada aqui ainda{tipo || bot || busca ? " com esse filtro" : ""}. O que os bots gerarem â€” imagem, vÃ­deo, PDF, .md, zip, pÃ¡gina â€” aparece nesta tela sozinho.</p>
         </div>
       )}
 
@@ -144,13 +145,13 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
                 ? <img src={f.url} alt={f.nome} loading="lazy" />
                 : f.tipo === "video"
                   ? <video src={f.url} preload="metadata" muted />
-                  : <span className="trab-icone" aria-hidden="true">{ICONE[f.tipo] ?? "📎"}</span>}
+                  : <span className="trab-icone" aria-hidden="true">{ICONE[f.tipo] ?? "ðŸ“Ž"}</span>}
             </a>
             <figcaption>
               <b title={f.nome}>{f.nome}</b>
-              <small>{quandoLegivel(f.quando)} · {tamanhoLegivel(f.tamanho)}</small>
+              <small>{quandoLegivel(f.quando)} Â· {tamanhoLegivel(f.tamanho)}</small>
               <div className="trab-origem">
-                {bots.find((b) => b.id === f.botId) ? <Avatar bot={bots.find((b) => b.id === f.botId)!} size={18} /> : <span className="trab-vazio-icone" aria-hidden style={{ fontSize: 18 }}>📎</span>}
+                {bots.find((b) => b.id === f.botId) ? <Avatar bot={bots.find((b) => b.id === f.botId)!} size={18} /> : <span className="trab-vazio-icone" aria-hidden style={{ fontSize: 18 }}>ðŸ“Ž</span>}
                 <span>{nomeDoBot[f.botId] ?? f.botId}</span>
                 {onAbrirBot && f.botId && f.botId !== "user" && <button type="button" className="link" onClick={() => onAbrirBot(f.botId)}>Ver conversa</button>}
               </div>
@@ -166,3 +167,4 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
     </div>
   );
 }
+

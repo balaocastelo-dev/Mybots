@@ -40,7 +40,12 @@ export type ApprovalKind =
    * Publicar para fora ou falar como o chefe: post no Instagram/Facebook, e-mail enviado.
    * Regra do o chefe: nada sai para o mundo sem o OK dele. Por isso NEM o MODO DEUS dispensa.
    */
-  | "publicacao";
+  | "publicacao"
+  /**
+   * Pagar ou enviar. Preencher o cartão não entra aqui: o clique final sim.
+   * Nem o MODO DEUS dispensa.
+   */
+  | "pagamento";
 
 /**
  * Decide se uma ação precisa passar pelo chefe neste nível.
@@ -50,7 +55,7 @@ export type ApprovalKind =
  */
 export function needsHumanApproval(mode: ControlMode, kind: ApprovalKind, risk: "low" | "medium" | "high"): boolean {
   // publicar para fora sempre passa pelo chefe, em qualquer modo — inclusive MODO DEUS
-  if (kind === "publicacao") return true;
+  if (kind === "publicacao" || kind === "pagamento") return true;
   if (mode === "deus") return false;
   if (mode === "supervisionado") return true;
   // autonomo
@@ -59,11 +64,21 @@ export function needsHumanApproval(mode: ControlMode, kind: ApprovalKind, risk: 
   return risk !== "low";
 }
 
+/** Pagar, comprar ou enviar. Preencher um campo não entra aqui. */
+export function textoExigeChefe(texto: string): boolean {
+  return /\b(pagar|pagamento|comprar|enviar|mandar|submit|send|pay|buy)\b/i.test(texto);
+}
+
+/** request_approval de pagar/enviar não passa no MODO DEUS. O resto segue o nível. */
+export function tipoDeAprovacao(texto: string): ApprovalKind {
+  return textoExigeChefe(texto) ? "pagamento" : "action";
+}
+
 /** Texto curto para o prompt de sistema do bot. */
 export function controlPromptLine(mode: ControlMode): string {
   switch (mode) {
     case "deus":
-      return "- MODO DE CONTROLE: MODO DEUS EXTREMO. O chefe autorizou você a fazer TUDO sozinho, mesmo com riscos: nada pede aprovação e você NÃO faz perguntas (ask_user responde 'decida você mesmo'). Decida, execute e relate o que fez. Limites absolutos que continuam valendo: nunca imprimir chaves, tokens ou senhas; nunca mexer no processo da porta 8787 (Portal de Agentes); e PUBLICAR PARA FORA (post no Instagram/Facebook, e-mail enviado) continua pedindo o OK do chefe — isso o MODO DEUS não dispensa.";
+      return "- MODO DE CONTROLE: MODO DEUS EXTREMO. O chefe autorizou você a fazer TUDO sozinho, mesmo com riscos: nada pede aprovação e você NÃO faz perguntas (ask_user responde 'decida você mesmo'). Decida, execute e relate o que fez. Limites absolutos que continuam valendo: nunca imprimir chaves, tokens ou senhas; nunca mexer no processo da porta 8787 (Portal de Agentes); PUBLICAR PARA FORA (post no Instagram/Facebook, e-mail enviado) continua pedindo o OK do chefe; e PAGAR ou ENVIAR (clique de pagar, checkout, mensagem) também — preencher o cartão não dispensa esse clique. O MODO DEUS não dispensa isso.";
     case "autonomo":
       return "- MODO DE CONTROLE: Autônomo. Comandos seguros/médios e edições dentro do workspace rodam sem pedir; só o destrutivo/irreversível (apagar, formatar, pagar, mexer fora do projeto, matar processos) pede aprovação. Evite perguntar o que você consegue decidir sozinho.";
     default:

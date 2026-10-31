@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { tipoDeAprovacao } from "@mybots/shared";
 import { botForToken, config, tokenAllows } from "./config.js";
 import type { Hub } from "./hub.js";
 
@@ -57,11 +58,23 @@ export function buildMcpServer(hub: Hub, botId: string) {
   }, async ({ question, options }) => text(await hub.askUserFromMcp(botId, question, options ?? [])));
 
   server.registerTool("request_approval", {
-    description: "Pede aprovação do chefe antes de uma ação crítica (apagar, pagar, enviar, instalar, mexer fora do workspace). Retorna 'aprovado' ou 'negado'. Só execute a ação se for aprovado.",
+    description: "Pede aprovação do chefe antes de uma ação crítica (apagar, pagar, enviar, instalar, mexer fora do workspace). Retorna 'aprovado' ou 'negado'. Só execute a ação se for aprovado. Pagar e enviar pedem o chefe mesmo no modo deus.",
     inputSchema: { action: z.string().describe("o que você quer fazer, em uma frase"), detail: z.string().optional().describe("comando, destinatário, valor etc."), risk: z.enum(["low", "medium", "high"]).default("medium") },
   }, async ({ action, detail, risk }) => {
-    const ok = await hub.requestApprovalFromMcp(botId, "action", { action, detail }, risk, action);
+    const kind = tipoDeAprovacao(`${action} ${detail ?? ""}`);
+    const ok = await hub.requestApprovalFromMcp(botId, "action", { action, detail }, risk, action, kind);
     return text(ok ? "aprovado" : "negado");
+  });
+
+  server.registerTool("fill_credential", {
+    description: "Preenche um campo de login ou cartão no navegador deste bot, com uma credencial do cofre. Você NÃO recebe a senha, o número nem o cvv: a resposta é só ok ou erro. site = o endereço da página (ou o nome do cartão, se houver mais de um). campo = usuario, senha, notas, titular, numero, validade ou cvv. Não clica em pagar, enviar ou comprar — esse clique continua pedindo o OK do chefe. Sem permissão explícita do chefe para este bot neste item, a resposta é erro.",
+    inputSchema: {
+      site: z.string().describe("site da página, ex.: loja.exemplo. Para cartão, o site do checkout ou o nome do cartão"),
+      campo: z.string().describe("usuario, senha, titular, numero, validade ou cvv"),
+    },
+  }, async ({ site, campo }) => {
+    const texto = await hub.cofre.preencher({ botId, empresaId: hub.empresaDe(botId).id, site, campo });
+    return text(texto === "ok" || texto.startsWith("erro") ? texto : "erro: não consegui preencher");
   });
 
   server.registerTool("set_status", {

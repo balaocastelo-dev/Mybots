@@ -19,7 +19,8 @@ import { voiceConfig } from "./voice.js";
 import { splitThoughts } from "./thoughts.js";
 import { MediaService } from "./media.js";
 import { SalaDeConversa } from "./sala.js";
-import type { Attachment, MediaKind, MediaResult } from "@mybots/shared";
+import type { Attachment, MediaKind, MediaResult, UsoDoPc } from "@mybots/shared";
+import { UsosDoPc } from "./usoDoPc.js";
 
 const STREAM_DELTAS = process.env.MYBOTS_STREAM_DELTAS === "1";
 
@@ -171,6 +172,8 @@ export class Hub {
     return !!t && Date.now() - t < Hub.DEBOUNCE_PARADA_MS;
   }
 
+  /** Últimas ações de navegador/tela, por empresa. O PC é um só para a empresa inteira. */
+  private usos = new UsosDoPc();
   private pendingAsks = new Map<string, PendingAsk>();
   private approvalOwner = new Map<string, string>();
   private questionOwner = new Map<string, string>();
@@ -781,6 +784,22 @@ export class Hub {
     return { ...novo, token: r.token };
   }
 
+  /**
+   * Anota que este bot mexeu no PC da empresa. Ferramenta que não é de tela
+   * (ou bot sem empresa) não entra. Devolve o uso atualizado, ou null.
+   */
+  anotarTela(botId: string, ferramenta: string, input: unknown): UsoDoPc | null {
+    const emp = this.empresaDe(botId).id;
+    if (!emp) return null;
+    const uso = this.usos.registrar(emp, { botId, nome: this.botSender(botId).name, ferramenta, input });
+    if (uso) this.broadcastUi({ type: "pc.uso", empresaId: emp, uso });
+    return uso;
+  }
+
+  usoDoPc(empresaId: string): UsoDoPc {
+    return this.usos.ver(empresaId);
+  }
+
   botSender(botId: string): Sender {
     const b = this.nodes.get(botId)?.bot ?? this.db.listBots().find((x) => x.id === botId);
     return { kind: "bot", id: botId, name: b?.name ?? botId };
@@ -1040,6 +1059,7 @@ export class Hub {
         this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, input: ev.input, done: false });
         this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "start", input: ev.input });
         this.db.audit(botId, "tool.start", { tool: ev.tool, input: ev.input, conversationId });
+        this.anotarTela(botId, ev.tool, ev.input);
         return;
       }
       case "tool.done": {

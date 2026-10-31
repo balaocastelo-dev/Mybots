@@ -209,11 +209,28 @@ export type HubToUi =
   | { type: "question.resolved"; questionId: string; answer: string }
   | { type: "status"; botId: string; text: string; busy: boolean }
   | { type: "notify"; botId: string; text: string }
+  /** Quem usou o PC da empresa por último. Um PC por empresa, compartilhado pelos bots dela. */
+  | { type: "pc.uso"; empresaId: string; uso: UsoDoPc }
   /** o histórico mudou (rebobinou, editou, apagou, fixou): quem está com essa conversa aberta recarrega */
   | { type: "conversation.changed"; conversationId: string }
   /** o Hub mandou parar tudo: toda janela cala a fala, fecha o microfone e esquece o que estava gerando */
   | { type: "stop"; reason?: string }
   | { type: "error"; message: string };
+
+/** Uma ação de navegador ou de tela no PC da empresa. O texto digitado não entra aqui. */
+export type AcaoNaTela = {
+  botId: string;
+  nome: string;
+  ferramenta: string;
+  resumo: string;
+  quando: number;
+};
+
+/** O bot da última ação é quem está usando o PC agora. O histórico é o mais novo primeiro. */
+export type UsoDoPc = {
+  usando: AcaoNaTela | null;
+  historico: AcaoNaTela[];
+};
 
 export type VoiceConfig = { stt: boolean; tts: boolean; ttsEngine: string; sttEngine: string };
 

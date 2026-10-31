@@ -109,6 +109,7 @@ function reducer(s: State, a: Action): State {
         case "question": return { ...s, questions: [...s.questions.filter((x) => x.id !== m.question.id), m.question] };
         case "question.resolved": return { ...s, questions: s.questions.filter((x) => x.id !== m.questionId), resolvedQuestions: { ...s.resolvedQuestions, [m.questionId]: m.answer } };
         case "notify": return { ...s, toasts: empilha(s.toasts, m.text, m.botId) };
+        case "pc.uso": return s;
         case "error": return { ...s, toasts: empilha(s.toasts, m.message) };
       }
       return s;

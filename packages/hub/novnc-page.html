@@ -19,24 +19,32 @@
     const q = new URLSearchParams(location.search);
     const destino = q.get("destino") || "mac";
     const senha = q.get("senha") || "";
+    const empresa = destino.indexOf("empresa:") === 0;
     const aviso = document.getElementById("aviso");
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const url = proto + "://" + location.host + "/ws/vnc?destino=" + encodeURIComponent(destino);
+    const k = q.get("k") || "";
+    const url = proto + "://" + location.host + "/ws/vnc?destino=" + encodeURIComponent(destino)
+      + (k ? "&k=" + encodeURIComponent(k) : "");
     let rfb;
     try {
       rfb = new RFB(document.getElementById("tela"), url, { credentials: { password: senha } });
       rfb.scaleViewport = true;
       rfb.resizeSession = false;
+      rfb.viewOnly = q.get("ver") === "1";
       rfb.addEventListener("connect", () => { aviso.style.display = "none"; });
       rfb.addEventListener("securityfailure", (e) => {
         aviso.style.display = "grid";
-        aviso.textContent = "a senha da tela nao foi aceita. Confira a senha VNC no Compartilhamento de Tela do Mac.";
+        aviso.textContent = empresa
+          ? "a tela do PC da empresa recusou a conexão."
+          : "a senha da tela nao foi aceita. Confira a senha VNC no Compartilhamento de Tela do Mac.";
       });
       rfb.addEventListener("disconnect", (e) => {
         aviso.style.display = "grid";
         aviso.textContent = e.detail && e.detail.clean
           ? "tela desconectada."
-          : "nao consegui ligar na tela. O Mac precisa da senha VNC legada ligada no Compartilhamento de Tela.";
+          : empresa
+            ? "nao consegui ligar na tela do PC da empresa. Confira se o PC está ligado."
+            : "nao consegui ligar na tela. O Mac precisa da senha VNC legada ligada no Compartilhamento de Tela.";
       });
     } catch (err) {
       aviso.textContent = "erro ao iniciar a tela: " + err;

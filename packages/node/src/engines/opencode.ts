@@ -18,7 +18,9 @@ export class OpenCodeEngine implements Engine {
   private child: ChildProcess | null = null;
   private base: string;
   private authHeader: Record<string, string> = {};
-  private sessions = new Map<string, string>();     // conversationId -> sessionID
+  private sessions = new Map<string, string>(); // conversationId -> sessionID
+  /** Recados de outros bots que esperam o próximo turno. */
+  private recados: string[] = [];
   /** conversationId -> histórico que o Hub refez (vai como contexto na primeira mensagem da sessão nova) */
   private contextoRefeito = new Map<string, Array<{ role: "user" | "assistant"; content: string }>>();
   private sessionConv = new Map<string, string>();  // sessionID -> conversationId
@@ -53,6 +55,13 @@ export class OpenCodeEngine implements Engine {
     hub.on("message", (m: Extract<HubToNode, { type: "message" }>) => void this.onMessage(m).catch((e) => hub.event(m.conversationId, { kind: "error", message: (e as Error).message })));
     hub.on("approval.response", (m: Extract<HubToNode, { type: "approval.response" }>) => void this.onApproval(m));
     hub.on("question.answer", (m: Extract<HubToNode, { type: "question.answer" }>) => void this.onAnswer(m));
+    hub.on("colab.parar", (m: Extract<HubToNode, { type: "colab.parar" }>) => {
+      const alvo = m.alvo;
+      if (alvo !== "todos" && !alvo.includes(this.cfg.bot.id)) return;
+      this.recados = [];
+      const ids = [...this.sessions.values()];
+      for (const s of ids) void this.api("POST", `/session/${s}/abort`).catch(() => {});
+    });
     hub.on("abort", (m: Extract<HubToNode, { type: "abort" }>) => {
       const ids = m.conversationId === "*" ? [...this.sessions.values()] : [this.sessions.get(m.conversationId)].filter(Boolean) as string[];
       for (const s of ids) void this.api("POST", `/session/${s}/abort`).catch(() => {});
@@ -119,7 +128,7 @@ export class OpenCodeEngine implements Engine {
       "## Contexto do MyBots",
       `- Você é o Bot "${this.cfg.bot.name}" (id ${this.cfg.bot.id}) da equipe MyBots. Seu chefe é ${process.env.MYBOTS_USER_NAME ?? "o chefe"}.`,
       `- Você roda no PC "${os.hostname()}" (${os.platform()}). Trabalhe dentro de ${this.cfg.workspace}.`,
-      "- Ferramentas da equipe (prefixo mybots_): ask_user para perguntar ao chefe com opções, ask_bot/send_to_bot para falar com colegas, request_approval antes de ações críticas fora do terminal, set_status enquanto trabalha, notify_user quando terminar algo, remember/recall para a memória compartilhada, schedule para rotinas.",
+      "- Ferramentas da equipe (prefixo mybots_): ask_user para perguntar ao chefe com opções, ask_bot/send_to_bot para falar com colegas, request_approval antes de ações críticas fora do terminal, set_status enquanto trabalha, notify_user quando terminar algo, remember/recall para a memória compartilhada, schedule para rotinas. Senha e cartão: mybots_fill_credential (site, campo) — você não recebe o valor, só ok ou erro. O clique de pagar ou enviar continua pedindo o OK do chefe.",
       "- A BASE DE CONHECIMENTO da casa é COMUM a todos os bots e você lê com mybots_search_knowledge (por palavras-chave, ou com id + parte para ler um documento inteiro) e mybots_list_knowledge (o índice todo). Antes de dizer que não sabe, que não encontrou ou que algo não existe na casa, você é OBRIGADO a buscar. O que você aprender e servir para a equipe, grave com mybots_learn_knowledge — todos passam a ver na hora.",
       ...(this.knowledge ? ["", this.knowledge] : []),
       controlPromptLine(this.cfg.approval.mode),
@@ -272,8 +281,16 @@ export class OpenCodeEngine implements Engine {
   }
 
   private async onMessage(m: Extract<HubToNode, { type: "message" }>) {
+    if (m.adiada) {
+      this.recados.push(`[Mensagem do Bot ${m.from.name}]\n${m.text}`);
+      return;
+    }
     const sessionID = await this.sessionFor(m.conversationId);
     let text = m.silent ? `[${m.from.kind === "bot" ? "Bot " : ""}${m.from.name} disse no grupo]\n${m.text}` : m.from.kind === "bot" ? `[Mensagem do Bot ${m.from.name}]\n${m.text}` : m.text;
+    if (this.recados.length) {
+      text = `${this.recados.join("\n\n")}\n\n${text}`;
+      this.recados = [];
+    }
     // o prompt do agente é fixo no opencode.json; se o Hub sobrescreveu o nível, avisamos na própria mensagem
     if (!m.silent && this.controlOverride && this.controlOverride !== this.cfg.approval.mode) text = `${controlPromptLine(this.controlOverride).replace(/^- MODO DE CONTROLE: /, "[Modo de controle: ")}]\n${text}`;
     if (m.silent) {

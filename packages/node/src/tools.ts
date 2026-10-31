@@ -355,7 +355,7 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
       case "screenshot": {
         ctx.setStatus("Tirando foto da tela");
         const file = await captureScreen(path.join(ctx.cfg.workspace, ".mybots", "capturas"));
-        return await sendFile(file, args.caption ? String(args.caption) : "Foto da tela", ctx);
+        return await sendFile(file, args.caption ? String(args.caption) : "Foto da tela", ctx, true);
       }
       case "schedule": {
         const r = await ctx.hub.call((callId) => ({ type: "schedule", callId, name: String(args.name ?? ""), cron: String(args.cron ?? ""), prompt: String(args.prompt ?? "") }), 15_000);
@@ -390,13 +390,13 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
   }
 }
 
-async function sendFile(p: string, caption: string | undefined, ctx: ToolContext) {
+async function sendFile(p: string, caption: string | undefined, ctx: ToolContext, tela = false) {
   const { abs } = resolvePath(p, ctx);
   if (!fs.existsSync(abs)) return { output: `Arquivo não existe: ${abs}`, ok: false };
   const st = fs.statSync(abs);
   if (st.size > 40 * 1024 * 1024) return { output: `Arquivo grande demais (${Math.round(st.size / 1e6)} MB; limite 40 MB).`, ok: false };
   ctx.setStatus("Enviando arquivo");
-  const r = await ctx.hub.call((callId) => ({ type: "upload", callId, conversationId: ctx.conversationId, messageId: "", name: path.basename(abs), mime: mimeOf(abs), dataBase64: fs.readFileSync(abs).toString("base64"), caption }), 120_000);
+  const r = await ctx.hub.call((callId) => ({ type: "upload", callId, conversationId: ctx.conversationId, messageId: "", name: path.basename(abs), mime: mimeOf(abs), dataBase64: fs.readFileSync(abs).toString("base64"), caption, ...(tela ? { tela: true } : {}) }), 120_000);
   return { output: String(r.data), ok: r.ok };
 }
 

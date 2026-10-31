@@ -1,6 +1,6 @@
 // Cliente da interface: WebSocket com o Hub + estado reativo.
 import { useEffect, useReducer, useRef } from "react";
-import type { BotSummary, ControlState, Group, HubToUi, PendingApproval, PendingQuestion, Routine, StoredMessage, UiToHub, VoiceConfig } from "@mybots/shared";
+import { faseDoStatus, type BotSummary, type ControlState, type Group, type HubToUi, type PendingApproval, type PendingQuestion, type Routine, type StoredMessage, type UiToHub, type VoiceConfig } from "@mybots/shared";
 
 export type ToolInfo = { callId: string; tool: string; input?: unknown; output?: string; ok?: boolean; done: boolean };
 
@@ -83,17 +83,20 @@ function reducer(s: State, a: Action): State {
           };
         }
         case "import.request": return { ...s, importFile: m.file };
-        case "status": return { ...s, bots: s.bots.map((b) => (b.id === m.botId ? { ...b, status: m.text, busy: m.busy, online: true } : b)) };
+        case "status": return { ...s, bots: s.bots.map((b) => (b.id === m.botId ? { ...b, status: m.text, busy: m.busy, fase: faseDoStatus(m.text, m.busy, m.fase), online: true } : b)) };
         case "message": {
           const list = s.messages[m.message.conversationId] ?? [];
           const idx = list.findIndex((x) => x.id === m.message.id);
           const next = idx >= 0 ? list.map((x, i) => (i === idx ? m.message : x)) : [...list, m.message];
-          return { ...s, messages: { ...s.messages, [m.message.conversationId]: next } };
+          return { ...s, bots: comPrevia(s.bots, m.message), messages: { ...s.messages, [m.message.conversationId]: next } };
         }
         case "message.delta": {
           const list = s.messages[m.conversationId] ?? [];
-          const next = list.map((x) => (x.id === m.messageId ? { ...x, text: x.text + m.text } : x));
-          return { ...s, messages: { ...s.messages, [m.conversationId]: next } };
+          const atual = list.find((x) => x.id === m.messageId);
+          const texto = (x: StoredMessage) => (m.replace ? m.text : x.text + m.text);
+          const next = list.map((x) => (x.id === m.messageId ? { ...x, text: texto(x) } : x));
+          const bots = atual ? comPrevia(s.bots, { ...atual, text: texto(atual) }) : s.bots;
+          return { ...s, bots, messages: { ...s.messages, [m.conversationId]: next } };
         }
         case "tool": {
           const list = s.tools[m.messageId] ?? [];
@@ -117,6 +120,24 @@ function reducer(s: State, a: Action): State {
       return s;
     }
   }
+}
+
+function previaDe(m: StoredMessage): string {
+  const files = (m.meta?.files as Array<{ name: string }> | undefined) ?? [];
+  const quem = m.sender.kind === "user" ? "Você: " : "";
+  const arquivo = files[0]?.name;
+  const texto = m.text.replace(/\s+/g, " ").trim();
+  const miolo = texto || (arquivo ? `📎 ${arquivo}` : "");
+  return (quem + miolo).slice(0, 80);
+}
+
+/** A lista acompanha o chat mesmo quando o chefe já saiu dele. */
+function comPrevia(bots: BotSummary[], m: StoredMessage): BotSummary[] {
+  if (!m.conversationId.startsWith("dm:") || m.meta?.hidden || m.meta?.marcador) return bots;
+  const id = m.conversationId.slice(3);
+  const preview = previaDe(m);
+  if (!preview) return bots;
+  return bots.map((b) => (b.id === id ? { ...b, preview } : b));
 }
 
 function upsert(list: BotSummary[], b: BotSummary) {

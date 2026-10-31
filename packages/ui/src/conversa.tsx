@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { BotSummary, ControlState, Group, PendingApproval, PendingQuestion, Routine, StoredMessage } from "@mybots/shared";
-import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, effectiveControl } from "@mybots/shared";
+import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, effectiveControl, faseDoStatus } from "@mybots/shared";
 import { useHub, type ToolInfo } from "./hub";
 import { registrarParada, stopEverything } from "./stop";
 import { criarFala, escolherMicrofone, escutaContinua, isSpeaking, listenOnce, microfoneEscolhido, microfones, onSpeaking, speak, speechSupported, stopSpeaking, type EscutaViva, type FalaViva, type VoiceCaps } from "./voice";
@@ -10,6 +10,7 @@ import { PainelDoPc } from "./painelPc";
 import { api } from "./api";
 import { Avatar } from "./avatar";
 import { ApprovalCard, Bolha, Message, QuestionCard, Visualizador, type ArquivoDoChat } from "./mensagem";
+import { DesktopAoVivo } from "./desktop";
 import { BotSettingsPanel, RoutinesPanel } from "./dialogos";
 
 export type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
@@ -33,6 +34,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const [showRoutines, setShowRoutines] = useState(false);
   // --- documento aberto em tela cheia ---
   const [arquivoAberto, setArquivoAberto] = useState<ArquivoDoChat | null>(null);
+  const [desktopAberto, setDesktopAberto] = useState(false);
   useEffect(() => { setArquivoAberto(null); }, [conversationId]);
 
   // --- com quais bots ele falou em cada turno (rodapé "Mensageou N bots") ---
@@ -336,9 +338,12 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   };
 
   const title = target.kind === "bot" ? target.bot.name : target.group.name;
+  const fase = target.kind === "bot"
+    ? faseDoStatus(target.bot.status, target.bot.busy, target.bot.fase)
+    : (bots.some((b) => target.group.members.includes(b.id) && b.busy && faseDoStatus(b.status, true, b.fase) === "trabalhando") ? "trabalhando" : "digitando");
   const subtitle = target.kind === "bot"
-    ? (target.bot.online ? (target.bot.busy ? target.bot.status + "…" : target.bot.role) : "Offline")
-    : (busy ? statusText : target.group.members.map((m) => bots.find((b) => b.id === m)?.name ?? m).join(", "));
+    ? (target.bot.online ? (target.bot.busy ? (fase === "trabalhando" ? "está trabalhando" : "digitando…") : target.bot.role) : "Offline")
+    : (busy ? (fase === "trabalhando" ? "está trabalhando" : "digitando…") : target.group.members.map((m) => bots.find((b) => b.id === m)?.name ?? m).join(", "));
 
   return (
     <>
@@ -402,6 +407,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
         {!messages.length && <div className="hint">{bot ? `Diga olá para ${bot.name}. ${bot.role}.` : "Fale com o grupo: todos os bots recebem e cada um responde o que é da sua área."}</div>}
         {messages.map((m) => <Fragment key={m.id}><Message m={m} showName={target.kind === "group" || m.conversationId.startsWith("pair:")} tools={tools[m.id] ?? (m.meta?.tools as ToolInfo[] | undefined)} answer={m.meta?.question ? resolvedQuestions[String(m.meta.question)] : undefined}
           onAbrirArquivo={setArquivoAberto}
+          onAbrirTela={bot ? () => setDesktopAberto(true) : undefined}
           onMenu={(msg, x, y) => setMenuMsg({ m: msg, x, y })}
           editando={editando === m.id}
           onCancelarEdicao={() => setEditando(null)}
@@ -413,13 +419,18 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           onSpeak={m.sender.kind === "bot" ? () => { if (isSpeaking()) stopSpeaking(); else void speak(m.text, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true); } : undefined} />{trocas[m.id]?.length ? <ChipTrocas trocas={trocas[m.id]} bots={bots} Avatar={Avatar} onAbrir={(ts) => ts.length === 1 ? onAbrirTroca(ts[0].conversationId) : setFolha(ts)} /> : null}</Fragment>)}
         {approvals.map((a) => <ApprovalCard key={a.id} a={a} botName={bots.find((b) => b.id === a.botId)?.name} onAnswer={(allow, remember) => send({ type: "approval.response", requestId: a.id, allow, remember })} />)}
         {questions.map((q) => <QuestionCard key={q.id} q={q} botName={bots.find((b) => b.id === q.botId)?.name} onAnswer={(answer) => send({ type: "question.answer", questionId: q.id, answer })} />)}
-        {busy && !approvals.length && !questions.length && (
-          <div className="typing">
-            {target.kind === "bot" ? <Avatar bot={target.bot} size={44} /> : <Bolha />}
-            <span className="brilho">{(target.kind === "bot" ? target.bot.name + " está " : "") + (statusText || "trabalhando").toLowerCase()}</span>
-          </div>
-        )}
       </div>
+
+      {busy && !approvals.length && !questions.length && (
+        <div className={"linha-atividade " + (fase === "trabalhando" ? "trabalhando" : "digitando")} role="status">
+          {target.kind === "bot"
+            ? <span className={fase === "trabalhando" ? "gira" : "av"}><Avatar bot={target.bot} size={22} /></span>
+            : <Bolha />}
+          {fase === "trabalhando"
+            ? <span>{title} está trabalhando</span>
+            : <><span>Digitando</span><span className="pontos" aria-hidden><i /><i /><i /></span></>}
+        </div>
+      )}
 
       {menuMsg && <ContextMenu x={menuMsg.x} y={menuMsg.y} itens={itensDoMenu(menuMsg.m)} onClose={() => setMenuMsg(null)} />}
 
@@ -464,7 +475,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
 
       <footer className="composer">
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => { void onFiles(e.target.files); e.target.value = ""; }} />
-        <button className="icon-btn" title="Anexar arquivo" onClick={() => fileRef.current?.click()}>📎</button>
+        <button className="icon-btn mais" type="button" title="Anexar arquivo" aria-label="Anexar" onClick={() => fileRef.current?.click()}>+</button>
         <textarea
           ref={textRef}
           value={text}
@@ -480,11 +491,23 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
             }
           }}
         />
-        {speechSupported(voice) && <button className={"icon-btn mic" + (listening ? " rec" : "")} title={listening ? "Parar de ouvir" : "Falar (envia sozinho quando você parar)"} onClick={toggleMic}>🎤</button>}
-        <button className="send" onClick={() => submit()} disabled={!text.trim() && !attachments.length}>➤</button>
+        {(text.trim() || attachments.length) ? (
+          <button className="send" type="button" aria-label="Enviar" onClick={() => submit()}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 12l16-8-6 16-2-6z"/></svg>
+          </button>
+        ) : speechSupported(voice) ? (
+          <button className={"icon-btn mic" + (listening ? " rec" : "")} type="button" title={listening ? "Parar de ouvir" : "Falar (envia sozinho quando você parar)"} aria-label="Microfone" onClick={toggleMic}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg>
+          </button>
+        ) : (
+          <button className="send" type="button" aria-label="Enviar" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 12l16-8-6 16-2-6z"/></svg>
+          </button>
+        )}
       </footer>
       {folha && <FolhaAbrirTroca trocas={folha} bots={bots} Avatar={Avatar} onEscolher={(t) => onAbrirTroca(t.conversationId)} onFechar={() => setFolha(null)} />}
       {arquivoAberto && <Visualizador f={arquivoAberto} onFechar={() => setArquivoAberto(null)} />}
+      {desktopAberto && bot && <DesktopAoVivo bot={bot} empresaId={bot.empresaId ?? null} nome={empresaNome} onFechar={() => setDesktopAberto(false)} />}
       </div>
       {bot && pcAberto && (
         <PainelDoPc

@@ -20,7 +20,7 @@ export function Thought({ text }: { text: string }) {
   );
 }
 
-export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, onMenu, editando, onSalvarEdicao, onCancelarEdicao }: { m: StoredMessage; tools?: ToolInfo[]; answer?: string; showName: boolean; onSpeak?: () => void; onAbrirArquivo?: (f: ArquivoDoChat) => void; onMenu?: (m: StoredMessage, x: number, y: number) => void; editando?: boolean; onSalvarEdicao?: (texto: string) => void; onCancelarEdicao?: () => void }) {
+export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, onAbrirTela, onMenu, editando, onSalvarEdicao, onCancelarEdicao }: { m: StoredMessage; tools?: ToolInfo[]; answer?: string; showName: boolean; onSpeak?: () => void; onAbrirArquivo?: (f: ArquivoDoChat) => void; onAbrirTela?: () => void; onMenu?: (m: StoredMessage, x: number, y: number) => void; editando?: boolean; onSalvarEdicao?: (texto: string) => void; onCancelarEdicao?: () => void }) {
   if (m.sender.kind === "system" && !m.sender.id.startsWith("routine:")) return <div className={"sys" + (m.meta?.error ? " err" : "")}>{m.text}</div>;
   const mine = m.sender.kind === "user" && m.sender.id === "user";
   const files = (m.meta?.files as Array<{ id: string; name: string; url: string; mime: string }> | undefined) ?? [];
@@ -36,8 +36,8 @@ export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, o
         <div className={"bubble" + (m.meta?.notify ? " notify" : "") + (routine ? " routine" : "")}>
           {(showName && !mine) || routine || (m.sender.kind === "user" && !mine) ? <div className="who">{routine ? "⏰ " : ""}{m.sender.name}</div> : null}
           {m.meta?.thought ? <Thought text={String(m.meta.thought)} /> : null}
-          <Markdownish text={m.text} />
-          {files.map((f) => <Arquivo key={f.id} f={f} onAbrir={onAbrirArquivo} />)}
+          {!(files.length && (m.text === files[0].name || m.text === `Enviou ${files[0].name}`)) && <Markdownish text={m.text} />}
+          {files.map((f) => <Arquivo key={f.id} f={f} tela={!!m.meta?.tela} onAbrir={onAbrirArquivo} onAbrirTela={onAbrirTela} />)}
           {answer && <div className="answered">Você respondeu: <b>{answer}</b></div>}
           {onSpeak && m.text ? <button className="speak-btn" title="Ler a mensagem inteira em voz alta" onClick={onSpeak}>🔊</button> : null}
           {onMenu && (
@@ -142,9 +142,17 @@ export const ehAudio = (f: ArquivoDoChat) => f.mime.startsWith("audio/");
 /** Um arquivo dentro da conversa. Documento se vê, não se clica para ver:
  *  o PDF já aparece aberto na primeira página, a imagem já aparece. Link solto
  *  obriga o chefe a abrir outra janela só para saber o que o bot mandou. */
-export function Arquivo({ f, onAbrir }: { f: ArquivoDoChat; onAbrir?: (f: ArquivoDoChat) => void }) {
+export function Arquivo({ f, tela, onAbrir, onAbrirTela }: { f: ArquivoDoChat; tela?: boolean; onAbrir?: (f: ArquivoDoChat) => void; onAbrirTela?: () => void }) {
   const src = f.url + location.search;
   const abrir = () => onAbrir?.(f);
+  if (ehImagem(f) && tela && onAbrirTela) {
+    return (
+      <button className="cartao-tela" type="button" onClick={onAbrirTela} title="Abrir o desktop">
+        <img src={src} alt={f.name} />
+        <span>Toque para abrir o desktop</span>
+      </button>
+    );
+  }
   if (ehImagem(f)) {
     return (
       <figure className="arq imagem" onClick={abrir} title="Abrir em tamanho cheio">
@@ -155,17 +163,13 @@ export function Arquivo({ f, onAbrir }: { f: ArquivoDoChat; onAbrir?: (f: Arquiv
   }
   if (ehPdf(f)) {
     return (
-      <div className="arq pdf">
-        <div className="arq-previa" onClick={abrir} title="Abrir o documento inteiro">
-          <iframe src={`${src}#toolbar=0&navpanes=0&view=FitH`} title={f.name} tabIndex={-1} />
-          <div className="arq-capa" />
-        </div>
-        <div className="arq-pe">
-          <span className="arq-nome" title={f.name}>{f.name}</span>
-          <button className="btn" onClick={abrir}>Abrir</button>
-          <a className="btn fraco" href={src} download={f.name}>Baixar</a>
-        </div>
-      </div>
+      <button className="cartao-arquivo" type="button" onClick={abrir} title="Abrir o documento">
+        <span className="cartao-pdf" aria-hidden>PDF</span>
+        <span className="cartao-txt">
+          <b>{f.name}</b>
+          <small>Documento PDF</small>
+        </span>
+      </button>
     );
   }
   if (ehVideo(f)) return (
@@ -191,13 +195,12 @@ export function Visualizador({ f, onFechar }: { f: ArquivoDoChat; onFechar: () =
     return () => window.removeEventListener("keydown", t);
   }, [onFechar]);
   return (
-    <div className="visor-fundo" onClick={onFechar}>
+    <div className={"visor-fundo" + (ehPdf(f) ? " cheio" : "")} onClick={onFechar}>
       <div className="visor" onClick={(e) => e.stopPropagation()}>
         <header>
           <span className="visor-nome" title={f.name}>{f.name}</span>
           <a className="btn fraco" href={src} download={f.name}>Baixar</a>
-          <a className="btn fraco" href={src} target="_blank" rel="noopener">Nova aba</a>
-          <button className="btn" onClick={onFechar}>Fechar</button>
+          <button className="btn ok" onClick={onFechar} aria-label="Fechar">✓</button>
         </header>
         <div className="visor-corpo">
           {ehImagem(f) ? <img src={src} alt={f.name} />

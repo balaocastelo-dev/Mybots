@@ -307,6 +307,7 @@ async function main() {
   });
 
   await test("status 'Pensando' aparece na lista enquanto trabalha", async () => {
+    await ui.wait((e) => e.type === "status" && e.fase === "digitando" && e.busy, 5000, "digitando");
     await ui.wait((e) => e.type === "status" && e.text === "Pensando" && e.busy, 5000, "status busy");
     await ui.wait((e) => e.type === "status" && e.busy === false, 5000, "status Disponível");
   });
@@ -324,6 +325,10 @@ async function main() {
   await test("run_command pede aprovação; Permitir → executa e responde", async () => {
     ui.clear();
     ui.send({ type: "send", conversationId: "dm:joao-videomaker", text: "rode o comando" });
+    await ui.wait((e) => e.type === "status" && e.botId === "joao-videomaker" && e.fase === "digitando", 5_000, "digitando na hora");
+    const nota = await ui.wait((e) => e.type === "message" && e.message.sender.id === "joao-videomaker" && e.message.text === "Vou fazer isso no computador agora.", 15_000, "confirmação curta");
+    assert(nota.message.meta?.nota === true, "a confirmação devia ser uma nota, sem encerrar o turno");
+    await ui.wait((e) => e.type === "status" && e.botId === "joao-videomaker" && e.fase === "trabalhando", 15_000, "trabalhando");
     const ap = await ui.wait((e) => e.type === "approval.request", 15_000, "approval.request");
     assert(ap.approval.tool === "run_command" && String((ap.approval.input as any).command).includes("echo"), "pedido de aprovação errado");
     const pend = await (await fetch(`http://127.0.0.1:${HUB_PORT}/api/approvals`)).json() as any[];
@@ -594,7 +599,9 @@ async function main() {
     const e = await ui.wait(botText("joao-videomaker"), 15_000, "resposta");
     assert(!/The user asks/.test(e.message.text) && /pensei em silêncio/.test(e.message.text), `texto: ${e.message.text}`);
     assert(/The user asks/.test(String(e.message.meta?.thought ?? "")), "pensamento não foi guardado em meta.thought");
-    assert(!ui.events.some((x) => x.type === "message.delta"), "deltas deveriam estar desligados por padrão");
+    const parcial = ui.events.filter((x) => x.type === "message.delta").map((x) => x.text).join("");
+    assert(!/The user asks/.test(parcial), `o pensamento vazou no texto parcial: ${parcial}`);
+    assert(/pensei em silêncio/.test(parcial), `o texto parcial devia ir saindo: ${parcial}`);
   });
 
   // O menu de botão direito só vale se o bot DEIXAR de ver o que saiu da conversa.
@@ -770,7 +777,7 @@ async function main() {
 
     ui.clear();
     ui.send({ type: "send", conversationId: "dm:joao-videomaker", text: "busque na base como trocar a tela" });
-    const e = await ui.wait(botText("joao-videomaker"), 20_000, "resposta com o resultado da busca");
+    const e = await ui.wait((ev) => botText("joao-videomaker")(ev) && ev.message.text.includes(MARCA), 20_000, "resposta com o resultado da busca");
     const texto = e.message.text;
     assert(!/\[object Object\]/.test(texto), `o nó entregou "[object Object]" em vez do conteúdo: ${texto}`);
     assert(texto.includes(MARCA), `o conteúdo da base não chegou ao modelo: ${texto}`);

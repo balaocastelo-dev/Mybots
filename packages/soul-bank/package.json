@@ -1,0 +1,10 @@
+{
+  "name": "@mybots/soul-bank",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Banco de almas: persona, skills e MCPs pinados para um bot nascer pronto.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

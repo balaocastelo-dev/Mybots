@@ -1,0 +1,24 @@
+{
+  "nome": "corretordofuturo.app",
+  "versaoContrato": "1.0.0",
+  "oQueFoiEncontrado": "Em 2026-10-31, https://corretordofuturo.app descreve o sistema Herrera HOUSE IA (portal, CRM, visitas, agentes). https://corretordofuturo.app/api, /docs e /openapi.json devolvem o HTML da página de apresentação, não uma API. https://app.corretordofuturo.app/ é o painel. Não há documentação pública de API.",
+  "adaptador": "packages/soul-bank/src/adaptadores/corretorDoFuturo.ts",
+  "autenticacao": "Authorization: Bearer, token no cofre corretor.token. URL base no cofre corretor.base-url.",
+  "rotasSupostas": {
+    "buscarImoveis": "GET {base}/v1/imoveis?q&bairro&tipo&precoMin&precoMax&pagina",
+    "verImovel": "GET {base}/v1/imoveis/{id}",
+    "criarLead": "POST {base}/v1/leads",
+    "agendarVisita": "POST {base}/v1/visitas"
+  },
+  "confirmacao": "criarLead e agendarVisita recusam a chamada se confirmado não for true.",
+  "perguntasEmAberto": [
+    "Existe API de parceiro, e qual é o caminho real (prefixo, versão)?",
+    "O autenticador é Bearer, outra header, ou sessão do painel?",
+    "Quais filtros de busca existem (cidade, bairro, tipo, preço) e como pagina?",
+    "Qual o formato do id do imóvel?",
+    "Quais campos o lead e a visita aceitam, e o que acontece se o horário já estiver ocupado?",
+    "Um token é de uma imobiliária só?",
+    "Há limite de taxa?",
+    "Os endpoints de escrita existem, ou só o painel grava?"
+  ]
+}

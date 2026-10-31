@@ -1,0 +1,18 @@
+{
+  "nome": "Bling MCP",
+  "oficial": true,
+  "url": "https://mcp.bling.com.br/mcp",
+  "saude": "https://mcp.bling.com.br/health",
+  "saudeCorpo": { "status": "ok" },
+  "documentacao": "https://developer.bling.com.br/mcp-server",
+  "transporte": "streamable-http",
+  "autenticacao": "oauth2.1-pkce",
+  "oauth": {
+    "resource": "https://mcp.bling.com.br/mcp",
+    "authorizationServers": ["https://mcp.bling.com.br"],
+    "scopes": ["bling:read", "bling:write"]
+  },
+  "padrao": false,
+  "verificadoEm": "2026-10-31",
+  "nota": "Complemento opcional. O financeiro da Balão da Informática usa o MCP balao-sistema, não este servidor."
+}

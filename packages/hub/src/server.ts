@@ -27,6 +27,7 @@ const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900
 import { PROVEDORES } from "@mybots/shared";
 import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
+import { registrarAlmas } from "./almas.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA, soulBlock } from "./botManager.js";
 import { listarEspecialidades, detectarEspecialidade, porId, montarPersonaComEspecialidade, idPadrao, categoriasDoCatalogo, resumoParaUi, carregarSkillsDaEspecialidade, recarregarEspecialidades } from "./especialidades.js";
 import { carregarReceita, idsEquipeInicial, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, reaplicarReceitaEmBot, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
@@ -617,6 +618,7 @@ export async function startServer(hub: Hub) {
 
   // --- bots criados pela interface (hospedados neste PC) ---
   const manager = new BotManager(hub);
+  registrarAlmas(app);
   hub.managedIds = () => new Set(manager.list().map((b) => b.id));
   hub.protegidosIds = () => new Set(manager.list().filter((b) => b.protegido).map((b) => b.id));
   // mesma regra que o nó usa no prompt: a persona diz se o bot fala outro idioma
@@ -1322,7 +1324,7 @@ export async function startServer(hub: Hub) {
       const esp = porId(espId) || porId(idPadrao());
       b.especialidadeId = esp?.id ?? idPadrao();
       if (!b.role?.trim()) b.role = esp?.nome || "Assistente geral";
-      if (!b.personaTouched || !String(b.persona || "").trim()) {
+      if (!b.alma && (!b.personaTouched || !String(b.persona || "").trim())) {
         b.persona = montarPersonaComEspecialidade(String(b.name).trim(), String(b.role || esp?.nome || "").trim(), esp, soulBlock());
       }
       if (!isControlMode(b.controlMode) || b.controlMode === "total" || b.controlMode === "deus") {

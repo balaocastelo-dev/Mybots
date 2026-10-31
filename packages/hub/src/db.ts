@@ -1,7 +1,8 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import type { Saber, SaberHit, BotInfo, Group, PendingApproval, PendingQuestion, Routine, Sender, StoredMessage, Risk } from "@mybots/shared";
+import type { Saber, SaberHit, BotInfo, Group, PendingApproval, PendingQuestion, Routine, Sender, StoredMessage, Risk, TarefaColab } from "@mybots/shared";
+import { redigir } from "./redacao.js";
 
 /** O que a tela da primeira empresa e o Gerente guardam além do nome e das regras. */
 export type FichaEmpresa = {
@@ -171,11 +172,32 @@ export class Db {
     this.adicionarColuna("messages", "deleted_at", "INTEGER");
     this.adicionarColuna("messages", "edit_of", "TEXT");
     this.adicionarColuna("messages", "pinned", "INTEGER DEFAULT 0");
+    this.adicionarColuna("approvals", "resolved_by", "TEXT");
     this.db.exec(`CREATE TABLE IF NOT EXISTS conversation_meta (
       id TEXT PRIMARY KEY, forked_from_conversation TEXT, forked_from_message TEXT,
       title TEXT, created_at INTEGER NOT NULL
     );`);
+    // Fila de delegação. Uma linha por tarefa; o destinatário (`para`) é a fila daquele bot.
+    this.db.exec(`CREATE TABLE IF NOT EXISTS colab_tarefas (
+      id TEXT PRIMARY KEY,
+      de TEXT NOT NULL,
+      para TEXT NOT NULL,
+      objetivo TEXT NOT NULL,
+      contexto TEXT NOT NULL DEFAULT '',
+      criterio_sucesso TEXT NOT NULL DEFAULT '',
+      prazo INTEGER,
+      formato_entrega TEXT,
+      status TEXT NOT NULL,
+      profundidade INTEGER NOT NULL DEFAULT 0,
+      tarefa_mae_id TEXT,
+      resultado TEXT,
+      criada_em INTEGER NOT NULL,
+      atualizada_em INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_colab_tarefas_para ON colab_tarefas(para, status, criada_em);`);
   }
+
+  close() { this.db.close(); }
 
   /**
    * A memoria curta e POR EMPRESA (o conhecimento e que e universal): o combinado com
@@ -674,8 +696,16 @@ export class Db {
       .run(a.id, a.botId, a.conversationId, a.tool, JSON.stringify(a.input ?? null), a.risk, a.description, a.createdAt);
   }
 
-  resolveApproval(id: string, allow: boolean) {
-    this.db.prepare(`UPDATE approvals SET status=?, resolved_at=? WHERE id=? AND status='pending'`).run(allow ? "allowed" : "denied", Date.now(), id);
+  resolveApproval(id: string, allow: boolean, por = "humano") {
+    this.db.prepare(`UPDATE approvals SET status=?, resolved_at=?, resolved_by=? WHERE id=? AND status='pending'`).run(allow ? "allowed" : "denied", Date.now(), por, id);
+  }
+
+  /** Cartão que o humano deixou passar, ainda dentro da janela. Aprovação de bot não entra. */
+  temAprovacaoHumana(botId: string, tool: string, janelaMs = 15 * 60_000): boolean {
+    const r = this.db.prepare(
+      `SELECT id FROM approvals WHERE bot_id=? AND tool=? AND status='allowed' AND resolved_by='humano' AND resolved_at>=? LIMIT 1`,
+    ).get(botId, tool, Date.now() - janelaMs);
+    return !!r;
   }
 
   /** Cartão que não espera mais ninguém: o turno dele foi rebobinado. */
@@ -824,12 +854,102 @@ export class Db {
   }
 
   audit(botId: string | null, action: string, detail?: unknown) {
-    this.db.prepare(`INSERT INTO audit (ts, bot_id, action, detail) VALUES (?, ?, ?, ?)`).run(Date.now(), botId, action, detail === undefined ? null : JSON.stringify(detail));
+    const cru = detail === undefined ? null : JSON.stringify(detail);
+    this.db.prepare(`INSERT INTO audit (ts, bot_id, action, detail) VALUES (?, ?, ?, ?)`).run(Date.now(), botId, action, cru == null ? null : redigir(cru));
   }
+
+  /** Conexão do cofre, que mora neste mesmo banco. */
+  get sqlite(): Database.Database { return this.db; }
 
   auditTail(limit = 100) {
     return this.db.prepare(`SELECT * FROM audit ORDER BY id DESC LIMIT ?`).all(limit);
   }
+
+  insertTarefa(t: TarefaColab) {
+    this.db.prepare(`INSERT INTO colab_tarefas (
+      id, de, para, objetivo, contexto, criterio_sucesso, prazo, formato_entrega,
+      status, profundidade, tarefa_mae_id, resultado, criada_em, atualizada_em
+    ) VALUES (
+      @id, @de, @para, @objetivo, @contexto, @criterioSucesso, @prazo, @formatoEntrega,
+      @status, @profundidade, @tarefaMaeId, @resultado, @criadaEm, @atualizadaEm
+    )`).run({
+      ...t,
+      prazo: t.prazo,
+      formatoEntrega: t.formatoEntrega,
+      tarefaMaeId: t.tarefaMaeId,
+      resultado: t.resultado ? JSON.stringify(t.resultado) : null,
+    });
+  }
+
+  getTarefa(id: string): TarefaColab | null {
+    const r = this.db.prepare(`SELECT * FROM colab_tarefas WHERE id=?`).get(id);
+    return r ? rowToTarefa(r) : null;
+  }
+
+  /** Fila do destinatário (`bot` = para), da mais antiga para a mais nova. Sem filtro, devolve todas. */
+  listTarefas(filtro: { bot?: string; status?: string } = {}): TarefaColab[] {
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (filtro.bot) { where.push("para = ?"); args.push(filtro.bot); }
+    if (filtro.status) { where.push("status = ?"); args.push(filtro.status); }
+    const sql = `SELECT * FROM colab_tarefas ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY criada_em ASC, id ASC`;
+    return (this.db.prepare(sql).all(...args) as any[]).map(rowToTarefa);
+  }
+
+  updateTarefa(t: TarefaColab) {
+    this.db.prepare(`UPDATE colab_tarefas SET status=?, resultado=?, atualizada_em=? WHERE id=?`)
+      .run(t.status, t.resultado ? JSON.stringify(t.resultado) : null, t.atualizadaEm, t.id);
+  }
+  auditColab(filtro: { bot?: string; desde?: number; limit?: number }) {
+    const desde = filtro.desde ?? 0;
+    const limit = Math.min(500, Math.max(1, filtro.limit ?? 200));
+    const rows = this.db.prepare(
+      `SELECT * FROM audit WHERE action LIKE 'colab.%' AND ts >= ? ORDER BY id DESC LIMIT ?`,
+    ).all(desde, limit) as Array<{ id: number; ts: number; bot_id: string | null; action: string; detail: string | null }>;
+    const bot = filtro.bot?.trim();
+    const saida = rows.map((r) => {
+      let detail: unknown = null;
+      if (r.detail) { try { detail = JSON.parse(r.detail); } catch { detail = r.detail; } }
+      return { id: r.id, ts: r.ts, botId: r.bot_id, action: r.action, detail };
+    });
+    if (!bot) return saida;
+    return saida.filter((r) => r.botId === bot || JSON.stringify(r.detail ?? "").includes(bot));
+  }
+
+  updateMessageMeta(id: string, meta: Record<string, unknown>) {
+    this.db.prepare(`UPDATE messages SET meta=? WHERE id=?`).run(JSON.stringify(meta), id);
+  }
+
+  /** Recados de colaboração ainda não entregues a este bot. */
+  mensagensColabPendentes(botId: string): StoredMessage[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM messages WHERE conversation_id LIKE 'pair:%' AND deleted_at IS NULL AND meta LIKE '%"pendente":true%' ORDER BY created_at ASC LIMIT 50`,
+    ).all() as any[];
+    return rows.map(rowToMessage).filter((m) => m.meta?.para === botId && m.meta?.pendente === true);
+  }
+}
+
+function rowToTarefa(r: any): TarefaColab {
+  let resultado: TarefaColab["resultado"];
+  if (r.resultado) {
+    try { resultado = JSON.parse(r.resultado); } catch { resultado = undefined; }
+  }
+  return {
+    id: r.id,
+    de: r.de,
+    para: r.para,
+    objetivo: r.objetivo,
+    contexto: r.contexto,
+    criterioSucesso: r.criterio_sucesso,
+    prazo: r.prazo == null ? null : Number(r.prazo),
+    formatoEntrega: r.formato_entrega ?? null,
+    status: r.status,
+    profundidade: Number(r.profundidade ?? 0),
+    tarefaMaeId: r.tarefa_mae_id ?? null,
+    ...(resultado ? { resultado } : {}),
+    criadaEm: Number(r.criada_em),
+    atualizadaEm: Number(r.atualizada_em),
+  };
 }
 
 function rowToMessage(r: any): StoredMessage {

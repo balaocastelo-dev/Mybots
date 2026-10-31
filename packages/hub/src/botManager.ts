@@ -9,7 +9,7 @@ import { config } from "./config.js";
 import { motivoDaQueda, recadoDaQueda } from "./diagnostico.js";
 import type { Hub } from "./hub.js";
 import { estadoDaChave } from "./chaves.js";
-import { pararPc } from "./pcs.js";
+import { pararPc, registrarPc } from "./pcs.js";
 
 export type ManagedBotDef = {
   id: string;
@@ -32,6 +32,8 @@ export type ManagedBotDef = {
   protegido?: boolean;
   /** gerente da empresa: ganha a coroa no painel, mesmo antes de ter equipe */
   gerente?: boolean;
+  /** cofre da empresa: preenche credencial e não revela o valor */
+  cofre?: boolean;
 };
 
 export type ManagedBotStatus = ManagedBotDef & { running: boolean; pid?: number; restarts: number; lastExit?: number | null };
@@ -138,6 +140,7 @@ export class BotManager {
       createdAt: Date.now(),
       protegido: input.protegido === true || undefined,
       gerente: input.gerente === true || undefined,
+      cofre: input.cofre === true || undefined,
     };
     if (!def.provider.model) return { error: "Informe o modelo." };
     // Mesmo id de um bot excluído antes: a lápide sai, senão ele nasce proibido de conectar.
@@ -432,6 +435,62 @@ export class BotManager {
   }
 
   /**
+   * Toda empresa nasce com um bot Cofre. Ele atende o pedido dos colegas e
+   * chama fill_credential: o Hub digita no navegador e o modelo só ouve ok ou erro.
+   * Não é protegido — a empresa pode trocar a persona. Se for excluído de propósito,
+   * a lápide impede que o próximo boot recrie.
+   */
+  private pcDoCofre(id: string, empresaId: string, nome: string) {
+    try { registrarPc({ botId: id, empresaId, nome }); }
+    catch (e) { this.hub.db.audit(id, "bot.empresa.cofre.pc", { erro: (e as Error).message }); }
+  }
+
+  criarCofreDaEmpresa(empresaId: string, nomeEmpresa: string): { id: string } | { error: string } {
+    const id = BotManager.slug(`cofre-${empresaId}`);
+    const nome = `Cofre — ${nomeEmpresa}`;
+    if (this.hub.db.estaExcluido(id)) return { error: "o cofre desta empresa foi excluído" };
+    if (this.hub.db.getManaged(id)) {
+      this.pcDoCofre(id, empresaId, nome);
+      return { id };
+    }
+    const r = this.create({
+      id,
+      name: nome,
+      role: `Guarda as credenciais da ${nomeEmpresa} e preenche login e cartão sem revelar o segredo`,
+      avatar: "🔐",
+      cofre: true,
+      engine: "direct",
+      provider: provedorDoGerente(),
+      persona: personaDoCofre(nomeEmpresa),
+      autoStart: true,
+      controlMode: "supervisionado",
+    });
+    if ("error" in r) return r;
+    this.hub.db.audit(id, "bot.empresa.cofre", { empresa: empresaId });
+    this.pcDoCofre(r.id, empresaId, nome);
+    return { id: r.id };
+  }
+
+  /** Empresa que já existia antes do cofre ganha o bot na subida do Hub. */
+  garantirCofres(): string[] {
+    const criados: string[] = [];
+    for (const e of this.hub.db.listEmpresas()) {
+      const antes = BotManager.slug(`cofre-${e.id}`);
+      if (this.hub.db.estaExcluido(antes)) continue;
+      if (this.hub.db.getManaged(antes)) {
+        this.pcDoCofre(antes, e.id, `Cofre — ${e.nome}`);
+        continue;
+      }
+      const r = this.criarCofreDaEmpresa(e.id, e.nome);
+      if (!("error" in r)) {
+        this.hub.db.setEmpresaDoBot(r.id, `Cofre — ${e.nome}`, e.id, false);
+        criados.push(r.id);
+      }
+    }
+    return criados;
+  }
+
+  /**
    * Gerente que ja existia nasceu sem saber que pode criar bot -- a persona dele e
    * so a do Medico (diagnosticar e consertar). Por isso respondia ao chefe que ele
    * teria de criar o bot no painel, mesmo tendo criar_bot na mao. Aqui o bloco e
@@ -480,6 +539,20 @@ function tsxLoader(fromDir: string): string {
  * lugares -- no gerente que nasce com a empresa e no gerente de equipe -- e
  * porque gerente antigo recebe este bloco por acrescimo, sem perder a persona.
  */
+export function personaDoCofre(nomeEmpresa: string): string {
+  return [
+    `Você é o Cofre da ${nomeEmpresa}. Os outros bots pedem login e cartão para você. Você preenche. Você não conta.`,
+    "",
+    "Como você trabalha:",
+    "- Quando um colega pedir para entrar num site ou pagar, use fill_credential com o site e o campo (usuario, senha, titular, numero, validade ou cvv).",
+    "- A resposta da ferramenta é só ok ou erro. Você NÃO recebe a senha, o número nem o cvv. Nunca peça o valor, nunca repita, nunca grave em arquivo, memória ou mensagem.",
+    "- Se o colega perguntar qual é a senha, recuse e ofereça preencher o campo na página.",
+    "- Sem permissão a ferramenta responde erro. Diga ao colega para o chefe liberar aquele bot naquele item, em Configurações. Não tente outro caminho.",
+    "- Preencher o cartão é permitido. Clicar em pagar, comprar, enviar ou finalizar NÃO é: isso pede o OK do chefe, em qualquer modo, e você não clica.",
+    "- Um cartão só: fill_credential aceita o site do checkout. Vários cartões: passe o nome do cartão no lugar do site.",
+  ].join("\n");
+}
+
 export function personaMontarEquipe(): string {
   return [
     "## MONTAR A EQUIPE E O SEU TRABALHO PRINCIPAL",
@@ -512,6 +585,7 @@ function personaGerente(nome: string, funcao: string, equipe: string[], info: (i
     "Como você trabalha:",
     "- O chefe fala com VOCÊ. Você distribui o trabalho e volta com o resultado.",
     "- Para pedir algo a alguém da equipe use ask_bot (quando precisa da resposta) ou send_to_bot (quando é só repassar).",
+    "- Para um trabalho com objetivo, critério de pronto e prazo, use delegate_task. O colega faz, o resultado volta e te acorda. Acompanhe com check_task e desista com cancel_task. Você não aprova essa delegação.",
     "- Quebre pedidos grandes em tarefas e mande cada uma para quem é da área. Vários podem trabalhar ao mesmo tempo.",
     "- NÃO faça você mesmo o que alguém da equipe faz melhor; sua função é coordenar e conferir.",
     "- Confira o que voltou antes de entregar. Se veio ruim, devolva para a pessoa com o que precisa corrigir.",

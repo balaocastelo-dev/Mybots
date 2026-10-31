@@ -37,11 +37,19 @@ import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
 import { registerPainel } from "./painel.js";
 import { estadoDaChave } from "./chaves.js";
+import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
+import { registrarCofre } from "./cofreRotas.js";
+import { instalarRedacao, redigir } from "./redacao.js";
 
 export async function startServer(hub: Hub) {
+  instalarRedacao();
   const app = Fastify({ logger: false, bodyLimit: 60 * 1024 * 1024 });
   let atenderAndroidHttp: ((req: any, reply: any) => Promise<void>) | null = null;
   let atenderAndroidWs: ((socket: any, req: any) => void) | null = null;
+  app.addHook("onSend", async (_req, reply, payload) => {
+    if (reply.statusCode < 400 || typeof payload !== "string") return payload;
+    return redigir(payload);
+  });
   await app.register(fastifyWebsocket, { options: { maxPayload: 60 * 1024 * 1024 } });
   // áudio e uploads chegam como binário cru
   // Corpo vazio com "content-type: application/json" é erro de cliente comum (DELETE e
@@ -399,11 +407,13 @@ export async function startServer(hub: Hub) {
     return m;
   });
   app.get("/api/approvals", async () => hub.db.pendingApprovals());
-  app.post("/api/approvals/:id", async (req) => {
-    const body = req.body as { allow: boolean; remember?: boolean };
-    hub.resolveApproval((req.params as any).id, !!body.allow, body.remember);
+  app.post("/api/approvals/:id", async (req, reply) => {
+    const body = req.body as { allow: boolean; remember?: boolean; de?: string };
+    const r = hub.responderAprovacao((req.params as any).id, !!body.allow, body.remember, body.de);
+    if (!r.ok) return reply.code(403).send(r);
     return { ok: true };
   });
+  registrarRotasColab(app, hub);
   app.get("/api/questions", async () => hub.db.pendingQuestions());
   app.post("/api/questions/:id", async (req) => {
     const body = req.body as { answer: string };
@@ -411,6 +421,8 @@ export async function startServer(hub: Hub) {
     return { ok: true };
   });
   app.get("/api/audit", async (req) => hub.db.auditTail(Number((req.query as any).limit ?? 100)));
+
+  registerColabRoutes(app, hub, nodeAuthorized);
 
   // --- automode: nível de controle global (sobrescreve o de cada bot) ---
   app.get("/api/control", async () => ({ ...hub.control(), bots: Object.fromEntries(hub.summaries().filter((b) => b.online).map((b) => [b.id, hub.effectiveModeFor(b.id)])) }));
@@ -469,6 +481,8 @@ export async function startServer(hub: Hub) {
   {
     const ensinados = manager.ensinarGerentesAMontarEquipe();
     if (ensinados.length) console.log(`[hub] gerente(s) ensinados a montar equipe: ${ensinados.join(", ")}`);
+    const cofres = manager.garantirCofres();
+    if (cofres.length) console.log(`[hub] cofre das empresas: ${cofres.join(", ")}`);
   }
   hub.restartBot = (botId) => { if (!manager.get(botId)) return false; manager.restart(botId); return true; };
   // O caminho certo para um bot cuidar da equipe. Antes não existia: o Médico tentava
@@ -811,12 +825,12 @@ export async function startServer(hub: Hub) {
         signal: AbortSignal.timeout(25_000),
       });
       const corpo = await r.text();
-      if (!r.ok) return { ok: false, erro: `HTTP ${r.status}: ${corpo.slice(0, 220)}` };
+      if (!r.ok) return { ok: false, erro: redigir(`HTTP ${r.status}: ${corpo.slice(0, 220)}`) };
       const j = JSON.parse(corpo);
       const txt = String(j?.choices?.[0]?.message?.content ?? "").trim();
       return { ok: !!txt, ms: Date.now() - t0, resposta: txt.slice(0, 60) || "(vazio)" };
     } catch (e) {
-      return { ok: false, erro: (e as Error).message };
+      return { ok: false, erro: redigir((e as Error).message) };
     }
   });
 
@@ -934,7 +948,11 @@ export async function startServer(hub: Hub) {
     // Empresa nasce com o WhatsApp dela subindo: o QR aparece no painel em segundos.
     void hub.whats.conectar(id).catch(() => {});
     // ...e com o Gerente Geral dela, que recebe o chefe e apresenta o sistema.
+    // comGerente/comMedico false é o atalho dos testes: não sobe Gerente nem Cofre.
     if (b.comGerente === false || b.comMedico === false) return { ...e, gerente: null };
+    const cofreBot = manager.criarCofreDaEmpresa(id, e.nome);
+    if ("error" in cofreBot) hub.db.audit(null, "empresa.cofre.falhou", { id, erro: cofreBot.error });
+    else hub.db.setEmpresaDoBot(cofreBot.id, `Cofre — ${e.nome}`, id, false);
     const gerente = manager.criarGerenteDaEmpresa(id, e.nome);
     if ("error" in gerente) {
       hub.db.audit(null, "empresa.gerente.falhou", { id, erro: gerente.error });
@@ -1357,6 +1375,8 @@ export async function startServer(hub: Hub) {
     }
   });
 
+
+  registrarCofre(app, hub);
 
   // --- MCP (ferramentas para os Bots, usado pelo engine opencode) ---
   await registerMcp(app, hub);

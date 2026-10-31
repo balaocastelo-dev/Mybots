@@ -1752,6 +1752,26 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
 .bots li.linha-bot { padding: 6px 8px; gap: 8px; }
 .bots li.linha-bot .avatar { width: 36px; height: 36px; }
 
+.guia-barra { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
+.guia-barra header { display: flex; justify-content: space-between; font-size: 12px; }
+.guia-trilho { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.guia-passo {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  border-radius: 10px; padding: 6px; font: 600 11px/1.2 var(--fonte); cursor: pointer; text-align: left;
+}
+.guia-passo i { width: 14px; text-align: center; font-style: normal; }
+.guia-passo.ok { color: var(--text); border-color: var(--accent-2, #1e9e62); }
+.guia-passo.falhou { color: #d4453c; }
+.guia-passo.agora { background: var(--panel); color: var(--text); }
+.guia-cartao { display: grid; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.guia-cartao label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.guia-cartao input { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.guia-legenda { margin: 0; font-size: 13px; line-height: 1.4; }
+.guia-erro { margin: 0; color: #d4453c; font-size: 12.5px; }
+.guia-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 720px) { .guia-trilho { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 /* Fluxo ao vivo, no jeito do Grok Bot: bolha do chefe na cor do bot,
    bolha do bot cinza, estado na lista e a linha acima do compositor. */
 .chat .msg.theirs .bubble {

@@ -18,7 +18,7 @@ import net from "node:net";
 import { fileURLToPath } from "node:url";
 import { alvoDaPonte, caminhoDaTela, caminhoNoContainer, idDaTela, idSeguro, portaDeEmpresaPermitida } from "./ponteVnc.js";
 import { videoExigeSenha } from "./gravacao.js";
-import { abrirWsDaTela, encaminharHttp } from "./ponteTela.js";
+import { abrirWsDaTela, encaminharHttp, quadroWs, type QuadroWs } from "./ponteTela.js";
 import { idDoAndroid, listarProvedoresAndroid, resolverAlvoAndroid, tratadorAndroid } from "./android.js";
 import { acordarPc, acessoAberto, atualizarEmpresaDoPc, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, abrirTela, fecharTela, iniciarVarreduraOciosa, lerRegistro, ligarPc, listarMaquinas, pararPc, registrarPc, type BotParaPc } from "./pcs.js";
 // O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
@@ -29,6 +29,7 @@ import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZE
 import { BotManager, PROVIDERS, PADRAO_DA_CASA } from "./botManager.js";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
 import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
+import { registrarGuia } from "./guiaRota.js";
 import * as celular from "./celular.js";
 import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
@@ -245,8 +246,8 @@ export async function startServer(hub: Hub) {
 
   // WebSocket da GUI (/pc/<empresa>/api/...). O HTTP da mesma URL sai no hook acima.
   app.get("/pc/:id/*", { websocket: true }, (socket: any, req: any) => {
-    const fila: Buffer[] = [];
-    let enviar: ((b: Buffer) => void) | null = null;
+    const fila: QuadroWs[] = [];
+    let enviar: ((q: QuadroWs) => void) | null = null;
     let morto = false;
     let botDaTela: string | null = null;
     let contou = false;
@@ -255,11 +256,13 @@ export async function startServer(hub: Hub) {
       contou = false;
       fecharTela(botDaTela);
     };
-    socket.on("message", (m: any) => {
+    // O segundo argumento é o tipo do quadro. Sem ele, SETTINGS vira binário
+    // e o Selkies 2.1 não registra o display — a tela fica preta.
+    socket.on("message", (m: unknown, isBinary: boolean) => {
       if (morto) return;
-      const b = Buffer.isBuffer(m) ? m : Buffer.from(m);
-      if (enviar) enviar(b);
-      else fila.push(b);
+      const q = quadroWs(m, isBinary);
+      if (enviar) enviar(q);
+      else fila.push(q);
     });
     socket.on("close", () => { morto = true; soltarOlho(); });
     socket.on("error", () => { morto = true; soltarOlho(); });
@@ -729,6 +732,7 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/empresas/:id/maquina/desligar", async (req) => await desligarMaquina((req.params as any).id as string));
   app.delete("/api/empresas/:id/maquina", async (req) => await apagarMaquina((req.params as any).id as string));
+  registrarGuia(app, hub);
 
   app.get("/api/previa", async (req, reply) => {
     const q = req.query as { url?: string; insta?: string };

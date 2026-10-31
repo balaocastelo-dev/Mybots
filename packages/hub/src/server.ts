@@ -18,7 +18,7 @@ import net from "node:net";
 import { fileURLToPath } from "node:url";
 import { alvoDaPonte, caminhoDaTela, caminhoNoContainer, idDaTela, idSeguro, portaDeEmpresaPermitida } from "./ponteVnc.js";
 import { videoExigeSenha } from "./gravacao.js";
-import { abrirWsDaTela, encaminharHttp } from "./ponteTela.js";
+import { abrirWsDaTela, encaminharHttp, quadroWs, type QuadroWs } from "./ponteTela.js";
 // O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
 const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900 };
 import { PROVEDORES } from "@mybots/shared";
@@ -169,14 +169,16 @@ export async function startServer(hub: Hub) {
 
   // WebSocket da GUI (/pc/<empresa>/api/...). O HTTP da mesma URL sai no hook acima.
   app.get("/pc/:id/*", { websocket: true }, (socket: any, req: any) => {
-    const fila: Buffer[] = [];
-    let enviar: ((b: Buffer) => void) | null = null;
+    const fila: QuadroWs[] = [];
+    let enviar: ((q: QuadroWs) => void) | null = null;
     let morto = false;
-    socket.on("message", (m: any) => {
+    // O segundo argumento é o tipo do quadro. Sem ele, SETTINGS vira binário
+    // e o Selkies 2.1 não registra o display — a tela fica preta.
+    socket.on("message", (m: unknown, isBinary: boolean) => {
       if (morto) return;
-      const b = Buffer.isBuffer(m) ? m : Buffer.from(m);
-      if (enviar) enviar(b);
-      else fila.push(b);
+      const q = quadroWs(m, isBinary);
+      if (enviar) enviar(q);
+      else fila.push(q);
     });
     socket.on("close", () => { morto = true; });
     socket.on("error", () => { morto = true; });

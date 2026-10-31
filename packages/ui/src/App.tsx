@@ -220,14 +220,24 @@ export function App() {
         <GlobalControl control={state.control} />
         {(buscaAberta || filter) && <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />}
         <ul className="bots">
-          <li className="atalho-trabalhos" onClick={() => { setVerCelular(true); if (window.innerWidth < 720) setSidebarOpen(false); }}>
-            <span className="at-icone"><Icone nome="celular" /></span><div><b>Celular</b></div>
-          </li>
-          <li className="atalho-trabalhos" onClick={() => { setVerMac(true); if (window.innerWidth < 720) setSidebarOpen(false); }}>
-            <span className="at-icone"><Icone nome="mac" /></span><div><b>Tela do Mac</b></div>
-          </li>
-          <li className="atalho-trabalhos" onClick={() => { setVerTrabalhos(true); if (window.innerWidth < 720) setSidebarOpen(false); }}>
-            <span className="at-icone"><Icone nome="pasta" /></span><div><b>Trabalhos</b></div>
+          <li className="atalhos-wrap">
+            <div className="pc-segmento lista-atalhos" role="tablist" aria-label="Atalhos da lista">
+              <button type="button" aria-pressed={verCelular} className={verCelular ? "on" : ""} onClick={() => {
+                const ligar = !verCelular;
+                setVerCelular(ligar); setVerMac(false); setVerTrabalhos(false);
+                if (ligar && window.innerWidth < 720) setSidebarOpen(false);
+              }} title="Celular"><Icone nome="celular" /><span>Celular</span></button>
+              <button type="button" aria-pressed={verMac} className={verMac ? "on" : ""} onClick={() => {
+                const ligar = !verMac;
+                setVerMac(ligar); setVerCelular(false); setVerTrabalhos(false);
+                if (ligar && window.innerWidth < 720) setSidebarOpen(false);
+              }} title="Tela do Mac"><Icone nome="mac" /><span>Tela do Mac</span></button>
+              <button type="button" aria-pressed={verTrabalhos} className={verTrabalhos ? "on" : ""} onClick={() => {
+                const ligar = !verTrabalhos;
+                setVerTrabalhos(ligar); setVerCelular(false); setVerMac(false);
+                if (ligar && window.innerWidth < 720) setSidebarOpen(false);
+              }} title="Trabalhos"><Icone nome="pasta" /><span>Trabalhos</span></button>
+            </div>
           </li>
           <li className="section empresa-linha">
             <select className="empresa-sel" value={empresaAtiva} onChange={(e) => { if (e.target.value === "+nova") { setVerEmpresas(true); return; } setEmpresaAtiva(e.target.value); }}>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BotSummary, ControlMode, ControlState, Group, PendingApproval, PendingQuestion, Routine, StoredMessage } from "@mybots/shared";
-import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, CONTROL_MODES, dmConversation, effectiveControl, groupConversation } from "@mybots/shared";
+import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, CONTROL_MODES, dmConversation, effectiveControl, faseDoStatus, groupConversation } from "@mybots/shared";
 import { useHub, type ToolInfo } from "./hub";
 import { registrarParada, stopEverything } from "./stop";
 import { criarFala, escolherMicrofone, escutaContinua, isSpeaking, listenOnce, microfoneEscolhido, microfones, onSpeaking, speak, speechSupported, stopSpeaking, type EscutaViva, type FalaViva, type VoiceCaps } from "./voice";
@@ -271,6 +271,7 @@ export function App() {
                         {(b.unread ?? 0) > 0 && <i className="nao-lido" title="não lido" />}
                       </span>
                       <span className="grade-nome">{nomeNaTela(b, painel.prefs)}</span>
+                      {b.online && b.busy && <span className="grade-vivo">{faseDoStatus(b.status, b.busy, b.fase) === "trabalhando" ? "trabalhando" : "digitando"}</span>}
                     </li>
                   );
                 })}
@@ -291,8 +292,9 @@ export function App() {
                     <Avatar bot={b} size={36} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
                     <div className="bot-text">
                       <div className="bot-name">{nomeNaTela(b, painel.prefs)}{(b.unread ?? 0) > 0 && conv !== selected && <span className="badge">{b.unread}</span>}</div>
+                      {b.online && b.busy && pendingFor(b.id) === 0 && <div className="bot-vivo">{faseDoStatus(b.status, b.busy, b.fase) === "trabalhando" ? "está trabalhando" : "digitando…"}</div>}
                       <div className={"bot-status" + (b.busy ? " busy" : "") + (pendingFor(b.id) > 0 ? " pedindo" : "")}>
-                        {pendingFor(b.id) > 0 ? "Espera o seu OK" : b.online ? (b.busy ? b.status + "…" : b.preview ?? b.status) : "Offline"}
+                        {pendingFor(b.id) > 0 ? "Espera o seu OK" : b.online ? (b.preview ?? (b.busy ? b.status : "Disponível")) : "Offline"}
                       </div>
                     </div>
                     {b.busy && (

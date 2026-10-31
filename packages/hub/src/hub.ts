@@ -2,11 +2,11 @@ import type { WebSocket } from "ws";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  type BotEvent, type BotInfo, type BotSummary, type ControlMode, type ControlState, type Group, type HubToNode, type HubToUi, type NodeToHub,
+  type BotEvent, type BotInfo, type BotSummary, type ControlMode, type ControlState, type FaseAtividade, type Group, type HubToNode, type HubToUi, type NodeToHub,
   type PendingApproval, type PendingQuestion, type Routine, type Sender, type StoredMessage, type UiToHub,
   type Saber,
   type SaberTipo,
-  botOfConversation, cortarFala, dmConversation, effectiveControl, groupOfConversation, isControlMode, needsHumanApproval, newId, pairConversation, PROTOCOL_VERSION, SABER_LABELS,
+  botOfConversation, cortarFala, dmConversation, effectiveControl, faseDoStatus, groupOfConversation, isControlMode, needsHumanApproval, newId, pairConversation, PROTOCOL_VERSION, SABER_LABELS,
 } from "@mybots/shared";
 import { Db } from "./db.js";
 import { WhatsAppDasEmpresas } from "./whatsapp.js";
@@ -32,8 +32,6 @@ import {
 import { argumentosScrcpy } from "./scrcpy.js";
 import { spawn } from "node:child_process";
 
-const STREAM_DELTAS = process.env.MYBOTS_STREAM_DELTAS === "1";
-
 type NodeConn = {
   ws: WebSocket;
   bot: BotInfo;
@@ -42,6 +40,7 @@ type NodeConn = {
   model: string;
   status: string;
   busy: boolean;
+  fase?: FaseAtividade;
   connectedAt: number;
   controlMode?: ControlMode;
 };
@@ -95,7 +94,7 @@ export class Hub {
     anotar: (conversationId, texto) => { this.marcador(conversationId, texto, { sala: true }); },
   });
   private uis = new Set<WebSocket>();
-  private streams = new Map<string, { conversationId: string; botId: string; text: string; createdAt: number; tools: ToolRecord[]; /** o que já foi mandado para a voz (chamada de voz: ele fala enquanto escreve) */ falado?: string }>();
+  private streams = new Map<string, { conversationId: string; botId: string; text: string; createdAt: number; tools: ToolRecord[]; /** o que já foi mandado para a voz (chamada de voz: ele fala enquanto escreve) */ falado?: string; /** o que a interface já está mostrando, já sem pensamento */ mostrado?: string }>();
 
   /** Garante a linha da mensagem do bot (texto vai chegando por partes; ferramentas chegam antes do texto). */
   private ensureStream(messageId: string, conversationId: string, botId: string, sender: Sender) {
@@ -707,6 +706,7 @@ export class Hub {
       online: !!n,
       busy: n?.busy ?? false,
       status: n?.status ?? (n ? "Disponível" : "Offline"),
+      fase: n ? faseDoStatus(n.status, n.busy, n.fase) : "livre",
       engine: n?.engine ?? b.engine,
       provider: n?.provider ?? b.provider,
       model: n?.model ?? b.model,
@@ -1175,10 +1175,7 @@ export class Hub {
         return;
       }
       case "status":
-        node.status = msg.text;
-        node.busy = msg.busy;
-        this.broadcastUi({ type: "status", botId, text: msg.text, busy: msg.busy });
-        if (!msg.busy) this.finalizeStreams(botId);
+        this.definirAtividade(botId, msg.text, msg.busy, msg.fase);
         return;
       case "event":
         return this.onBotEvent(botId, msg.conversationId, msg.event);
@@ -1278,7 +1275,10 @@ export class Hub {
       case "upload": {
         try {
           const f = this.saveFile(botId, msg.name, msg.mime, Buffer.from(msg.dataBase64, "base64"));
-          this.storeMessage(msg.conversationId, this.botSender(botId), msg.caption ?? `Enviou ${f.name}`, { files: [{ id: f.id, name: f.name, url: f.url, mime: f.mime }] });
+          this.storeMessage(msg.conversationId, this.botSender(botId), msg.caption ?? `Enviou ${f.name}`, {
+            files: [{ id: f.id, name: f.name, url: f.url, mime: f.mime }],
+            ...(msg.tela ? { tela: true } : {}),
+          });
           this.db.audit(botId, "file.sent", { name: f.name, size: f.size });
           return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: `Arquivo enviado ao chefe: ${f.name} (${config.publicUrl}${f.url})` });
         } catch (e) {
@@ -1321,9 +1321,26 @@ export class Hub {
       case "text.delta": {
         const s = this.ensureStream(ev.messageId, conversationId, botId, sender);
         s.text += ev.text;
-        // Por padrão não mostramos o texto chegando aos poucos: os "pensamentos" do modelo apareceriam antes de serem filtrados.
-        if (STREAM_DELTAS) this.broadcastUi({ type: "message.delta", conversationId, messageId: ev.messageId, text: ev.text });
+        // Só sai o que já é resposta. O raciocínio em inglês fica no filtro até o fim.
+        const { answer } = splitThoughts(s.text, { permiteIngles: this.falamOutroIdioma().has(botId), aoVivo: true });
+        const mostrado = s.mostrado ?? "";
+        // Frase pela metade que ainda pode ser raciocínio não vai para a tela.
+        // Com 40 caracteres ou um ponto final, já é resposta e pode ir saindo.
+        const pronto = /[.!?…]\s*$/.test(answer) || answer.length >= 40;
+        if (pronto && answer !== mostrado) {
+          if (answer.startsWith(mostrado)) {
+            this.broadcastUi({ type: "message.delta", conversationId, messageId: ev.messageId, text: answer.slice(mostrado.length) });
+          } else {
+            this.broadcastUi({ type: "message.delta", conversationId, messageId: ev.messageId, text: answer, replace: true });
+          }
+          s.mostrado = answer;
+        }
         this.falaEmTempoReal(conversationId, botId, ev.messageId, s);
+        return;
+      }
+      case "text.note": {
+        const frase = ev.text.trim();
+        if (frase) this.storeMessage(conversationId, sender, frase, { nota: true }, ev.messageId);
         return;
       }
       case "text.done": {
@@ -1366,6 +1383,7 @@ export class Hub {
         this.db.audit(botId, "tool.start", { tool: ev.tool, input: ev.input, conversationId });
         this.anotarTela(botId, ev.tool, ev.input);
         this.anotarCelular(botId, ev.tool, ev.input);
+        this.definirAtividade(botId, "Trabalhando", true, "trabalhando");
         return;
       }
       case "tool.done": {
@@ -1516,14 +1534,16 @@ export class Hub {
         const offline: string[] = [];
         for (const member of g.members) {
           const ok = this.sendNode(member, payload(stored.id));
-          if (!ok) offline.push(this.botSender(member).name);
+          if (ok && from.kind === "user") this.definirAtividade(member, "Digitando", true, "digitando");
+          else if (!ok) offline.push(this.botSender(member).name);
         }
         if (offline.length) this.storeMessage(conversationId, SYSTEM, `Offline: ${offline.join(", ")}.`, { error: true });
         return;
       }
       const botId = botOfConversation(conversationId) ?? conversationId.split(":").pop()!;
       const ok = this.sendNode(botId, payload(stored.id));
-      if (!ok) this.storeMessage(conversationId, SYSTEM, `${this.botSender(botId).name} está offline. A mensagem fica salva, mas o bot não vai responder até o PC dele conectar.`, { error: true });
+      if (ok && from.kind === "user") this.definirAtividade(botId, "Digitando", true, "digitando");
+      else if (!ok) this.storeMessage(conversationId, SYSTEM, `${this.botSender(botId).name} está offline. A mensagem fica salva, mas o bot não vai responder até o PC dele conectar.`, { error: true });
     };
     const atts: Attachment[] = files.map((f) => ({ id: f.id, name: f.name, mime: f.mime, url: f.url, size: f.size }));
     // vídeos/áudios: quadros + transcrição antes de entregar (assíncrono; sem ffmpeg/STT entrega só o original)
@@ -1807,9 +1827,16 @@ export class Hub {
   }
 
   setStatusFromMcp(botId: string, text: string, busy: boolean) {
+    this.definirAtividade(botId, text, busy);
+  }
+
+  /** Avisa a lista e o chat na hora. O nó pode detalhar depois; a fase é o que a tela usa. */
+  private definirAtividade(botId: string, text: string, busy: boolean, fase?: FaseAtividade) {
     const n = this.nodes.get(botId);
-    if (n) { n.status = text; n.busy = busy; }
-    this.broadcastUi({ type: "status", botId, text, busy });
+    const resolvida = faseDoStatus(text, busy, fase);
+    if (n) { n.status = text; n.busy = busy; n.fase = resolvida; }
+    this.broadcastUi({ type: "status", botId, text, busy, fase: resolvida });
+    if (!busy) this.finalizeStreams(botId);
   }
 
   notifyFromMcp(botId: string, text: string) {

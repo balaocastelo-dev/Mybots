@@ -22,6 +22,8 @@ export type Risk = "low" | "medium" | "high";
 export type BotEvent =
   | { kind: "text.delta"; messageId: string; text: string }
   | { kind: "text.done"; messageId: string; text: string }
+  /** Frase curta antes do trabalho longo. Não encerra o turno nem responde um ask_bot. */
+  | { kind: "text.note"; messageId: string; text: string }
   | { kind: "tool.start"; messageId: string; callId: string; tool: string; input: unknown }
   | { kind: "tool.done"; messageId: string; callId: string; tool: string; output: string; ok: boolean }
   | { kind: "approval.request"; requestId: string; tool: string; input: unknown; risk: Risk; description: string }
@@ -46,7 +48,7 @@ export type NodeToHub =
   | { type: "heartbeat" }
   /** registro de auditoria (ex.: aprovação automática no modo autônomo/deus) */
   | { type: "audit"; action: string; detail?: unknown }
-  | { type: "status"; text: string; busy: boolean }
+  | { type: "status"; text: string; busy: boolean; fase?: FaseAtividade }
   | { type: "event"; conversationId: string; event: BotEvent }
   | { type: "ask_bot"; callId: string; conversationId: string; to: string; text: string; wait: boolean }
   | { type: "list_bots"; callId: string }
@@ -62,7 +64,7 @@ export type NodeToHub =
   | { type: "learn_knowledge"; callId: string; titulo: string; resumo: string; conteudo: string; tipo?: SaberTipo; tags?: string[] }
   | { type: "notify"; text: string }
   /** arquivo gerado pelo bot (imagem, planilha, vídeo pequeno) — base64 */
-  | { type: "upload"; callId: string; conversationId: string; messageId: string; name: string; mime: string; dataBase64: string; caption?: string }
+  | { type: "upload"; callId: string; conversationId: string; messageId: string; name: string; mime: string; dataBase64: string; caption?: string; /** miniatura da tela: tocar abre o desktop */ tela?: boolean }
   | { type: "schedule"; callId: string; name: string; cron: string; prompt: string }
   | { type: "list_routines"; callId: string }
   | { type: "cancel_routine"; callId: string; id: string }
@@ -113,6 +115,8 @@ export type BotSummary = BotInfo & {
   online: boolean;
   busy: boolean;
   status: string;
+  /** o que a lista e o chat mostram agora: digitando, trabalhando ou livre */
+  fase?: FaseAtividade;
   engine?: string;
   provider?: string;
   model?: string;
@@ -202,7 +206,7 @@ export type HubToUi =
   | { type: "whatsapp"; estado: { empresaId: string; estado: "desligado" | "qr" | "conectando" | "conectado"; qr?: string; numero?: string; desde?: number; erro?: string } }
   | { type: "import.request"; file: { name: string; mime: string; dataBase64: string } }
   | { type: "message"; message: StoredMessage }
-  | { type: "message.delta"; conversationId: string; messageId: string; text: string }
+  | { type: "message.delta"; conversationId: string; messageId: string; text: string; /** o filtro mudou de ideia: este texto substitui o que já estava na bolha */ replace?: boolean }
   /** Chamada de voz: frase pronta (já sem o raciocínio do modelo) para a interface falar enquanto o bot ainda escreve. */
   | { type: "speech.delta"; conversationId: string; botId: string; messageId: string; text: string }
   | { type: "speech.done"; conversationId: string; botId: string; messageId: string }
@@ -211,7 +215,7 @@ export type HubToUi =
   | { type: "approval.resolved"; requestId: string; allow: boolean }
   | { type: "question"; question: PendingQuestion }
   | { type: "question.resolved"; questionId: string; answer: string }
-  | { type: "status"; botId: string; text: string; busy: boolean }
+  | { type: "status"; botId: string; text: string; busy: boolean; fase?: FaseAtividade }
   | { type: "notify"; botId: string; text: string }
   /** Quem usou o PC da empresa por último. Um PC por empresa, compartilhado pelos bots dela. */
   | { type: "pc.uso"; empresaId: string; uso: UsoDoPc }
@@ -297,6 +301,17 @@ export type SaberHit = { id: string; titulo: string; resumo: string; tipo: Saber
 
 export * from "./speech.ts";
 export * from "./instance.ts";
+/** O que o chefe vê enquanto o bot ainda não entregou. */
+export type FaseAtividade = "digitando" | "trabalhando" | "livre";
+
+/** Sem a fase explícita, o texto do status antigo ainda decide. "Pensando" é digitando. */
+export function faseDoStatus(text: string, busy: boolean, fase?: FaseAtividade): FaseAtividade {
+  if (fase === "digitando" || fase === "trabalhando" || fase === "livre") return fase;
+  if (!busy) return "livre";
+  if (/digitando|pensando|terminando/i.test(text)) return "digitando";
+  return "trabalhando";
+}
+
 export * from "./control.ts";
 export * from "./media.ts";
 export * from "./resources.ts";

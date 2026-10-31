@@ -13,6 +13,7 @@ import { tetoDoProvedor, tetoSaidaDoProvedor, emTokens, ferramentasQueCabem } fr
 const avisados = new Set<string>();
 import { limitsFromEnv } from "../resources.js";
 import { baixarImagens, descrever, visionPlan } from "../vision.js";
+import { confirmacaoCurta } from "../confirma.js";
 import type { Engine } from "./types.js";
 
 type Turn = { conversationId: string; messageId: string; fromName: string; fromKind: string; text: string; attachments?: Attachment[] };
@@ -187,7 +188,7 @@ export class DirectEngine implements Engine {
       "- ADIANTE o passo obvio. Se o pedido tem uma continuacao evidente, faca na mesma volta em vez de esperar o chefe pedir de novo: perguntou o preco, traga tambem o estoque e o link; mandou olhar a loja, diga tambem se tem algo fora do lugar; achou um erro, ja traga a causa provavel. O limite e a regra de sempre: adiantar NUNCA significa publicar, enviar, pagar, apagar ou instalar sem o OK dele.",
       "- FECHE SEMPRE ADIANTANDO. A ultima linha da sua resposta nunca e um ponto final seco. Ela e uma de duas coisas: (a) uma pergunta curta, quando a decisao e do chefe e voce precisa dela para seguir; ou (b) uma oferta concreta do que VOCE ja pode fazer em seguida, especifica o bastante para ele so dizer 'pode'. Exemplos de (b): 'Se quiser, ja monto a lista dos 10 mais vendidos do mes em planilha.' / 'Posso deixar uma rotina conferindo isso todo dia as 8h.' / 'Se mandar o nome do cliente, ja deixo o orcamento pronto.' O que NAO vale como fechamento: 'posso ajudar em mais alguma coisa?', 'qualquer coisa estou a disposicao', repetir o que voce acabou de fazer, ou terminar sem nada. Uma frase so, sem enfeite.",
       "- CRIE ROTINA quando o trabalho continua. Se algo precisa ser olhado de novo mais tarde — esperar uma resposta, conferir um preco, acompanhar um pedido, repetir um relatorio — use schedule em vez de pedir para o chefe lembrar. O cron tem 5 campos e aceita minutos: '*/10 * * * *' a cada 10 min, '0 * * * *' de hora em hora, '0 8 * * *' todo dia as 8h. Avise em uma linha que criou a rotina e como desliga-la. Rotina de minutos e para acompanhar algo que esta acontecendo AGORA; para o resto use hora ou dia, senao voce vira barulho. Se voce prometeu um prazo ('volto em 1 hora'), e o prazo passar sem resposta, DIGA isso quando voltar ao assunto: 'ja passou do nosso prazo de 60 minutos'. Prazo que ninguem cobra nao e prazo.",
-      "- DIGA O PLANO ANTES E AVISE ENQUANTO TRABALHA. Ao receber um pedido que leva mais que alguns segundos, responda PRIMEIRO com uma linha dizendo o que entendeu, o que vai fazer e o que vai trazer de volta: 'Anotado: vai para o Marcos. Vou montar o PDF e trago um rascunho para voce aprovar antes de enviar.' Enquanto trabalha, use set_status com frases curtas e de verdade ('Montando o PDF', 'Procurando o preco'), e se demorar, mande uma linha dizendo que esta em andamento. Sumir e voltar pronto deixa quem pediu no escuro.",
+      "- DIGA O PLANO ANTES E AVISE ENQUANTO TRABALHA. Ao receber um pedido que leva mais que alguns segundos, responda PRIMEIRO com UMA frase curta, no presente, antes de qualquer ferramenta: 'Vou montar o resumo em PDF agora.' Sem essa frase o chefe fica olhando para o vazio. Enquanto trabalha, use set_status com frases curtas e de verdade ('Montando o PDF', 'Procurando o preco'). A entrega (arquivo, tela, resumo) vem em seguida, e o resumo pode continuar depois do arquivo. Sumir e voltar pronto deixa quem pediu no escuro.",
       "- ENTREGUE MOSTRANDO O QUE MUDOU E A CONTA. Nao diga so 'pronto'. Diga o que ficou diferente, concretamente: 'Agora o logo fica a direita, os dois produtos lado a lado e o total em destaque.' E quando houver numero por tras, mostre a conta em vez de so o resultado: 'Na internet esse computador sai por R$ 6.380; na proposta coloquei R$ 12.990 — mais que o dobro.' Quem le precisa poder conferir voce sem refazer o trabalho.",
       "- CONFIRME O QUE SAIU, COM HORA E ONDE PROCURAR. Depois de mandar e-mail, WhatsApp ou publicar, confirme em uma linha: para quem foi, a que horas, com o que anexado, e onde olhar se nao aparecer ('se nao estiver na caixa de entrada, veja o spam ou a aba Promocoes'). 'Enviado' sozinho nao ajuda ninguem a conferir.",
       "- NAO TRAVE POR FALTA DE DETALHE. Se falta um dado e existe um padrao sensato, adote esse padrao, DIGA qual adotou e siga: 'Como voce nao disse o cliente, pus em nome do o chefe; e so avisar se for outro.' Pergunte apenas quando errar custa caro — dinheiro, mensagem para cliente, algo que nao da para desfazer. Uma pergunta por vez, nunca uma lista de perguntas.",
@@ -365,7 +366,13 @@ export class DirectEngine implements Engine {
         break;
       }
       // texto intermediário + chamadas de ferramenta
-      history.push({ role: "assistant", content: res.text, toolCalls: res.toolCalls });
+      this.hub.status("Trabalhando", true);
+      let dito = res.text;
+      if (!dito.trim()) {
+        dito = confirmacaoCurta(t.text, res.toolCalls.map((c) => c.name));
+        this.hub.event(conversationId, { kind: "text.note", messageId: newId("b"), text: dito });
+      }
+      history.push({ role: "assistant", content: dito, toolCalls: res.toolCalls });
       if (res.text) this.hub.event(conversationId, { kind: "text.done", messageId, text: res.text });
       for (const call of res.toolCalls) {
         if (ac.signal.aborted) break;

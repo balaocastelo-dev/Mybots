@@ -172,6 +172,7 @@ export class Db {
     this.adicionarColuna("messages", "deleted_at", "INTEGER");
     this.adicionarColuna("messages", "edit_of", "TEXT");
     this.adicionarColuna("messages", "pinned", "INTEGER DEFAULT 0");
+    this.adicionarColuna("approvals", "resolved_by", "TEXT");
     this.db.exec(`CREATE TABLE IF NOT EXISTS conversation_meta (
       id TEXT PRIMARY KEY, forked_from_conversation TEXT, forked_from_message TEXT,
       title TEXT, created_at INTEGER NOT NULL
@@ -675,8 +676,16 @@ export class Db {
       .run(a.id, a.botId, a.conversationId, a.tool, JSON.stringify(a.input ?? null), a.risk, a.description, a.createdAt);
   }
 
-  resolveApproval(id: string, allow: boolean) {
-    this.db.prepare(`UPDATE approvals SET status=?, resolved_at=? WHERE id=? AND status='pending'`).run(allow ? "allowed" : "denied", Date.now(), id);
+  resolveApproval(id: string, allow: boolean, por = "humano") {
+    this.db.prepare(`UPDATE approvals SET status=?, resolved_at=?, resolved_by=? WHERE id=? AND status='pending'`).run(allow ? "allowed" : "denied", Date.now(), por, id);
+  }
+
+  /** Cartão que o humano deixou passar, ainda dentro da janela. Aprovação de bot não entra. */
+  temAprovacaoHumana(botId: string, tool: string, janelaMs = 15 * 60_000): boolean {
+    const r = this.db.prepare(
+      `SELECT id FROM approvals WHERE bot_id=? AND tool=? AND status='allowed' AND resolved_by='humano' AND resolved_at>=? LIMIT 1`,
+    ).get(botId, tool, Date.now() - janelaMs);
+    return !!r;
   }
 
   /** Cartão que não espera mais ninguém: o turno dele foi rebobinado. */
@@ -834,6 +843,34 @@ export class Db {
 
   auditTail(limit = 100) {
     return this.db.prepare(`SELECT * FROM audit ORDER BY id DESC LIMIT ?`).all(limit);
+  }
+
+  auditColab(filtro: { bot?: string; desde?: number; limit?: number }) {
+    const desde = filtro.desde ?? 0;
+    const limit = Math.min(500, Math.max(1, filtro.limit ?? 200));
+    const rows = this.db.prepare(
+      `SELECT * FROM audit WHERE action LIKE 'colab.%' AND ts >= ? ORDER BY id DESC LIMIT ?`,
+    ).all(desde, limit) as Array<{ id: number; ts: number; bot_id: string | null; action: string; detail: string | null }>;
+    const bot = filtro.bot?.trim();
+    const saida = rows.map((r) => {
+      let detail: unknown = null;
+      if (r.detail) { try { detail = JSON.parse(r.detail); } catch { detail = r.detail; } }
+      return { id: r.id, ts: r.ts, botId: r.bot_id, action: r.action, detail };
+    });
+    if (!bot) return saida;
+    return saida.filter((r) => r.botId === bot || JSON.stringify(r.detail ?? "").includes(bot));
+  }
+
+  updateMessageMeta(id: string, meta: Record<string, unknown>) {
+    this.db.prepare(`UPDATE messages SET meta=? WHERE id=?`).run(JSON.stringify(meta), id);
+  }
+
+  /** Recados de colaboração ainda não entregues a este bot. */
+  mensagensColabPendentes(botId: string): StoredMessage[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM messages WHERE conversation_id LIKE 'pair:%' AND deleted_at IS NULL AND meta LIKE '%"pendente":true%' ORDER BY created_at ASC LIMIT 50`,
+    ).all() as any[];
+    return rows.map(rowToMessage).filter((m) => m.meta?.para === botId && m.meta?.pendente === true);
   }
 }
 

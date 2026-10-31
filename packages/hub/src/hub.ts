@@ -22,7 +22,9 @@ import { voiceConfig } from "./voice.js";
 import { splitThoughts } from "./thoughts.js";
 import { MediaService } from "./media.js";
 import { SalaDeConversa } from "./sala.js";
-import type { Attachment, MediaKind, MediaResult, UsoDoPc } from "@mybots/shared";
+import type { Attachment, ColabEvento, MediaKind, MediaResult, UsoDoPc } from "@mybots/shared";
+import { ServicoColab } from "./colab/servico.js";
+import { aprovacaoDoPainel, classificarAcaoSensivel, mensagemLiberaEnvioExterno, registrarAuditoria } from "./colab/seguranca.js";
 import { UsosDoPc } from "./usoDoPc.js";
 import { Gravacoes, codificarMp4, ligarCdp, portaCdpPermitida, temFfmpeg, limitesDaGravacao } from "./gravacao.js";
 import { estadoDa as estadoDaMaquina } from "./maquinas.js";
@@ -81,6 +83,8 @@ export class Hub {
     async () => ({ ok: false, msg: "este Hub nao cria bots." });
   manageBot: (acao: "excluir" | "parar" | "ligar" | "reiniciar", botId: string, apagarArquivos: boolean) => Promise<{ ok: boolean; msg: string }> =
     async () => ({ ok: false, msg: "este Hub não gerencia bots." });
+  /** Mensagens entre bots, parar e permissão entre empresas. Tarefa e sala ficam em outros módulos. */
+  readonly colab: ServicoColab;
   private nodes = new Map<string, NodeConn>();
 
   /** A sala: os bots conversando entre si, um de cada vez e com fim marcado.
@@ -272,7 +276,75 @@ export class Hub {
     for (const a of this.db.pendingApprovals()) this.approvalOwner.set(a.id, a.botId);
     for (const q of this.db.pendingQuestions()) this.questionOwner.set(q.id, q.botId);
     this.passos.retomar(this.db.pendingQuestions());
+    this.colab = new ServicoColab({
+      db: this.db,
+      empresaId: (id) => this.empresaDe(id).id,
+      entregarNo: (id, msg) => this.entregarNo(id, msg),
+      online: (id) => !!this.nodes.get(id),
+      storeMessage: (conversationId, sender, text, meta) => this.storeMessage(conversationId, sender, text, meta),
+      emitirUi: (msg) => this.broadcastUi(msg),
+      pararBot: (id, motivo) => { this.pararBot(id, motivo); },
+      idsDosBots: () => this.idsDosBots(),
+      botSender: (id) => this.botSender(id),
+      acharBot: (de, para) => this.acharBotColab(de, para),
+    });
     this.cleanOldThoughts();
+  }
+
+  entregarNo(botId: string, msg: HubToNode) { return this.sendNode(botId, msg); }
+  emitirUi(msg: HubToUi) { this.broadcastUi(msg); }
+  emitirColab(evento: ColabEvento) { this.colab.emitir(evento); }
+  idsDosBots(): string[] {
+    return [...new Set([...this.db.listBots().map((b) => b.id), ...this.nodes.keys()])];
+  }
+
+  /** Acha o id mesmo quando o bot é de outra empresa — o bloqueio fica com checarColab. */
+  acharBotColab(de: string, bruto: string): { id: string } | { erro: string } {
+    const nome = bruto.trim();
+    if (!nome) return { erro: "Diga para quem é a mensagem." };
+    if (nome === "humano") return { id: "humano" };
+    const n = nome.toLowerCase();
+    const todos = this.db.listBots();
+    const achado = todos.find((b) => b.id === nome || b.id === n || b.name.toLowerCase() === n)
+      ?? todos.find((b) => b.name.toLowerCase().startsWith(n));
+    if (!achado) {
+      const online = this.colegasDe(de).filter((b) => b.online).map((b) => b.id).join(", ");
+      return { erro: `Bot "${bruto}" não está online. Da sua empresa, online: ${online || "nenhum"}.` };
+    }
+    return { id: achado.id };
+  }
+
+  /**
+   * Envio externo, pagamento e exclusão. O cartão em /api/approvals tem de ter sido
+   * resolvido pelo humano. Envio externo ainda exige que o turno tenha sido acordado
+   * por uma mensagem de autor "humano".
+   */
+  liberarAcaoSensivel(botId: string, tool: string, input: unknown, description = ""): { ok: true } | { ok: false; texto: string } {
+    const classe = classificarAcaoSensivel(tool, input, description);
+    if (!classe) return { ok: true };
+    if (classe === "envio" && !mensagemLiberaEnvioExterno(this.colab.autorDe(botId))) {
+      registrarAuditoria({ acao: "colab.bloqueio", de: botId, para: "externo", detalhe: { motivo: "aprovacao", ferramenta: tool, autor: this.colab.autorDe(botId) || null } });
+      this.colab.emitir({ tipo: "colab.bloqueio", motivo: "aprovacao", de: botId, para: "externo" });
+      return { ok: false, texto: "Não enviei. Só uma mensagem com autor 'humano' libera envio externo. Aprovação de outro bot não conta." };
+    }
+    if (!this.db.temAprovacaoHumana(botId, tool)) {
+      registrarAuditoria({ acao: "colab.bloqueio", de: botId, para: tool, detalhe: { motivo: "aprovacao", classe } });
+      this.colab.emitir({ tipo: "colab.bloqueio", motivo: "aprovacao", de: botId, para: tool });
+      return { ok: false, texto: "Essa ação (envio, pagamento ou exclusão) precisa do OK do humano em /api/approvals. Aprovação de bot não conta." };
+    }
+    return { ok: true };
+  }
+
+  /** POST /api/approvals. `de` omitido ou "humano" é o painel. Bot não resolve o cartão. */
+  responderAprovacao(id: string, allow: boolean, remember: boolean | undefined, de: string | undefined): { ok: true } | { ok: false; motivo: "aprovacao"; error: string } {
+    if (!aprovacaoDoPainel(de)) {
+      const quem = String(de);
+      registrarAuditoria({ acao: "colab.bloqueio", de: quem, para: id, detalhe: { motivo: "aprovacao", allow: !!allow } });
+      this.colab.emitir({ tipo: "colab.bloqueio", motivo: "aprovacao", de: quem, para: id });
+      return { ok: false, motivo: "aprovacao", error: "Aprovação vinda de bot não conta como aprovação humana." };
+    }
+    this.resolveApproval(id, allow, remember, "humano");
+    return { ok: true };
   }
 
   /** Limpa pensamentos de mensagens gravadas antes do filtro existir (roda uma vez por mensagem). */
@@ -1075,8 +1147,10 @@ export class Hub {
     const v = this.vinculoDoCelular(emp);
     if (!v) return { ok: false, texto: "O celular desta empresa ainda não foi vinculado. O chefe liga em Empresas → Celular da empresa." };
     const acao = String(msg.acao || "estado");
-    if (acaoSensivel(acao, msg.texto, msg.pacote) && !msg.aprovado) {
-      return { ok: false, texto: "Essa ação no celular (pagamento, apagar ou enviar) precisa do OK do chefe. Peça com request_approval e tente de novo." };
+    if (acaoSensivel(acao, msg.texto, msg.pacote)) {
+      if (!msg.aprovado) return { ok: false, texto: "Essa ação no celular (pagamento, apagar ou enviar) precisa do OK do chefe. Peça com request_approval e tente de novo." };
+      const gate = this.liberarAcaoSensivel(botId, "celular", { acao, texto: msg.texto, pacote: msg.pacote }, `${acao} ${msg.texto ?? ""} ${msg.pacote ?? ""}`);
+      if (!gate.ok) return { ok: false, texto: gate.texto };
     }
     if (acao !== "estado" && acao !== "print" && acao !== "arvore") {
       const trava = this.travaCelular.pegar(emp, botId, this.botSender(botId).name, false);
@@ -1161,6 +1235,7 @@ export class Hub {
         ws.send(JSON.stringify({ type: "hello.ok", botId, hubVersion: config.version, knowledge: this.knowledgeIndex(botId), hubPid: process.pid } satisfies HubToNode));
         ws.send(JSON.stringify({ type: "control", override: this.control().global } satisfies HubToNode));
         this.botUpdate(botId);
+        this.colab.reidratar(botId);
         console.log(`[hub] bot online: ${msg.bot.name} (${botId}) engine=${msg.engine} ${msg.provider}/${msg.model}`);
         return;
       }
@@ -1216,6 +1291,10 @@ export class Hub {
         // Um bot não se exclui nem se para a si mesmo: ficaria metade feito, sem ninguém para terminar.
         if (msg.bot === botId) {
           return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: "Você não pode fazer isso com você mesmo. Peça ao chefe." });
+        }
+        if (msg.acao === "excluir") {
+          const gate = this.liberarAcaoSensivel(botId, "gerenciar_bot", { acao: "excluir" }, "excluir");
+          if (!gate.ok) return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: gate.texto });
         }
         void this.manageBot(msg.acao, msg.bot, msg.apagarArquivos === true)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.msg }))
@@ -1280,6 +1359,10 @@ export class Hub {
         const liberado = this.podeFalarComCliente(emp);
         if (!liberado.ok) return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: `Não enviei: esta empresa ainda não aceitou os termos de uso de dados (falta: ${liberado.falta.join(", ")}). O chefe precisa abrir Leis e consentimentos no painel.` });
         const acao = msg.acao ?? "enviar";
+        if (acao !== "estado") {
+          const gate = this.liberarAcaoSensivel(botId, "whatsapp", { acao, texto: msg.texto, para: msg.para }, acao);
+          if (!gate.ok) return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: gate.texto });
+        }
         if (acao === "estado") {
           const e = this.whats.estado(emp);
           const texto = e.estado === "conectado"
@@ -1456,24 +1539,22 @@ export class Hub {
   }
 
   private onAskBot(fromBotId: string, msg: Extract<NodeToHub, { type: "ask_bot" }>) {
-    const visiveis = this.colegasDe(fromBotId);
-    const alvoDireto = visiveis.find((b) => b.id === msg.to)?.id ?? null;
-    const target = alvoDireto ?? this.resolveBotByName(msg.to, fromBotId);
-    // Empresa e empresa: se o bot existe mas e de outra, ele nao esta "offline", esta invisivel.
-    if (!target && this.db.listBots().some((b) => b.id === msg.to || b.name.toLowerCase() === String(msg.to).trim().toLowerCase())) {
-      return this.sendNode(fromBotId, { type: "result", callId: msg.callId, ok: false, data: `"${msg.to}" é de outra empresa — você só fala com os bots da sua. Se precisar de algo de fora, peça ao chefe.` });
+    const r = this.colab.enviar({
+      de: fromBotId,
+      para: msg.to,
+      texto: msg.text,
+      prioridade: msg.wait || msg.prioridade === true,
+      profundidade: Number.isFinite(msg.profundidade) ? Number(msg.profundidade) : 0,
+      contexto: msg.contexto,
+    });
+    if (!r.ok) return this.sendNode(fromBotId, { type: "result", callId: msg.callId, ok: false, data: r.erro });
+    if (!msg.wait) return this.sendNode(fromBotId, { type: "result", callId: msg.callId, ok: true, data: r.aviso });
+    const alvo = this.acharBotColab(fromBotId, msg.to);
+    if ("erro" in alvo || !this.nodes.get(alvo.id)) {
+      return this.sendNode(fromBotId, { type: "result", callId: msg.callId, ok: false, data: r.aviso });
     }
-    if (!target || !this.nodes.get(target)) {
-      return this.sendNode(fromBotId, { type: "result", callId: msg.callId, ok: false, data: `Bot "${msg.to}" não está online. Da sua empresa, online: ${visiveis.filter((b) => b.online).map((b) => b.id).join(", ") || "nenhum"}.` });
-    }
+    const target = alvo.id;
     const conversationId = pairConversation(fromBotId, target);
-    const from = this.botSender(fromBotId);
-    const stored = this.storeMessage(conversationId, from, msg.text, { ask: true, callId: msg.callId });
-    this.db.audit(fromBotId, "ask_bot", { to: target, wait: msg.wait, text: msg.text.slice(0, 200) });
-    this.sendNode(target, { type: "message", conversationId, messageId: stored.id, from, text: msg.text });
-    if (!msg.wait) {
-      return this.sendNode(fromBotId, { type: "result", callId: msg.callId, ok: true, data: `Mensagem entregue a ${this.botSender(target).name}.` });
-    }
     const key = `${conversationId}:${target}`;
     const old = this.pendingAsks.get(key);
     if (old) { clearTimeout(old.timer); this.sendNode(old.fromBotId, { type: "result", callId: old.callId, ok: false, data: "Substituído por uma nova pergunta." }); }
@@ -1572,6 +1653,7 @@ export class Hub {
         const offline: string[] = [];
         for (const member of g.members) {
           const ok = this.sendNode(member, payload(stored.id));
+          if (ok) this.colab.anotarAutor(member, from.kind === "user" ? "humano" : from.kind === "bot" ? from.id : from.kind);
           if (ok && from.kind === "user") this.definirAtividade(member, "Digitando", true, "digitando");
           else if (!ok) offline.push(this.botSender(member).name);
         }
@@ -1580,6 +1662,7 @@ export class Hub {
       }
       const botId = botOfConversation(conversationId) ?? conversationId.split(":").pop()!;
       const ok = this.sendNode(botId, payload(stored.id));
+      if (ok) this.colab.anotarAutor(botId, from.kind === "user" ? "humano" : from.kind === "bot" ? from.id : from.kind);
       if (ok && from.kind === "user") this.definirAtividade(botId, "Digitando", true, "digitando");
       else if (!ok) this.storeMessage(conversationId, SYSTEM, `${this.botSender(botId).name} está offline. A mensagem fica salva, mas o bot não vai responder até o PC dele conectar.`, { error: true });
     };
@@ -1785,11 +1868,16 @@ export class Hub {
     return this.sendUserMessage(conversationId, text, undefined, sender);
   }
 
-  resolveApproval(requestId: string, allow: boolean, remember?: boolean) {
+  resolveApproval(requestId: string, allow: boolean, remember?: boolean, por = "humano") {
+    if (allow && por !== "humano") {
+      registrarAuditoria({ acao: "colab.bloqueio", de: por, para: requestId, detalhe: { motivo: "aprovacao" } });
+      this.colab.emitir({ tipo: "colab.bloqueio", motivo: "aprovacao", de: por, para: requestId });
+      return;
+    }
     const botId = this.approvalOwner.get(requestId);
-    this.db.resolveApproval(requestId, allow);
+    this.db.resolveApproval(requestId, allow, "humano");
     this.approvalOwner.delete(requestId);
-    this.db.audit(botId ?? null, allow ? "approval.allowed" : "approval.denied", { requestId, remember: !!remember });
+    this.db.audit(botId ?? null, allow ? "approval.allowed" : "approval.denied", { requestId, remember: !!remember, por: "humano" });
     this.broadcastUi({ type: "approval.resolved", requestId, allow });
     if (botId) this.sendNode(botId, { type: "approval.response", requestId, allow, remember });
   }
@@ -1813,16 +1901,21 @@ export class Hub {
   }
 
   /** Usado pelo servidor MCP: o bot `fromBotId` pergunta a outro e espera. */
-  askBotFromMcp(fromBotId: string, to: string, text: string, wait: boolean): Promise<{ ok: boolean; data: unknown }> {
+  askBotFromMcp(fromBotId: string, to: string, text: string, wait: boolean, opts?: { prioridade?: boolean; profundidade?: number; contexto?: string }): Promise<{ ok: boolean; data: unknown }> {
     return new Promise((resolve) => {
       const callId = newId("mcp");
-      const target = this.nodes.get(to) ? to : this.resolveBotByName(to);
-      if (!target || !this.nodes.get(target)) return resolve({ ok: false, data: `Bot "${to}" não está online.` });
+      const r = this.colab.enviar({
+        de: fromBotId, para: to, texto: text,
+        prioridade: wait || opts?.prioridade === true,
+        profundidade: Number.isFinite(opts?.profundidade) ? Number(opts?.profundidade) : 0,
+        contexto: opts?.contexto,
+      });
+      if (!r.ok) return resolve({ ok: false, data: r.erro });
+      const alvo = this.acharBotColab(fromBotId, to);
+      const target = "erro" in alvo ? "" : alvo.id;
+      if (!wait) return resolve({ ok: true, data: r.aviso });
+      if (!target || !this.nodes.get(target)) return resolve({ ok: false, data: r.aviso });
       const conversationId = pairConversation(fromBotId, target);
-      const from = this.botSender(fromBotId);
-      const stored = this.storeMessage(conversationId, from, text, { ask: true, callId });
-      this.sendNode(target, { type: "message", conversationId, messageId: stored.id, from, text });
-      if (!wait) return resolve({ ok: true, data: `Mensagem entregue a ${this.botSender(target).name}.` });
       const key = `${conversationId}:${target}`;
       const old = this.pendingAsks.get(key);
       if (old) { clearTimeout(old.timer); this.sendNode(old.fromBotId, { type: "result", callId: old.callId, ok: false, data: "Substituído por uma nova pergunta." }); }
@@ -1849,8 +1942,14 @@ export class Hub {
   }
 
   requestApprovalFromMcp(botId: string, tool: string, input: unknown, risk: PendingApproval["risk"], description: string, kind: ApprovalKind = "action"): Promise<boolean> {
+    const gate = classificarAcaoSensivel(tool, input, description);
+    if (gate === "envio" && !mensagemLiberaEnvioExterno(this.colab.autorDe(botId))) {
+      registrarAuditoria({ acao: "colab.bloqueio", de: botId, para: "externo", detalhe: { motivo: "aprovacao", ferramenta: tool, via: "mcp" } });
+      this.colab.emitir({ tipo: "colab.bloqueio", motivo: "aprovacao", de: botId, para: "externo" });
+      return Promise.resolve(false);
+    }
     const mode = this.effectiveModeFor(botId);
-    if (!needsHumanApproval(mode, kind, risk)) {
+    if (!gate && !needsHumanApproval(mode, kind, risk)) {
       this.db.audit(botId, "approval.auto", { mode, tool, input, risk, description, via: "mcp" });
       return Promise.resolve(true);
     }

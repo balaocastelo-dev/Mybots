@@ -37,10 +37,16 @@ export function buildMcpServer(hub: Hub, botId: string) {
   }, async () => text(JSON.stringify(hub.colegasDe(botId).map((b) => ({ id: b.id, name: b.name, role: b.role, online: b.online, status: b.status })), null, 2)));
 
   server.registerTool("send_to_bot", {
-    description: "Envia uma mensagem a outro Bot da equipe sem esperar resposta.",
-    inputSchema: { bot: z.string().describe("id ou nome do Bot"), text: z.string() },
-  }, async ({ bot, text: t }) => {
-    const r = await hub.askBotFromMcp(botId, bot, t, false);
+    description: "Envia uma mensagem a outro Bot sem esperar resposta. prioridade true acorda o destinatário agora; false deixa o texto para o próximo turno, marcado como vindo deste bot.",
+    inputSchema: {
+      bot: z.string().describe("id ou nome do Bot"),
+      text: z.string(),
+      prioridade: z.boolean().optional().describe("true acorda o destinatário; omitido ou false espera o próximo turno"),
+      profundidade: z.number().optional(),
+      contexto: z.string().optional(),
+    },
+  }, async ({ bot, text: t, prioridade, profundidade, contexto }) => {
+    const r = await hub.askBotFromMcp(botId, bot, t, false, { prioridade, profundidade, contexto });
     return text(String(r.data));
   });
 

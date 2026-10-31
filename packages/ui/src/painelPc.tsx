@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { HubToUi, UsoDoPc } from "@mybots/shared";
-import { CelularDaEmpresaPainel } from "./celularEmpresa";
+import type { BotSummary, HubToUi, UsoDoPc } from "@mybots/shared";
 import { Icone } from "./icones";
+import { TelaDoMac } from "./mac";
+import { TelasDoBot } from "./telasBot";
+import { Trabalhos } from "./trabalhos";
 
 /**
  * O PC da empresa, do lado do chat.
@@ -234,24 +236,27 @@ function VisaoDaEmpresa({ nome, empresaId, rotinas, arquivos }: { nome: string; 
   return (
     <div className="lado-visao">
       <p><b>{nome || "Sem empresa"}</b></p>
-      <p className="muted">{empresaId ? "Os bots desta empresa dividem o mesmo PC e o mesmo celular." : "Bot do sistema: não tem PC nem celular próprios."}</p>
+      <p className="muted">Este bot tem o próprio PC e o próprio Android.</p>
       <p className="muted">{texto}</p>
       <p className="muted">{rotinas} rotina(s) · {arquivos} arquivo(s) nesta conversa</p>
     </div>
   );
 }
 
-type AbaLado = "pc" | "celular" | "trabalho";
+type AbaLado = "pc" | "celular" | "mac" | "trabalhos" | "trabalho";
 
-const ABAS: { id: AbaLado; rotulo: string; icone: "pc" | "celular" | "trabalho" }[] = [
-  { id: "pc", rotulo: "Tela do PC", icone: "pc" },
+const ABAS: { id: AbaLado; rotulo: string; icone: "pc" | "celular" | "mac" | "pasta" | "trabalho" }[] = [
   { id: "celular", rotulo: "Celular", icone: "celular" },
+  { id: "pc", rotulo: "Tela do PC", icone: "pc" },
+  { id: "mac", rotulo: "Tela do Mac", icone: "mac" },
+  { id: "trabalhos", rotulo: "Trabalhos", icone: "pasta" },
   { id: "trabalho", rotulo: "Trabalho", icone: "trabalho" },
 ];
 
 export function PainelDoPc({
-  empresaId, nome, onFechar, onEvent, conversationId, rotinas = [], arquivos = [],
+  botId, empresaId, nome, onFechar, onEvent, conversationId, rotinas = [], arquivos = [], bots = [],
 }: {
+  botId: string;
   empresaId: string | null;
   nome: string;
   onFechar: () => void;
@@ -259,10 +264,11 @@ export function PainelDoPc({
   conversationId?: string;
   rotinas?: { id: string; nome: string; cron: string }[];
   arquivos?: { name: string; url: string }[];
+  bots?: BotSummary[];
 }) {
   const [aba, setAba] = useState<AbaLado>("pc");
   const [largura, setLargura] = useState(() => {
-    try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 300 && n <= 760 ? n : 400; } catch { return 400; }
+    try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 300 && n <= 860 ? n : 640; } catch { return 640; }
   });
   const larguraRef = useRef(largura);
   larguraRef.current = largura;
@@ -272,7 +278,7 @@ export function PainelDoPc({
     const inicioX = e.clientX;
     const inicioW = larguraRef.current;
     const mover = (ev: PointerEvent) => {
-      const teto = Math.min(760, Math.max(320, window.innerWidth * 0.62));
+      const teto = Math.min(860, Math.max(320, window.innerWidth * 0.58));
       const w = Math.min(teto, Math.max(300, inicioW + (inicioX - ev.clientX)));
       setLargura(w);
     };
@@ -291,11 +297,11 @@ export function PainelDoPc({
       <header className="pc-lado-topo">
         <div>
           <b>{nome || "Empresa"}</b>
-          <small>{empresaId ? "PC e celular desta casa" : "sem empresa"}</small>
+          <small>PC e Android deste bot</small>
         </div>
         <button className="icon-btn" type="button" title="Recolher o painel" onClick={onFechar}>›</button>
       </header>
-      <div className="pc-segmento" role="tablist" aria-label="O que ver neste painel">
+      <div className="pc-segmento varias" role="tablist" aria-label="O que ver neste painel">
         {ABAS.map((item) => (
           <button key={item.id} type="button" role="tab" aria-selected={aba === item.id} className={aba === item.id ? "on" : ""} onClick={() => setAba(item.id)}>
             <Icone nome={item.icone} />
@@ -303,9 +309,11 @@ export function PainelDoPc({
           </button>
         ))}
       </div>
-      {!empresaId && (aba === "pc" || aba === "celular") && <p className="pc-sem-empresa">Este bot não está numa empresa. O PC e o celular são um de cada, compartilhados pelos bots dela.</p>}
-      {empresaId && aba === "pc" && <TelaDaEmpresa empresaId={empresaId} nome={nome} onEvent={onEvent} conversationId={conversationId} compacto />}
-      {empresaId && aba === "celular" && <CelularDaEmpresaPainel empresaId={empresaId} nome={nome} conversationId={conversationId} onEvent={onEvent} aoVivo />}
+      {(aba === "pc" || aba === "celular") && (
+        <TelasDoBot botId={botId} nome={nome} mostrarPareamento={aba === "celular"} />
+      )}
+      {aba === "mac" && <TelaDoMac embutido />}
+      {aba === "trabalhos" && <Trabalhos bots={bots} botInicial={botId} embutido />}
       {aba === "trabalho" && (
         <div className="lado-trabalho">
           <VisaoDaEmpresa nome={nome} empresaId={empresaId} rotinas={rotinas.length} arquivos={arquivos.length} />

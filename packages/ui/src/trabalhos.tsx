@@ -48,12 +48,17 @@ function quandoLegivel(ts: number) {
   return mesmoDia ? `hoje ${hora}` : `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ${hora}`;
 }
 
-export function Trabalhos({ bots, onClose }: { bots: BotSummary[]; onClose: () => void }) {
+export function Trabalhos({ bots, onClose, botInicial = "", embutido = false }: {
+  bots: BotSummary[];
+  onClose?: () => void;
+  botInicial?: string;
+  embutido?: boolean;
+}) {
   const [itens, setItens] = useState<Trabalho[] | null>(null);
   const [contagem, setContagem] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
   const [tipo, setTipo] = useState("");
-  const [bot, setBot] = useState("");
+  const [bot, setBot] = useState(botInicial);
   const [busca, setBusca] = useState("");
   const [recado, setRecado] = useState("");
 
@@ -87,7 +92,7 @@ export function Trabalhos({ bots, onClose }: { bots: BotSummary[]; onClose: () =
   };
 
   return (
-    <div className="trabalhos">
+    <div className={"trabalhos" + (embutido ? " embutido" : "")}>
       <header className="trab-head">
         <div>
           <h2>📂 Trabalhos feitos</h2>
@@ -97,7 +102,7 @@ export function Trabalhos({ bots, onClose }: { bots: BotSummary[]; onClose: () =
           <button className="btn primary" onClick={() => void levarParaAPasta()} title="Copia com nome legível para a Área de Trabalho e abre a pasta">
             📁 Abrir a pasta no Windows
           </button>
-          <button className="link" onClick={onClose}>fechar</button>
+          {onClose && <button className="link" onClick={onClose}>fechar</button>}
         </div>
       </header>
 

@@ -511,8 +511,10 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       </div>
       {bot && pcAberto && (
         <PainelDoPc
+          botId={bot.id}
+          bots={bots}
           empresaId={bot.empresaId ?? null}
-          nome={empresaNome}
+          nome={empresaNome || bot.name}
           conversationId={conversationId}
           onFechar={alternarPc}
           onEvent={onEvent}

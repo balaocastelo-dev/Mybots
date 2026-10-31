@@ -1,3 +1,5 @@
+import { redigir } from "./redacao.js";
+
 // A chave da casa (Claude), conferida uma vez por boot.
 // Todo bot nasce no Claude: se a chave não presta, isso tem que aparecer aqui, no log e
 // no /api/health — e não depois, num bot mudo. Nunca imprime a chave, só o veredito.
@@ -34,7 +36,7 @@ export async function checarChaveDaCasa(): Promise<EstadoChave> {
     else { estado = "sem-rede"; detalhe = `HTTP ${r.status} ao falar com a Anthropic`; }
   } catch (e) {
     estado = "sem-rede";
-    detalhe = (e as Error).message;
+    detalhe = redigir((e as Error).message);
   }
   return estado;
 }

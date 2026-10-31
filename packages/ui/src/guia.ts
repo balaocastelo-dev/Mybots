@@ -39,7 +39,29 @@ export function definirIdioma(l: Idioma) {
   idioma = l;
   try { localStorage.setItem("mybots.idioma", l); document.documentElement.lang = l; } catch { /* ignora */ }
 }
-const vozAtual = () => VOZES[idioma] ?? VOZES.pt;
+export const VOZES_PADRAO: { id: string; nome: string }[] = [
+  { id: "pt-BR-ThalitaNeural", nome: "Thalita · português" },
+  { id: "en-US-AriaNeural", nome: "Aria · English" },
+  { id: "es-ES-ElviraNeural", nome: "Elvira · español" },
+  { id: "fr-FR-DeniseNeural", nome: "Denise · français" },
+];
+
+/** Voz da casa. Sem escolha guardada, segue o idioma. */
+export function vozPadrao(): string {
+  try {
+    const g = localStorage.getItem("mybots.voz");
+    if (g && VOZES_PADRAO.some((v) => v.id === g)) return g;
+  } catch { /* navegador privado ou teste sem localStorage */ }
+  return VOZES[idioma] ?? VOZES.pt;
+}
+
+export function definirVozPadrao(id: string) {
+  if (!VOZES_PADRAO.some((v) => v.id === id)) return;
+  try { localStorage.setItem("mybots.voz", id); } catch { /* ignora */ }
+  window.dispatchEvent(new CustomEvent("mybots-voz", { detail: id }));
+}
+
+const vozAtual = () => vozPadrao();
 const tagDeFala = () => (idioma === "pt" ? "pt-BR" : idioma === "en" ? "en-US" : idioma === "es" ? "es-ES" : "fr-FR");
 
 /** Dito na explosão, quando ainda não há idioma escolhido: por isso vai nos quatro. */

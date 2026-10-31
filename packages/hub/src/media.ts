@@ -11,6 +11,7 @@ import {
   DEFAULT_MEDIA_BUDGET, MEDIA_PROVIDERS, isVideoMime, isAudioMime, withinLimit,
 } from "@mybots/shared";
 import type { Db } from "./db.js";
+import { redigir } from "./redacao.js";
 import { transcribe, voiceSettings } from "./voice.js";
 
 const env = (k: string, d = "") => process.env[k] ?? d;
@@ -191,7 +192,7 @@ function sizeFor(aspect?: string, base = 1024): { w: number; h: number } {
 async function fetchJson(url: string, init?: RequestInit, timeoutMs = 30_000): Promise<any> {
   const r = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const t = await r.text();
-  if (!r.ok) throw new Error(`HTTP ${r.status} ${url.replace(/key=[^&]+/, "key=***")}: ${t.slice(0, 300)}`);
+  if (!r.ok) throw new Error(redigir(`HTTP ${r.status} ${url}: ${t.slice(0, 300)}`));
   try { return JSON.parse(t); } catch { return t; }
 }
 
@@ -388,7 +389,7 @@ async function geminiVideo(prompt: string, ref: { mime: string; data: Buffer } |
   while (Date.now() < end) {
     await new Promise((r) => setTimeout(r, 8000));
     const st = await fetchJson(`${base}/${op.name}?key=${key}`);
-    if (st.error) throw new Error(`Veo: ${st.error.message ?? JSON.stringify(st.error).slice(0, 200)}`);
+    if (st.error) throw new Error(redigir(`Veo: ${st.error.message ?? JSON.stringify(st.error).slice(0, 200)}`));
     if (st.done) {
       const uri = st.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ?? st.response?.generatedVideos?.[0]?.video?.uri;
       if (!uri) throw new Error("Veo terminou sem vídeo");

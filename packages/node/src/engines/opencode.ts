@@ -8,6 +8,8 @@ import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type ControlMode, type HubToNode, type Risk, controlPromptLine, effectiveControl, needsHumanApproval, resourcePromptLine } from "@mybots/shared";
 import { OPENAI_COMPAT_PRESETS, type NodeConfig, readPersona } from "../config.js";
+import { Aquecedor, preaquecer } from "../aquecer.js";
+import { ehGerenteBot, numCtxDe, promptGerenteNoOllama } from "../promptEnxuto.js";
 import type { HubClient } from "../hubClient.js";
 import { limitsFromEnv } from "../resources.js";
 import { tocaCoracaoDoSistema } from "../tools.js";
@@ -18,7 +20,9 @@ export class OpenCodeEngine implements Engine {
   private child: ChildProcess | null = null;
   private base: string;
   private authHeader: Record<string, string> = {};
-  private sessions = new Map<string, string>();     // conversationId -> sessionID
+  private sessions = new Map<string, string>(); // conversationId -> sessionID
+  /** Recados de outros bots que esperam o próximo turno. */
+  private recados: string[] = [];
   /** conversationId -> histórico que o Hub refez (vai como contexto na primeira mensagem da sessão nova) */
   private contextoRefeito = new Map<string, Array<{ role: "user" | "assistant"; content: string }>>();
   private sessionConv = new Map<string, string>();  // sessionID -> conversationId
@@ -36,6 +40,7 @@ export class OpenCodeEngine implements Engine {
   private agent: string;
   /** nível global do Hub (sobrescreve cfg.approval.mode); null = usa o do nó */
   private controlOverride: ControlMode | null = null;
+  private calor = new Aquecedor((ativo) => preaquecer(this.cfg.provider, ativo));
 
   /** Nível de controle em vigor agora. */
   mode(): ControlMode { return effectiveControl(this.controlOverride, this.cfg.approval.mode); }
@@ -50,9 +55,23 @@ export class OpenCodeEngine implements Engine {
       this.controlOverride = m.override;
       console.log(`[node] nível de controle: ${this.mode()}${m.override ? " (global do Hub)" : ""}`);
     });
-    hub.on("message", (m: Extract<HubToNode, { type: "message" }>) => void this.onMessage(m).catch((e) => hub.event(m.conversationId, { kind: "error", message: (e as Error).message })));
+    hub.on("warm", (m: Extract<HubToNode, { type: "warm" }>) => {
+      this.calor.definir(m.conversationId, m.ativo);
+      if (m.ativo) void this.sessionFor(m.conversationId).catch(() => {});
+    });
+    hub.on("message", (m: Extract<HubToNode, { type: "message" }>) => {
+      this.calor.tocar(m.conversationId);
+      void this.onMessage(m).catch((e) => hub.event(m.conversationId, { kind: "error", message: (e as Error).message }));
+    });
     hub.on("approval.response", (m: Extract<HubToNode, { type: "approval.response" }>) => void this.onApproval(m));
     hub.on("question.answer", (m: Extract<HubToNode, { type: "question.answer" }>) => void this.onAnswer(m));
+    hub.on("colab.parar", (m: Extract<HubToNode, { type: "colab.parar" }>) => {
+      const alvo = m.alvo;
+      if (alvo !== "todos" && !alvo.includes(this.cfg.bot.id)) return;
+      this.recados = [];
+      const ids = [...this.sessions.values()];
+      for (const s of ids) void this.api("POST", `/session/${s}/abort`).catch(() => {});
+    });
     hub.on("abort", (m: Extract<HubToNode, { type: "abort" }>) => {
       const ids = m.conversationId === "*" ? [...this.sessions.values()] : [this.sessions.get(m.conversationId)].filter(Boolean) as string[];
       for (const s of ids) void this.api("POST", `/session/${s}/abort`).catch(() => {});
@@ -104,22 +123,23 @@ export class OpenCodeEngine implements Engine {
         const preset = OPENAI_COMPAT_PRESETS[p.kind];
         const baseURL = p.baseURL ?? preset?.baseURL;
         model = `${p.kind}/${p.model}`;
+        const contexto = p.kind === "ollama" || p.kind === "lmstudio" ? numCtxDe([readPersona(this.cfg)], 2048) : 128_000;
         provider[p.kind] = {
           npm: "@ai-sdk/openai-compatible",
           name: preset?.label ?? p.kind,
           options: { baseURL, ...(p.apiKey ? { apiKey: "{env:MYBOTS_API_KEY}" } : {}) },
-          models: { ...(provider[p.kind]?.models ?? {}), [p.model]: { name: p.model, tool_call: true, limit: { context: 128_000, output: 16_000 } } },
+          models: { ...(provider[p.kind]?.models ?? {}), [p.model]: { name: p.model, tool_call: true, limit: { context: contexto, output: Math.min(16_000, Math.floor(contexto / 4)) }, ...(p.kind === "ollama" || p.kind === "lmstudio" ? { options: { num_ctx: contexto } } : {}) } },
         };
       }
     }
     const hubHttp = (this.cfg.opencode.hubHttp ?? this.cfg.hub.replace(/^ws/, "http")).replace(/\/$/, "");
-    const persona = [
+    const personaCheia = [
       readPersona(this.cfg).trim(),
       "",
       "## Contexto do MyBots",
       `- Você é o Bot "${this.cfg.bot.name}" (id ${this.cfg.bot.id}) da equipe MyBots. Seu chefe é ${process.env.MYBOTS_USER_NAME ?? "o chefe"}.`,
       `- Você roda no PC "${os.hostname()}" (${os.platform()}). Trabalhe dentro de ${this.cfg.workspace}.`,
-      "- Ferramentas da equipe (prefixo mybots_): ask_user para perguntar ao chefe com opções, ask_bot/send_to_bot para falar com colegas, request_approval antes de ações críticas fora do terminal, set_status enquanto trabalha, notify_user quando terminar algo, remember/recall para a memória compartilhada, schedule para rotinas.",
+      "- Ferramentas da equipe (prefixo mybots_): ask_user para perguntar ao chefe com opções, ask_bot/send_to_bot para falar com colegas, delegate_task para entregar uma tarefa (o resultado volta e te acorda; check_task e cancel_task acompanham), request_approval antes de ações críticas fora do terminal, set_status enquanto trabalha, notify_user quando terminar algo, remember/recall para a memória compartilhada, schedule para rotinas. Você não aprova delegate_task. Senha e cartão: mybots_fill_credential (site, campo) — você não recebe o valor, só ok ou erro. O clique de pagar ou enviar continua pedindo o OK do chefe.",
       "- A BASE DE CONHECIMENTO da casa é COMUM a todos os bots e você lê com mybots_search_knowledge (por palavras-chave, ou com id + parte para ler um documento inteiro) e mybots_list_knowledge (o índice todo). Antes de dizer que não sabe, que não encontrou ou que algo não existe na casa, você é OBRIGADO a buscar. O que você aprender e servir para a equipe, grave com mybots_learn_knowledge — todos passam a ver na hora.",
       ...(this.knowledge ? ["", this.knowledge] : []),
       controlPromptLine(this.cfg.approval.mode),
@@ -135,6 +155,15 @@ export class OpenCodeEngine implements Engine {
       "- IDIOMA: esta casa é nativa em português, inglês e espanhol. Responda NO IDIOMA DE QUEM ESCREVEU quando for um desses três; se não der para saber, use o idioma da empresa. Status, nomes de arquivo e mensagens para colegas seguem o idioma da empresa. Nunca misture dois idiomas na mesma resposta.",
       "- Responda curto e direto, no idioma de quem escreveu.",
     ].join("\n");
+    const enxuto = (p.kind === "ollama" || p.kind === "lmstudio") && ehGerenteBot(this.cfg.bot);
+    const persona = enxuto
+      ? promptGerenteNoOllama({ persona: readPersona(this.cfg), nome: this.cfg.bot.name, id: this.cfg.bot.id, chefe: process.env.MYBOTS_USER_NAME ?? "o chefe", workspace: this.cfg.workspace })
+      : personaCheia;
+    if ((p.kind === "ollama" || p.kind === "lmstudio") && provider[p.kind]?.models?.[p.model]) {
+      const ctx = numCtxDe([persona], 2048);
+      provider[p.kind].models[p.model].limit = { context: ctx, output: Math.min(4096, Math.floor(ctx / 4)) };
+      provider[p.kind].models[p.model].options = { ...(provider[p.kind].models[p.model].options ?? {}), num_ctx: ctx };
+    }
     const cfg = {
       $schema: "https://opencode.ai/config.json",
       ...existing,
@@ -272,8 +301,16 @@ export class OpenCodeEngine implements Engine {
   }
 
   private async onMessage(m: Extract<HubToNode, { type: "message" }>) {
+    if (m.adiada) {
+      this.recados.push(`[Mensagem do Bot ${m.from.name}]\n${m.text}`);
+      return;
+    }
     const sessionID = await this.sessionFor(m.conversationId);
     let text = m.silent ? `[${m.from.kind === "bot" ? "Bot " : ""}${m.from.name} disse no grupo]\n${m.text}` : m.from.kind === "bot" ? `[Mensagem do Bot ${m.from.name}]\n${m.text}` : m.text;
+    if (this.recados.length) {
+      text = `${this.recados.join("\n\n")}\n\n${text}`;
+      this.recados = [];
+    }
     // o prompt do agente é fixo no opencode.json; se o Hub sobrescreveu o nível, avisamos na própria mensagem
     if (!m.silent && this.controlOverride && this.controlOverride !== this.cfg.approval.mode) text = `${controlPromptLine(this.controlOverride).replace(/^- MODO DE CONTROLE: /, "[Modo de controle: ")}]\n${text}`;
     if (m.silent) {
@@ -495,6 +532,7 @@ function statusForTool(tool: string): string {
   if (/read/i.test(tool)) return "Lendo o arquivo";
   if (/write|edit|patch/i.test(tool)) return "Escrevendo código";
   if (/webfetch|websearch/i.test(tool)) return "Navegando pelas páginas";
+  if (/delegate_task/i.test(tool)) return "Delegando tarefa";
   if (/ask_bot/i.test(tool)) return "Consultando outro Bot";
   if (/ask_user/i.test(tool)) return "Aguardando sua resposta";
   return "Trabalhando nisso";

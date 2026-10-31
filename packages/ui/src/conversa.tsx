@@ -36,6 +36,11 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const [arquivoAberto, setArquivoAberto] = useState<ArquivoDoChat | null>(null);
   const [desktopAberto, setDesktopAberto] = useState(false);
   useEffect(() => { setArquivoAberto(null); }, [conversationId]);
+  // Chat aberto: o nó deixa o modelo quente. Ao sair, esfria.
+  useEffect(() => {
+    send({ type: "warm", conversationId, ativo: true });
+    return () => { send({ type: "warm", conversationId, ativo: false }); };
+  }, [conversationId]);
 
   // --- com quais bots ele falou em cada turno (rodapé "Mensageou N bots") ---
   // Uma requisição para a conversa inteira, refeita quando chega mensagem nova.
@@ -511,8 +516,10 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       </div>
       {bot && pcAberto && (
         <PainelDoPc
+          botId={bot.id}
+          bots={bots}
           empresaId={bot.empresaId ?? null}
-          nome={empresaNome}
+          nome={empresaNome || bot.name}
           conversationId={conversationId}
           onFechar={alternarPc}
           onEvent={onEvent}

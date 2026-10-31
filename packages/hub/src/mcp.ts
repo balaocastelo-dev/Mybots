@@ -5,8 +5,10 @@ import type { FastifyInstance } from "fastify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { tipoDeAprovacao } from "@mybots/shared";
 import { botForToken, config, tokenAllows } from "./config.js";
 import type { Hub } from "./hub.js";
+import { chamarColabLocal } from "./colab/cliente.js";
 
 export async function registerMcp(app: FastifyInstance, hub: Hub) {
   app.all("/mcp", async (req, reply) => {
@@ -36,10 +38,16 @@ export function buildMcpServer(hub: Hub, botId: string) {
   }, async () => text(JSON.stringify(hub.colegasDe(botId).map((b) => ({ id: b.id, name: b.name, role: b.role, online: b.online, status: b.status })), null, 2)));
 
   server.registerTool("send_to_bot", {
-    description: "Envia uma mensagem a outro Bot da equipe sem esperar resposta.",
-    inputSchema: { bot: z.string().describe("id ou nome do Bot"), text: z.string() },
-  }, async ({ bot, text: t }) => {
-    const r = await hub.askBotFromMcp(botId, bot, t, false);
+    description: "Envia uma mensagem a outro Bot sem esperar resposta. prioridade true acorda o destinatário agora; false deixa o texto para o próximo turno, marcado como vindo deste bot.",
+    inputSchema: {
+      bot: z.string().describe("id ou nome do Bot"),
+      text: z.string(),
+      prioridade: z.boolean().optional().describe("true acorda o destinatário; omitido ou false espera o próximo turno"),
+      profundidade: z.number().optional(),
+      contexto: z.string().optional(),
+    },
+  }, async ({ bot, text: t, prioridade, profundidade, contexto }) => {
+    const r = await hub.askBotFromMcp(botId, bot, t, false, { prioridade, profundidade, contexto });
     return text(String(r.data));
   });
 
@@ -57,11 +65,23 @@ export function buildMcpServer(hub: Hub, botId: string) {
   }, async ({ question, options }) => text(await hub.askUserFromMcp(botId, question, options ?? [])));
 
   server.registerTool("request_approval", {
-    description: "Pede aprovação do chefe antes de uma ação crítica (apagar, pagar, enviar, instalar, mexer fora do workspace). Retorna 'aprovado' ou 'negado'. Só execute a ação se for aprovado.",
+    description: "Pede aprovação do chefe antes de uma ação crítica (apagar, pagar, enviar, instalar, mexer fora do workspace). Retorna 'aprovado' ou 'negado'. Só execute a ação se for aprovado. Pagar e enviar pedem o chefe mesmo no modo deus.",
     inputSchema: { action: z.string().describe("o que você quer fazer, em uma frase"), detail: z.string().optional().describe("comando, destinatário, valor etc."), risk: z.enum(["low", "medium", "high"]).default("medium") },
   }, async ({ action, detail, risk }) => {
-    const ok = await hub.requestApprovalFromMcp(botId, "action", { action, detail }, risk, action);
+    const kind = tipoDeAprovacao(`${action} ${detail ?? ""}`);
+    const ok = await hub.requestApprovalFromMcp(botId, "action", { action, detail }, risk, action, kind);
     return text(ok ? "aprovado" : "negado");
+  });
+
+  server.registerTool("fill_credential", {
+    description: "Preenche um campo de login ou cartão no navegador deste bot, com uma credencial do cofre. Você NÃO recebe a senha, o número nem o cvv: a resposta é só ok ou erro. site = o endereço da página (ou o nome do cartão, se houver mais de um). campo = usuario, senha, notas, titular, numero, validade ou cvv. Não clica em pagar, enviar ou comprar — esse clique continua pedindo o OK do chefe. Sem permissão explícita do chefe para este bot neste item, a resposta é erro.",
+    inputSchema: {
+      site: z.string().describe("site da página, ex.: loja.exemplo. Para cartão, o site do checkout ou o nome do cartão"),
+      campo: z.string().describe("usuario, senha, titular, numero, validade ou cvv"),
+    },
+  }, async ({ site, campo }) => {
+    const texto = await hub.cofre.preencher({ botId, empresaId: hub.empresaDe(botId).id, site, campo });
+    return text(texto === "ok" || texto.startsWith("erro") ? texto : "erro: não consegui preencher");
   });
 
   server.registerTool("set_status", {
@@ -146,6 +166,37 @@ export function buildMcpServer(hub: Hub, botId: string) {
   });
 
   server.registerTool("list_routines", { description: "Lista suas rotinas agendadas.", inputSchema: {} }, async () => text(JSON.stringify(hub.db.listRoutines(botId), null, 2)));
+
+  server.registerTool("delegate_task", {
+    description: "Entrega uma tarefa a outro Bot e segue o seu trabalho. O resultado volta depois e acorda você. Você não aprova esta delegação; pagar, enviar, apagar ou publicar continua pedindo o chefe em /api/approvals.",
+    inputSchema: {
+      para: z.string().describe("id do Bot que vai fazer"),
+      objetivo: z.string(),
+      contexto: z.string(),
+      criterioSucesso: z.string().describe("como saber que ficou pronto"),
+      prazo: z.union([z.string(), z.number()]).optional().describe("epoch em ms ou ISO 8601"),
+      formatoEntrega: z.string().optional(),
+    },
+  }, async ({ para, objetivo, contexto, criterioSucesso, prazo, formatoEntrega }) => {
+    const r = await chamarColabLocal(botId, "POST", "/api/colab/tarefas", { de: botId, para, objetivo, contexto, criterioSucesso, prazo, formatoEntrega });
+    return text(r.status >= 400 ? `Falhou: ${r.corpo?.error ?? r.status}` : JSON.stringify(r.corpo));
+  });
+
+  server.registerTool("check_task", {
+    description: "Consulta uma tarefa delegada pelo id.",
+    inputSchema: { taskId: z.string() },
+  }, async ({ taskId }) => {
+    const r = await chamarColabLocal(botId, "GET", `/api/colab/tarefas/${encodeURIComponent(taskId)}`);
+    return text(r.status >= 400 ? `Falhou: ${r.corpo?.error ?? r.status}` : JSON.stringify(r.corpo));
+  });
+
+  server.registerTool("cancel_task", {
+    description: "Cancela uma tarefa que você delegou e ainda não terminou.",
+    inputSchema: { taskId: z.string(), motivo: z.string().optional() },
+  }, async ({ taskId, motivo }) => {
+    const r = await chamarColabLocal(botId, "POST", `/api/colab/tarefas/${encodeURIComponent(taskId)}/cancelar`, motivo ? { motivo } : {});
+    return text(r.status >= 400 ? `Falhou: ${r.corpo?.error ?? r.status}` : JSON.stringify(r.corpo));
+  });
 
   server.registerTool("cancel_routine", { description: "Cancela uma rotina sua pelo id.", inputSchema: { id: z.string() } }, async ({ id }) => {
     const r = hub.db.listRoutines(botId).find((x) => x.id === id);

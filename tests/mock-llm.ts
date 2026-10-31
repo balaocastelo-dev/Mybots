@@ -59,6 +59,38 @@ function readJson(req: http.IncomingMessage): Promise<any> {
 
 let counter = 0;
 export const requests: Array<{ api: string; body: any }> = [];
+/** Modelos que receberam keep_alive e ainda não esfriaram. Só o benchmark usa. */
+const quentes = new Set<string>();
+
+/**
+ * Atraso só para modelos `bench-*`. O teste e2e usa mock-1 e continua instantâneo.
+ * O número imita o que muda de verdade: carga fria do Ollama, prefill de prompt
+ * grande e janela num_ctx. Não é a latência de um provedor real.
+ */
+function perfilBench(body: any, system: string): { espera: number; gap: number } | null {
+  const model = String(body.model ?? "");
+  if (!model.startsWith("bench-")) return null;
+  const tabela: Record<string, { ttft: number; gap: number; frio: number }> = {
+    "bench-ollama": { ttft: 160, gap: 36, frio: 280 },
+    "bench-groq": { ttft: 35, gap: 4, frio: 0 },
+    "bench-zai": { ttft: 50, gap: 5, frio: 0 },
+    "bench-anthropic": { ttft: 200, gap: 12, frio: 0 },
+  };
+  const p = tabela[model] ?? { ttft: 80, gap: 8, frio: 0 };
+  let espera = p.ttft;
+  if (model.includes("ollama")) {
+    const pedidoQuente = !!(body.keep_alive && body.keep_alive !== 0 && String(body.keep_alive) !== "0");
+    const jaCarregado = quentes.has(model);
+    // A primeira carga paga mesmo com keep_alive no pedido. O que o keep_alive
+    // (ou o ping de pré-carga) evita é pagar de novo na próxima.
+    if (!jaCarregado) espera += p.frio;
+    if (system.length > 6000) espera += 450;
+    const ctx = Number(body.options?.num_ctx ?? 32768);
+    espera = Math.round(espera * Math.min(1, 0.35 + ctx / 32768));
+    if (pedidoQuente || jaCarregado) quentes.add(model);
+  }
+  return { espera, gap: p.gap };
+}
 
 export function startMockLlm(port: number): Promise<http.Server> {
   const server = http.createServer(async (req, res) => {
@@ -82,13 +114,16 @@ export function startMockLlm(port: number): Promise<http.Server> {
         if (body.stream) {
           res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
           const chunk = (delta: any, finish: string | null = null) => res.write(`data: ${JSON.stringify({ id: "chatcmpl-mock", object: "chat.completion.chunk", model: body.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`);
+          const atraso = perfilBench(body, system);
           chunk({ role: "assistant", content: "" });
           if (d.text) {
             const devagar = /fale sem parar/i.test(lastUser ?? "");
-            for (const piece of d.text.match(/.{1,12}/g) ?? []) {
+            const pedacos = d.text.match(/.{1,12}/g) ?? [];
+            for (let i = 0; i < pedacos.length; i++) {
               if (res.writableEnded || res.destroyed) return;   // abortaram: o modelo de mentira também para
-              chunk({ content: piece });
-              if (devagar) await new Promise((r) => setTimeout(r, 40));
+              if (atraso) await new Promise((r) => setTimeout(r, i === 0 ? atraso.espera : atraso.gap));
+              else if (devagar) await new Promise((r) => setTimeout(r, 40));
+              chunk({ content: pedacos[i] });
             }
           }
           if (toolCalls.length) chunk({ tool_calls: toolCalls.map((t, index) => ({ index, ...t })) });
@@ -150,6 +185,24 @@ export function startMockLlm(port: number): Promise<http.Server> {
         return send({ candidates: [{ content: { role: "model", parts }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } });
       }
       if (url.endsWith("/models")) return send({ object: "list", data: [{ id: "mock-1" }] });
+      // Pré-carga do Ollama (keep_alive). Não gera texto; só marca o modelo como quente.
+      if (url.includes("/api/generate") || url.includes("/api/chat")) {
+        if (body.keep_alive && body.keep_alive !== 0 && String(body.keep_alive) !== "0") quentes.add(String(body.model ?? ""));
+        else if (body.keep_alive === 0 || String(body.keep_alive) === "0") quentes.delete(String(body.model ?? ""));
+        return send({ done: true });
+      }
+      if (url.startsWith("/bench/last")) {
+        const last = requests[requests.length - 1];
+        const sys = last?.body?.messages?.find((m: any) => m.role === "system");
+        const system = typeof sys?.content === "string" ? sys.content : "";
+        return send({
+          n: requests.length,
+          model: last?.body?.model ?? null,
+          systemChars: system.length,
+          keepAlive: last?.body?.keep_alive ?? null,
+          numCtx: last?.body?.options?.num_ctx ?? null,
+        });
+      }
       send({ error: `rota desconhecida ${url}` }, 404);
     } catch (e) {
       send({ error: (e as Error).message }, 500);

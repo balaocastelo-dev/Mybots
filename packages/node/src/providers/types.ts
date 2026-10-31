@@ -1,3 +1,5 @@
+import { redigirSegredos } from "@mybots/shared";
+
 export type ToolCall = { id: string; name: string; args: Record<string, unknown> };
 
 /** Imagem (ou vídeo pequeno, só para quem aceita) anexada a uma mensagem do usuário. */
@@ -39,6 +41,11 @@ export type ChatRequest = {
    * o bot começar a falar na primeira frase em vez de depois do texto inteiro.
    */
   onText?: (delta: string) => void;
+  /**
+   * Só o Ollama (e o LM Studio) usam isto. num_ctx é a janela desta chamada;
+   * keep_alive mantém o modelo na memória enquanto o chat está aberto.
+   */
+  ollama?: { num_ctx?: number; keep_alive?: string | number };
 };
 
 export type ChatResponse = {
@@ -69,8 +76,8 @@ export class ProviderError extends Error {
 export async function postJson(url: string, headers: Record<string, string>, body: unknown, signal?: AbortSignal): Promise<any> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), signal });
   const text = await res.text();
-  if (!res.ok) throw new ProviderError(`HTTP ${res.status} de ${url}: ${text.slice(0, 500)}`, res.status, text);
-  try { return JSON.parse(text); } catch { throw new ProviderError(`Resposta não-JSON de ${url}: ${text.slice(0, 300)}`); }
+  if (!res.ok) throw new ProviderError(redigirSegredos(`HTTP ${res.status} de ${url}: ${text.slice(0, 500)}`), res.status, text);
+  try { return JSON.parse(text); } catch { throw new ProviderError(redigirSegredos(`Resposta não-JSON de ${url}: ${text.slice(0, 300)}`)); }
 }
 
 export function parseArgs(raw: unknown): Record<string, unknown> {
@@ -98,7 +105,7 @@ export async function postSSE(
   });
   if (!res.ok || !res.body) {
     const t = await res.text().catch(() => "");
-    throw new ProviderError(`HTTP ${res.status} de ${url}: ${t.slice(0, 500)}`, res.status, t);
+    throw new ProviderError(redigirSegredos(`HTTP ${res.status} de ${url}: ${t.slice(0, 500)}`), res.status, t);
   }
   const reader = (res.body as any).getReader();
   const dec = new TextDecoder();

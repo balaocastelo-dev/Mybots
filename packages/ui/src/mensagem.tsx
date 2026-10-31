@@ -33,11 +33,11 @@ export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, o
       onContextMenu={(e) => { if (!onMenu || e.shiftKey) return; e.preventDefault(); onMenu(m, e.clientX, e.clientY); }}
       {...(onMenu ? toqueLongo : {})}>
       {tools?.length ? <div className="tools">{tools.map((t) => <ToolChip key={t.callId} t={t} />)}</div> : null}
-      {(m.text || files.length) ? (
+      {(m.text || files.length || m.meta?.streaming === true) ? (
         <div className={"bubble" + (m.meta?.notify ? " notify" : "") + (routine ? " routine" : "")}>
           {(showName && !mine) || routine || (m.sender.kind === "user" && !mine) ? <div className="who">{routine ? "⏰ " : ""}{m.sender.name}</div> : null}
           {m.meta?.thought ? <Thought text={String(m.meta.thought)} /> : null}
-          {!(files.length && (m.text === files[0].name || m.text === `Enviou ${files[0].name}`)) && <Markdownish text={m.text} />}
+          {!(files.length && (m.text === files[0].name || m.text === `Enviou ${files[0].name}`)) && (m.text || m.meta?.streaming === true) && <Markdownish text={m.text} aoVivo={m.meta?.streaming === true} />}
           {files.map((f) => <Arquivo key={f.id} f={f} tela={!!m.meta?.tela} onAbrir={onAbrirArquivo} onAbrirTela={onAbrirTela} />)}
           {answer && <div className="answered">Você respondeu: <b>{answer}</b></div>}
           {onSpeak && m.text ? <button className="speak-btn" title="Ler a mensagem inteira em voz alta" onClick={onSpeak}>🔊</button> : null}
@@ -307,7 +307,7 @@ export function QuestionCard({ q, botName, onAnswer }: { q: PendingQuestion; bot
 export const CRON_PRESETS: Array<[string, string]> = [["Todo dia às 8h", "0 8 * * *"], ["Segunda a sexta às 9h", "0 9 * * 1-5"], ["Segundas às 8h", "0 8 * * 1"], ["A cada hora", "0 * * * *"], ["A cada 30 min", "*/30 * * * *"], ["Sexta às 18h", "0 18 * * 5"]];
 
 /** Render mínimo de markdown: blocos de código, negrito, itálico, links, listas e quebras de linha. */
-export function Markdownish({ text }: { text: string }) {
+export function Markdownish({ text, aoVivo }: { text: string; aoVivo?: boolean }) {
   const parts = text.split(/(```[\s\S]*?```)/g);
   return (
     <div className="md">
@@ -315,6 +315,7 @@ export function Markdownish({ text }: { text: string }) {
         if (p.startsWith("```")) return <pre key={i}>{p.replace(/^```\w*\n?/, "").replace(/```$/, "")}</pre>;
         return <span key={i} dangerouslySetInnerHTML={{ __html: inline(p) }} />;
       })}
+      {aoVivo ? <span className="cursor" aria-hidden="true" /> : null}
     </div>
   );
 }

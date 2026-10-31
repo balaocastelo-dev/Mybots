@@ -1,7 +1,7 @@
 // Fila de tarefas por bot. Persiste no SQLite do Hub e sobrevive a reinício.
 // Quem pode delegar para quem não é decidido aqui: isso é checarColab.
 
-import { dmConversation, newId, pairConversation, type ResultadoTarefa, type StatusTarefa, type TarefaColab } from "@mybots/shared";
+import { dmConversation, newId, pairConversation, type ColabEvento, type ResultadoTarefa, type StatusTarefa, type TarefaColab } from "@mybots/shared";
 import type { Db } from "../db.js";
 import type { ParadaColab } from "./parar.js";
 import { checarColab, registrarAuditoria, type EventoAuditoria, type MotivoChecagem, type PedidoColab, type ResultadoColab } from "./seguranca.js";
@@ -30,10 +30,7 @@ export function conversaDaTarefa(t: { de: string; para: string }): string {
   return pairConversation(t.de, t.para);
 }
 
-export type EventoColabSaida =
-  | { type: "colab.tarefa"; id: string; de: string; para: string; status: StatusTarefa; resultado?: ResultadoTarefa }
-  | { type: "colab.ajudando"; bot: string; ajudando: boolean; tarefaId: string | null }
-  | { type: "colab.bloqueio"; motivo: MotivoChecagem; de: string; para: string };
+export type EventoColabSaida = Extract<ColabEvento, { tipo: "colab.tarefa" | "colab.ajudando" | "colab.bloqueio" }>;
 
 export type AcordoTarefa = {
   botId: string;
@@ -116,7 +113,7 @@ export class FilaDeTarefas {
     const checagem = this.checar({ de, para, tipo: "tarefa", profundidade });
     if (!checagem.ok) {
       this.auditar({ acao: "bloqueio", de, para, detalhe: { motivo: checagem.motivo, tipo: "tarefa", profundidade }, quando: this.agora() });
-      this.emitir({ type: "colab.bloqueio", motivo: checagem.motivo, de, para });
+      this.emitir({ tipo: "colab.bloqueio", motivo: checagem.motivo, de, para });
       return { ok: false, erro: "delegação bloqueada", status: 403, motivo: checagem.motivo };
     }
 
@@ -309,18 +306,18 @@ export class FilaDeTarefas {
 
   private atualizarAjudando(botId: string) {
     const ativa = this.emCurso(botId);
-    const ajudando = !!ativa && (ativa.status === "running" || ativa.status === "waiting");
+    const emAjuda = !!ativa && (ativa.status === "running" || ativa.status === "waiting");
     this.emitir({
-      type: "colab.ajudando",
+      tipo: "colab.ajudando",
       bot: botId,
-      ajudando,
-      tarefaId: ajudando && ativa ? ativa.id : null,
+      ajudando: emAjuda && ativa ? ativa.de : null,
+      tarefaId: emAjuda && ativa ? ativa.id : null,
     });
   }
 
   private emitirTarefa(t: TarefaColab) {
     this.emitir({
-      type: "colab.tarefa",
+      tipo: "colab.tarefa",
       id: t.id,
       de: t.de,
       para: t.para,

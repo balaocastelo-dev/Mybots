@@ -1,6 +1,5 @@
 // A delegação escuta isto para marcar as tarefas do alvo como cancelled.
 // Este módulo não grava tarefa.
-// Stub com a mesma assinatura do PR #15. Se ele entrar antes, apague este arquivo no rebase.
 
 export type ParadaColab = { alvo: "todos" | string[]; por: string };
 

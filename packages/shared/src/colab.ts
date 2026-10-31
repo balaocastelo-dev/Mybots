@@ -1,13 +1,10 @@
-// Contrato da delegação de tarefas entre bots. O outro agente (send_to_bot,
-// segurança e auditoria) completa a política; aqui ficam só os tipos estáveis.
+// Contrato da colaboração entre bots. A tela e os outros PRs importam daqui.
+// O envelope no WebSocket da interface é { type: "colab", ...evento }.
 
 /** Estado de uma tarefa na fila de um bot (o destinatário). */
 export type StatusTarefa = "queued" | "running" | "waiting" | "done" | "failed" | "cancelled";
 
 export const STATUS_TAREFA: readonly StatusTarefa[] = ["queued", "running", "waiting", "done", "failed", "cancelled"];
-
-/** Motivo devolvido por checarColab. Quem aplica a regra é o módulo de segurança. */
-export type MotivoBloqueioColab = "profundidade" | "taxa" | "empresa";
 
 /**
  * O que volta quando a tarefa termina.
@@ -48,3 +45,15 @@ export type PedidoTarefa = {
   prazo?: number | null;
   formatoEntrega?: string | null;
 };
+
+export type MotivoBloqueioColab = "profundidade" | "taxa" | "empresa" | "aprovacao";
+
+export type ColabEvento =
+  | { tipo: "colab.mensagem"; id: string; de: string; para: string; prioridade: boolean }
+  | { tipo: "colab.tarefa"; id: string; de: string; para: string; status: StatusTarefa; resultado?: ResultadoTarefa }
+  | { tipo: "colab.ajudando"; bot: string; ajudando: string | null; tarefaId: string | null }
+  | { tipo: "colab.sala"; salaId: string; msgId: string }
+  | { tipo: "colab.bloqueio"; motivo: MotivoBloqueioColab; de: string; para: string }
+  | { tipo: "colab.parar"; alvo: "todos" | string[]; por: string };
+
+export type ColabWs = { type: "colab" } & ColabEvento;

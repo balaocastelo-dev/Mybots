@@ -7,8 +7,14 @@ import os from "node:os";
 import path from "node:path";
 import { Db } from "../packages/hub/src/db.ts";
 import { FilaDeTarefas, TRANSICOES_TAREFA, conversaDaTarefa, type PedidoCriarTarefa } from "../packages/hub/src/colab/fila.ts";
-import { checarColab, registrarAuditoria } from "../packages/hub/src/colab/seguranca.ts";
+import { checarColab, classificarAcaoSensivel, mensagemLiberaEnvioExterno, PROFUNDIDADE_MAXIMA, registrarAuditoria, resetarContadoresColab, TAXA_POR_PAR } from "../packages/hub/src/colab/seguranca.ts";
 import { notificarParada, registrarAoParar } from "../packages/hub/src/colab/parar.ts";
+import { registrarRotasColab } from "../packages/hub/src/colab/rotas.ts";
+import Fastify from "fastify";
+import { PROTOCOL_VERSION } from "@mybots/shared";
+import { Hub } from "../packages/hub/src/hub.ts";
+import { config } from "../packages/hub/src/config.ts";
+import { textoComRecadosDeBots } from "../packages/node/src/recados.ts";
 import { lerPrazo } from "../packages/hub/src/colab/rotas.ts";
 import { pairConversation, type StatusTarefa, type TarefaColab } from "@mybots/shared";
 import { TOOL_DEFS, runTool, urlHttpDoHub, type ToolContext } from "../packages/node/src/tools.ts";
@@ -23,6 +29,7 @@ const BASE: Omit<PedidoCriarTarefa, "de" | "para"> = {
 };
 
 function bancada() {
+  resetarContadoresColab();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mybots-colab-"));
   const db = new Db(path.join(dir, "t.sqlite"));
   const eventos: Array<{ type: string; [k: string]: unknown }> = [];
@@ -49,10 +56,15 @@ function pedido(de: string, para: string, extra: Partial<PedidoCriarTarefa> = {}
   return { ...BASE, de, para, ...extra };
 }
 
-test("stub de segurança deixa passar e a auditoria não grava", () => {
-  // O arquivo de verdade (PR #15) recusa profundidade acima de 3. O stub deste PR não.
-  assert.deepEqual(checarColab({ de: "a", para: "b", tipo: "tarefa", profundidade: 9 }), { ok: true });
+test("checarColab da main aceita até profundidade 3 e recusa 4", () => {
+  resetarContadoresColab();
+  assert.equal(PROFUNDIDADE_MAXIMA, 3);
+  assert.deepEqual(checarColab({ de: "a", para: "b", tipo: "tarefa", profundidade: 3 }), { ok: true });
+  const fundo = checarColab({ de: "z", para: "y", tipo: "tarefa", profundidade: 4 });
+  assert.equal(fundo.ok, false);
+  if (!fundo.ok) assert.equal(fundo.motivo, "profundidade");
   assert.equal(registrarAuditoria({ acao: "criar", de: "a", para: "b", detalhe: { tarefaId: "t" }, quando: 1 }), undefined);
+  resetarContadoresColab();
 });
 
 test("colab.parar só cancela quem está inscrito em registrarAoParar", () => {
@@ -97,7 +109,7 @@ test("criar fica queued, persiste e sobrevive a reabrir o banco", () => {
   assert.equal(r.tarefa.status, "queued");
   assert.equal(r.tarefa.profundidade, 1);
   assert.equal(b.fila.obter(r.tarefa.id)?.formatoEntrega, "uma frase");
-  assert.equal(b.eventos.some((e) => e.type === "colab.tarefa" && e.status === "queued"), true);
+  assert.equal(b.eventos.some((e) => e.tipo === "colab.tarefa" && e.status === "queued"), true);
   assert.equal(b.audits.some((a) => a.acao === "criar"), true);
   b.db.close();
 
@@ -165,7 +177,7 @@ test("prazo vencido vira failed com motivo e avisa quem pediu, inclusive depois 
   assert.equal(t?.resultado?.resumo.includes("venceu"), true);
   assert.equal(b.acordes.some((a) => a.botId === "ana" && a.texto.includes("prazo vencido")), true);
   assert.equal(b.acordes.some((a) => a.botId === "bruno"), false);
-  assert.equal(b.eventos.some((e) => e.type === "colab.tarefa" && e.status === "failed"), true);
+  assert.equal(b.eventos.some((e) => e.tipo === "colab.tarefa" && e.status === "failed"), true);
 
   const fresco = bancada();
   const futuro = fresco.agora() + 10_000;
@@ -235,7 +247,7 @@ test("bloqueio não grava e emite colab.bloqueio", () => {
   if (r.ok) return;
   assert.equal(r.motivo, "empresa");
   assert.equal(b.fila.listar().length, 0);
-  assert.deepEqual(b.eventos[0], { type: "colab.bloqueio", motivo: "empresa", de: "ana", para: "bruno" });
+  assert.deepEqual(b.eventos[0], { tipo: "colab.bloqueio", motivo: "empresa", de: "ana", para: "bruno" });
   assert.equal(b.audits[0].acao, "bloqueio");
   b.db.close();
 });
@@ -258,7 +270,7 @@ test("colab.parar cancela só queued/running/waiting do destinatário e avisa qu
   assert.equal(b.fila.obter(ab.tarefa.id)?.resultado?.motivo, "parado pelo humano");
   assert.equal(b.fila.obter(bc.tarefa.id)?.status, "queued");
   assert.equal(b.fila.obter(feito.tarefa.id)?.status, "done");
-  assert.equal(b.eventos.some((e) => e.type === "colab.tarefa" && e.id === ab.tarefa.id && e.status === "cancelled"), true);
+  assert.equal(b.eventos.some((e) => e.tipo === "colab.tarefa" && e.id === ab.tarefa.id && e.status === "cancelled"), true);
   assert.equal(b.acordes.some((a) => a.botId === "ana" && a.texto.includes("parado pelo humano")), true);
 
   const resto = b.fila.receberParar({ alvo: "todos", por: "humano" });
@@ -292,6 +304,7 @@ test("um bot não delega para si e o destino humano é recusado", () => {
 });
 
 test("ciclo HTTP: tarefa de Ana para Bruno, resultado volta, parar e ferramentas", async () => {
+  resetarContadoresColab();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mybots-colab-http-"));
   const port = 18793;
   process.env.MYBOTS_HUB_PORT = String(port);
@@ -402,9 +415,9 @@ test("ciclo HTTP: tarefa de Ana para Bruno, resultado volta, parar e ferramentas
     assert.equal(tarefa.resultado?.resumo, "Temos 12 monitores Acer no estoque.");
     assert.equal(tarefa.resultado?.motivo, undefined);
 
-    await esperar(() => uiEventos.some((e) => e.type === "colab.tarefa" && e.id === criada.id && e.status === "done"), "evento done");
-    assert.equal(uiEventos.some((e) => e.type === "colab.ajudando" && e.bot === "bruno" && e.ajudando === true && e.tarefaId === criada.id), true);
-    assert.equal(uiEventos.some((e) => e.type === "colab.ajudando" && e.bot === "bruno" && e.ajudando === false && e.tarefaId === null), true);
+    await esperar(() => uiEventos.some((e) => e.type === "colab" && e.tipo === "colab.tarefa" && e.id === criada.id && e.status === "done"), "evento done");
+    assert.equal(uiEventos.some((e) => e.type === "colab" && e.tipo === "colab.ajudando" && e.bot === "bruno" && e.ajudando === "ana" && e.tarefaId === criada.id), true);
+    assert.equal(uiEventos.some((e) => e.type === "colab" && e.tipo === "colab.ajudando" && e.bot === "bruno" && e.ajudando === null && e.tarefaId === null), true);
 
     const msgs = await (await fetch(`${base}/api/conversations/${encodeURIComponent(pairConversation("ana", "bruno"))}/messages`)).json() as Array<{ sender: { name: string }; text: string }>;
     assert.equal(msgs.some((m) => m.text.includes("Conferir o estoque de monitores")), true);
@@ -412,7 +425,7 @@ test("ciclo HTTP: tarefa de Ana para Bruno, resultado volta, parar e ferramentas
 
     const arte = "/opt/cursor/artifacts/delegacao";
     fs.mkdirSync(arte, { recursive: true });
-    fs.writeFileSync(path.join(arte, "fluxo.html"), paginaDoFluxo(msgs, uiEventos.filter((e) => e.type === "colab.tarefa" && e.id === criada.id)));
+    fs.writeFileSync(path.join(arte, "fluxo.html"), paginaDoFluxo(msgs, uiEventos.filter((e) => e.type === "colab" && e.tipo === "colab.tarefa" && e.id === criada.id)));
 
     const lista = await (await fetch(`${base}/api/colab/tarefas?bot=bruno&status=done`)).json() as TarefaColab[];
     assert.equal(lista.length, 1);
@@ -479,7 +492,7 @@ test("ciclo HTTP: tarefa de Ana para Bruno, resultado volta, parar e ferramentas
     const corpoBloqueio = await bloqueio.json() as { motivo: string };
     assert.equal(corpoBloqueio.motivo, "taxa");
     assert.equal(hub.tarefas.listar().length, antes);
-    await esperar(() => uiEventos.some((e) => e.type === "colab.bloqueio" && e.motivo === "taxa" && e.de === "ana" && e.para === "bruno"), "evento de bloqueio");
+    await esperar(() => uiEventos.some((e) => e.type === "colab" && e.tipo === "colab.bloqueio" && e.motivo === "taxa" && e.de === "ana" && e.para === "bruno"), "evento de bloqueio");
   } finally {
     for (const s of sockets) { try { s.close(); } catch { /* já fechou */ } }
     // o "bot offline" grava auditoria no close do socket; espera isso antes de derrubar o servidor
@@ -521,3 +534,199 @@ function paginaDoFluxo(msgs: Array<{ sender: { name: string }; text: string }>, 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, (c) => c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;");
 }
+
+function soquete() {
+  const ouvintes = new Map<string, (raw: { toString(): string }) => void>();
+  const enviados: any[] = [];
+  const ws: any = {
+    readyState: 1,
+    OPEN: 1,
+    send(s: string) { enviados.push(JSON.parse(s)); },
+    on(ev: string, fn: (raw: { toString(): string }) => void) { ouvintes.set(ev, fn); },
+    close() {},
+  };
+  return {
+    ws, enviados,
+    receber(msg: unknown) { ouvintes.get("message")?.({ toString: () => JSON.stringify(msg) }); },
+  };
+}
+
+function conectar(hub: Hub, id: string, name: string) {
+  const s = soquete();
+  hub.handleNodeConnection(s.ws);
+  s.receber({
+    type: "hello", protocol: PROTOCOL_VERSION, token: config.hubToken || "dev",
+    bot: { id, name, role: "teste" }, engine: "direct", provider: "mock", model: "m", version: "0",
+  });
+  return s;
+}
+
+test("colaboração: prioridade, segurança, auditoria e parar", async () => {
+  resetarContadoresColab();
+  assert.equal(PROFUNDIDADE_MAXIMA, 3);
+  assert.equal(mensagemLiberaEnvioExterno("humano"), true);
+  assert.equal(mensagemLiberaEnvioExterno("user"), false);
+  assert.equal(mensagemLiberaEnvioExterno("pixel"), false);
+  assert.equal(mensagemLiberaEnvioExterno(undefined), false);
+  assert.equal(classificarAcaoSensivel("whatsapp", { acao: "enviar" }, ""), "envio");
+  assert.equal(classificarAcaoSensivel("whatsapp", { acao: "estado" }, ""), null);
+  assert.equal(classificarAcaoSensivel("email", {}, "Enviar e-mail para ana"), "envio");
+  assert.equal(classificarAcaoSensivel("gerenciar_bot", { acao: "excluir" }, ""), "exclusao");
+  assert.equal(classificarAcaoSensivel("gerenciar_bot", { acao: "parar" }, ""), null);
+  assert.equal(classificarAcaoSensivel("action", { action: "pagar o boleto" }, "pagar o boleto"), "pagamento");
+  assert.equal(classificarAcaoSensivel("celular", { acao: "tocar", texto: "confirmar pagamento" }, "tocar confirmar pagamento"), "pagamento");
+
+  assert.deepEqual(checarColab({ de: "a", para: "b", tipo: "mensagem", profundidade: 3 }), { ok: true });
+  const fundo = checarColab({ de: "a", para: "b", tipo: "tarefa", profundidade: 4 });
+  assert.equal(fundo.ok, false);
+  if (!fundo.ok) assert.equal(fundo.motivo, "profundidade");
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mybots-colab-"));
+  const hub = new Hub(path.join(dir, "hub.sqlite"));
+  hub.db.ensureManagedTable();
+  resetarContadoresColab();
+  const pixel = conectar(hub, "pixel", "Pixel");
+  const gerente = conectar(hub, "gerente", "Gerente");
+  conectar(hub, "vendas", "Vendas");
+  const ui = soquete();
+  hub.handleUiConnection(ui.ws);
+  ui.receber({ type: "subscribe" });
+
+  hub.db.saveEmpresa({ id: "escola", nome: "Escola" });
+  hub.db.saveEmpresa({ id: "loja", nome: "Loja" });
+  hub.db.setEmpresaDoBot("pixel", "Pixel", "escola");
+  hub.db.setEmpresaDoBot("gerente", "Gerente", "escola");
+  hub.db.setEmpresaDoBot("vendas", "Vendas", "loja");
+
+  const app = Fastify({ logger: false });
+  registrarRotasColab(app, hub);
+
+  const sem = await app.inject({
+    method: "POST", url: "/api/colab/mensagens",
+    payload: { de: "gerente", para: "pixel", texto: "fica para depois", prioridade: false },
+  });
+  assert.equal(sem.statusCode, 200);
+  const idSem = (sem.json() as { id: string }).id;
+  const adiada = pixel.enviados.filter((m) => m.type === "message" && m.adiada && m.messageId === idSem);
+  assert.equal(adiada.length, 1, "sem prioridade não acorda: vai como recado adiado");
+  assert.equal(adiada[0].from.kind, "bot");
+  assert.equal(adiada[0].from.id, "gerente");
+  assert.equal(adiada[0].silent, true);
+  assert.equal(pixel.enviados.some((m) => m.type === "message" && m.messageId === idSem && !m.adiada), false);
+
+  pixel.enviados.length = 0;
+  const com = await app.inject({
+    method: "POST", url: "/api/colab/mensagens",
+    payload: { de: "gerente", para: "pixel", texto: "acorda agora", prioridade: true, contexto: "banner" },
+  });
+  assert.equal(com.statusCode, 200);
+  const idCom = (com.json() as { id: string }).id;
+  const acordou = pixel.enviados.find((m) => m.type === "message" && m.messageId === idCom);
+  assert.ok(acordou, "com prioridade o destinatário recebe um turno");
+  assert.equal(acordou.adiada, undefined);
+  assert.equal(acordou.from.kind, "bot");
+  assert.match(acordou.text, /acorda agora/);
+  assert.match(acordou.text, /banner/);
+  assert.equal(hub.colab.autorDe("pixel"), "gerente");
+
+  const evento = ui.enviados.find((e) => e.type === "colab" && e.tipo === "colab.mensagem" && e.id === idCom);
+  assert.ok(evento);
+  assert.equal(evento.prioridade, true);
+  assert.equal(evento.de, "gerente");
+  assert.equal(evento.para, "pixel");
+
+  const texto = textoComRecadosDeBots(
+    { fromKind: "user", fromName: "humano", text: "manda ver" },
+    [{ nome: "Gerente", texto: "fica para depois" }],
+  );
+  assert.match(texto, /\[Mensagem do Bot Gerente\]/);
+  assert.doesNotMatch(texto, /\[Mensagem do humano\]|Você disse/);
+  assert.match(texto, /manda ver/);
+
+  const conversas = await app.inject({ method: "GET", url: "/api/colab/conversas?bot=pixel" });
+  const lista = conversas.json() as Array<{ id: string; bots: string[]; ultimaEm: number }>;
+  assert.ok(lista.some((c) => c.id === "pair:gerente:pixel" && c.bots.includes("pixel") && c.bots.includes("gerente")));
+  const msgs = await app.inject({ method: "GET", url: "/api/colab/conversas/pair:gerente:pixel/mensagens" });
+  const gravadas = msgs.json() as Array<{ autor: string; texto: string }>;
+  assert.ok(gravadas.every((m) => m.autor === "gerente"));
+  assert.equal(gravadas.some((m) => m.autor === "humano" || m.autor === "user"), false);
+
+  const cruzado = await app.inject({
+    method: "POST", url: "/api/colab/mensagens",
+    payload: { de: "vendas", para: "pixel", texto: "arte da loja", prioridade: true },
+  });
+  assert.equal(cruzado.statusCode, 403);
+  assert.equal((cruzado.json() as { motivo: string }).motivo, "empresa");
+  const liberada = await app.inject({
+    method: "PUT", url: "/api/colab/permissoes-empresa",
+    payload: { de: "loja", para: "escola", liberado: true },
+  });
+  assert.equal(liberada.statusCode, 200);
+  const deNovo = await app.inject({
+    method: "POST", url: "/api/colab/mensagens",
+    payload: { de: "vendas", para: "pixel", texto: "agora pode", prioridade: false },
+  });
+  assert.equal(deNovo.statusCode, 200);
+
+  resetarContadoresColab();
+  let taxa = 0;
+  for (let i = 0; i < TAXA_POR_PAR + 1; i++) {
+    const r = await app.inject({
+      method: "POST", url: "/api/colab/mensagens",
+      payload: { de: "gerente", para: "pixel", texto: "ping " + i, prioridade: false },
+    });
+    if (r.statusCode === 403) {
+      taxa++;
+      assert.equal((r.json() as { motivo: string }).motivo, "taxa");
+    }
+  }
+  assert.equal(taxa, 1);
+
+  const botPara = await app.inject({
+    method: "POST", url: "/api/colab/parar",
+    payload: { de: "pixel", alvo: "todos" },
+  });
+  assert.equal(botPara.statusCode, 403);
+  assert.equal((botPara.json() as { motivo: string }).motivo, "aprovacao");
+  assert.equal(ui.enviados.some((e) => e.type === "colab" && e.tipo === "colab.parar"), false);
+
+  const paradas: string[] = [];
+  const soltar = registrarAoParar((e) => { if (e.por === "humano") paradas.push(e.alvo === "todos" ? "todos" : e.alvo.join(",")); });
+  pixel.enviados.length = 0;
+  const humanoPara = await app.inject({
+    method: "POST", url: "/api/colab/parar",
+    payload: { de: "humano", alvo: ["pixel"] },
+  });
+  assert.equal(humanoPara.statusCode, 200);
+  assert.equal(paradas[0], "pixel");
+  soltar();
+  assert.ok(ui.enviados.some((e) => e.type === "colab" && e.tipo === "colab.parar" && e.por === "humano"));
+  assert.ok(pixel.enviados.some((m) => m.type === "colab.parar"));
+  assert.ok(pixel.enviados.some((m) => m.type === "abort"));
+
+  hub.db.insertApproval({
+    id: "ap-email", botId: "pixel", conversationId: "dm:pixel", tool: "email",
+    input: { para: "a@b.c" }, risk: "high", description: "Enviar e-mail", createdAt: Date.now(),
+  });
+  const recusa = hub.responderAprovacao("ap-email", true, false, "gerente");
+  assert.equal(recusa.ok, false);
+  if (!recusa.ok) assert.equal(recusa.motivo, "aprovacao");
+  assert.equal(hub.db.pendingApprovals().some((a) => a.id === "ap-email"), true);
+  assert.equal(hub.db.temAprovacaoHumana("pixel", "email"), false);
+  const okHumano = hub.responderAprovacao("ap-email", true, false, undefined);
+  assert.equal(okHumano.ok, true);
+  assert.equal(hub.db.temAprovacaoHumana("pixel", "email"), true);
+
+  hub.colab.anotarAutor("pixel", "gerente");
+  const semHumano = hub.liberarAcaoSensivel("pixel", "email", {}, "Enviar e-mail para o cliente");
+  assert.equal(semHumano.ok, false);
+  hub.colab.anotarAutor("pixel", "humano");
+  const comHumano = hub.liberarAcaoSensivel("pixel", "email", {}, "Enviar e-mail para o cliente");
+  assert.equal(comHumano.ok, true);
+
+  const aud = await app.inject({ method: "GET", url: "/api/colab/auditoria?bot=gerente" });
+  const linhas = aud.json() as Array<{ action: string }>;
+  assert.ok(linhas.some((l) => l.action === "colab.mensagem" || l.action === "colab.bloqueio"));
+
+  await app.close();
+});

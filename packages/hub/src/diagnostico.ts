@@ -10,6 +10,7 @@
 // do Node e uma única linha que importa.
 import fs from "node:fs";
 import path from "node:path";
+import { redigir } from "./redacao.js";
 
 export type Queda = {
   classe: "config-invalido" | "nao-compila" | "falta-modulo" | "chave-recusada" | "porta-ocupada" | "sem-rede" | "desconhecido" | "sem-log";
@@ -66,7 +67,7 @@ export function motivoDaQueda(dirDoBot: string, linhas = 60): Queda {
     if (p.re.test(texto)) {
       // a linha que casou é a que interessa; a pilha do Node só atrapalha
       const linha = texto.split("\n").find((l) => p.re.test(l))?.trim() ?? "";
-      return { classe: p.classe, resumo: p.resumo, conserto: p.conserto, trecho: linha.slice(0, 500) };
+      return { classe: p.classe, resumo: p.resumo, conserto: p.conserto, trecho: redigir(linha.slice(0, 500)) };
     }
   }
   const uteis = texto.split("\n").filter((l) => l.trim() && !/^\s+at /.test(l)).slice(-6);
@@ -74,7 +75,7 @@ export function motivoDaQueda(dirDoBot: string, linhas = 60): Queda {
     classe: "desconhecido",
     resumo: "o nó morreu e o motivo não é um dos conhecidos",
     conserto: "Leia o node.log inteiro do bot antes de mexer em qualquer coisa.",
-    trecho: uteis.join("\n").slice(0, 700),
+    trecho: redigir(uteis.join("\n").slice(0, 700)),
   };
 }
 

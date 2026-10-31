@@ -2,13 +2,7 @@
 
 Este documento é o contrato da **fila de tarefas** no Hub (porta do MyBots, por padrão 8790). Cobre criar, consultar, cancelar, o ciclo de vida e os eventos. Não cobre mensagem solta entre bots.
 
-A política de quem pode delegar para quem **não está implementada aqui**. As assinaturas já são as do PR #15:
-
-- `checarColab(pedido: PedidoColab): ResultadoColab`
-- `registrarAuditoria(evento: EventoAuditoria): void`
-- `registrarAoParar(fn): () => void` e `notificarParada(e: ParadaColab)` em `parar.ts`
-
-Os arquivos `packages/hub/src/colab/seguranca.ts` e `packages/hub/src/colab/parar.ts` deste PR são stubs com essas assinaturas, para o Hub funcionar sem o #15. Se o #15 entrar na main antes, no rebase **apague os dois stubs** e fique com os arquivos de lá — a fila já chama essas funções. Enquanto o stub de segurança estiver no lugar, `checarColab` devolve `{ ok: true }` e `registrarAuditoria` não grava.
+Quem pode delegar para quem, a taxa e a empresa estão em `packages/hub/src/colab/seguranca.ts` (o do PR #15, já na main). Esta fila chama `checarColab` e `registrarAuditoria` com a assinatura de lá. O cancelamento por `colab.parar` se inscreve com `registrarAoParar` em `parar.ts`, também o da main. Não há stub destes dois arquivos neste branch.
 
 Nenhum bot aprova tarefa. Pagar, enviar, apagar, publicar e o resto que já pede o chefe continua em `POST /api/approvals`.
 
@@ -157,10 +151,12 @@ Conversa da tarefa: `pair:<de>:<para>` (ids em ordem). Se `de` é humano (`human
 
 Saem para a interface (`/ws/ui`), no mesmo canal dos outros eventos do Hub.
 
+O envelope é o de `docs/colaboracao.md`: `type` é sempre `"colab"` e `tipo` distingue.
+
 ### colab.tarefa
 
 ```json
-{ "type": "colab.tarefa", "id": "t…", "de": "ana", "para": "bruno", "status": "done", "resultado": { "resumo": "Temos 12." } }
+{ "type": "colab", "tipo": "colab.tarefa", "id": "t…", "de": "ana", "para": "bruno", "status": "done", "resultado": { "resumo": "Temos 12." } }
 ```
 
 `resultado` só quando já existe.
@@ -168,18 +164,18 @@ Saem para a interface (`/ws/ui`), no mesmo canal dos outros eventos do Hub.
 ### colab.ajudando
 
 ```json
-{ "type": "colab.ajudando", "bot": "bruno", "ajudando": true, "tarefaId": "t…" }
+{ "type": "colab", "tipo": "colab.ajudando", "bot": "bruno", "ajudando": "ana", "tarefaId": "t…" }
 ```
 
-`ajudando: false` e `tarefaId: null` quando ele não tem tarefa `running` nem `waiting`.
+`ajudando` é o id de quem está sendo ajudado (`de` da tarefa em `running` ou `waiting`). Os dois campos `ajudando` e `tarefaId` ficam `null` quando o bot não tem tarefa em curso.
 
 ### colab.bloqueio
 
 ```json
-{ "type": "colab.bloqueio", "motivo": "empresa", "de": "ana", "para": "bruno" }
+{ "type": "colab", "tipo": "colab.bloqueio", "motivo": "empresa", "de": "ana", "para": "bruno" }
 ```
 
-`motivo` é só `profundidade`, `taxa` ou `empresa`. Não cria tarefa.
+`motivo` vem de `checarColab`: `profundidade`, `taxa` ou `empresa`. Não cria tarefa.
 
 ### colab.parar (a interface manda, o Hub recebe)
 
@@ -219,8 +215,8 @@ Argumentos de `delegate_task`: `objetivo`, `contexto`, `criterioSucesso`, `para`
 | Fila, transições, prazo, parar, acordar | `packages/hub/src/colab/fila.ts` |
 | Rotas | `packages/hub/src/colab/rotas.ts` |
 | Cliente HTTP do MCP | `packages/hub/src/colab/cliente.ts` |
-| Checagem e auditoria (stub, mesma assinatura do PR #15) | `packages/hub/src/colab/seguranca.ts` |
-| Barramento do parar (stub, mesma assinatura do PR #15) | `packages/hub/src/colab/parar.ts` |
+| Checagem e auditoria (versão da main, PR #15) | `packages/hub/src/colab/seguranca.ts` |
+| Barramento do parar (versão da main, PR #15) | `packages/hub/src/colab/parar.ts` |
 | Tabela | `colab_tarefas` em `packages/hub/src/db.ts` |
 | Ferramentas do nó | `delegate_task`, `check_task`, `cancel_task` em `packages/node/src/tools.ts` |
 
@@ -238,32 +234,4 @@ Evento de auditoria, na assinatura do PR #15. O detalhe da tarefa vai em `detalh
 }
 ```
 
-<!-- AGENTE-SEGURANCA:COMECO -->
-
-## A completar pelo agente de segurança e de send_to_bot
-
-Esta seção é do outro PR. Este arquivo não substitui `docs/colaboracao.md` (não existe aqui de propósito).
-
-Se o PR #15 já estiver na main, não reescreva estes módulos: apague os stubs `seguranca.ts` e `parar.ts` deste branch no rebase. As chamadas já usam a assinatura de lá.
-
-Substituir o stub de `packages/hub/src/colab/seguranca.ts` **sem mudar a assinatura**:
-
-- `checarColab({ de, para, tipo: "mensagem" | "tarefa", profundidade })` → `{ ok: true }` ou `{ ok: false, motivo: "profundidade" | "taxa" | "empresa" }`.
-- `registrarAuditoria(evento)` grava de verdade. A redação de segredos nos logs do Hub também é desse agente; esta fila não escreve objetivo, contexto nem resultado em log.
-
-Regras que este módulo **não** aplica e o checador deve aplicar:
-
-1. **Profundidade.** Recusar acima de 3. 0 é humano, cada delegação soma 1. Motivo `"profundidade"`.
-2. **Taxa.** Limite de delegações por bot/janela. Motivo `"taxa"`.
-3. **Empresa.** Quem fala com quem (mesma empresa, ponte, etc.). Motivo `"empresa"`.
-4. **Quem pode delegar para quem**, além da empresa: papel, gerente, bot protegido. Continua sendo decisão do `checarColab`, não da fila.
-5. Pedido humano sem token pode mandar `de` no corpo (profundidade 0). Se isso tiver que ser só o chefe, o checador recusa.
-
-O que **não** fazer neste fluxo:
-
-- Não implementar `send_to_bot` nem `POST /api/colab/mensagens` — é o outro agente. O tipo `"mensagem"` em `checarColab` já está na assinatura para ele usar.
-- Não fazer o bot aprovar a delegação. Ação externa segue em `/api/approvals`.
-- Não alterar o tratamento de erro nem os logs que já existem no Hub.
-- Em bloqueio, não criar a tarefa. O Hub já emite `colab.bloqueio`; o checador só devolve `{ ok: false, motivo }`.
-
-<!-- AGENTE-SEGURANCA:FIM -->
+Segurança, mensagem (`POST /api/colab/mensagens`) e o barramento de parar estão na main (PR #15). O contrato geral é `docs/colaboracao.md`. Este arquivo só descreve a fila de tarefas.

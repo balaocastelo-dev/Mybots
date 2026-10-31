@@ -18,6 +18,7 @@ import { config, tokenAllows , raizDoProjeto } from "./config.js";
 import { nextRunOf, validateCron } from "./scheduler.js";
 import { voiceConfig } from "./voice.js";
 import { splitThoughts } from "./thoughts.js";
+import { devePublicar } from "./fluxo.js";
 import { MediaService } from "./media.js";
 import { SalaDeConversa } from "./sala.js";
 import type { Attachment, MediaKind, MediaResult, UsoDoPc } from "@mybots/shared";
@@ -323,6 +324,20 @@ export class Hub {
   private mcpWaiters = new Map<string, (r: { ok: boolean; data: unknown }) => void>();
   private questionWaiters = new Map<string, (answer: string) => void>();
   private approvalWaiters = new Map<string, (allow: boolean) => void>();
+
+  /** Quem deve aquecer quando esta conversa está aberta. */
+  private botsDaConversa(conversationId: string): string[] {
+    const dm = botOfConversation(conversationId);
+    if (dm) return [dm];
+    const g = groupOfConversation(conversationId);
+    if (g) return this.db.getGroup(g)?.members ?? [];
+    if (conversationId.startsWith("pair:")) return conversationId.slice(5).split(":").filter(Boolean);
+    if (conversationId.startsWith("channel:")) {
+      const bot = conversationId.split(":").pop();
+      return bot ? [bot] : [];
+    }
+    return [];
+  }
 
   private sendNode(botId: string, msg: HubToNode): boolean {
     // Chamadas feitas pelo servidor MCP não têm nó atrás: resolvem promessas locais.
@@ -1324,10 +1339,8 @@ export class Hub {
         // Só sai o que já é resposta. O raciocínio em inglês fica no filtro até o fim.
         const { answer } = splitThoughts(s.text, { permiteIngles: this.falamOutroIdioma().has(botId), aoVivo: true });
         const mostrado = s.mostrado ?? "";
-        // Frase pela metade que ainda pode ser raciocínio não vai para a tela.
-        // Com 40 caracteres ou um ponto final, já é resposta e pode ir saindo.
-        const pronto = /[.!?…]\s*$/.test(answer) || answer.length >= 40;
-        if (pronto && answer !== mostrado) {
+        // Pensamento não entra. A primeira palavra já vai para a tela; o resto acompanha o modelo.
+        if (devePublicar(answer, mostrado)) {
           if (answer.startsWith(mostrado)) {
             this.broadcastUi({ type: "message.delta", conversationId, messageId: ev.messageId, text: answer.slice(mostrado.length) });
           } else {
@@ -1474,6 +1487,9 @@ export class Hub {
         return;
       case "send":
         this.sendUserMessage(msg.conversationId, msg.text, msg.attachments);
+        return;
+      case "warm":
+        for (const id of this.botsDaConversa(msg.conversationId)) this.sendNode(id, { type: "warm", conversationId: msg.conversationId, ativo: msg.ativo });
         return;
       case "approval.response":
         this.resolveApproval(msg.requestId, msg.allow, msg.remember);

@@ -8,6 +8,8 @@ import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type ControlMode, type HubToNode, type Risk, controlPromptLine, effectiveControl, needsHumanApproval, resourcePromptLine } from "@mybots/shared";
 import { OPENAI_COMPAT_PRESETS, type NodeConfig, readPersona } from "../config.js";
+import { Aquecedor, preaquecer } from "../aquecer.js";
+import { ehGerenteBot, numCtxDe, promptGerenteNoOllama } from "../promptEnxuto.js";
 import type { HubClient } from "../hubClient.js";
 import { limitsFromEnv } from "../resources.js";
 import { tocaCoracaoDoSistema } from "../tools.js";
@@ -36,6 +38,7 @@ export class OpenCodeEngine implements Engine {
   private agent: string;
   /** nível global do Hub (sobrescreve cfg.approval.mode); null = usa o do nó */
   private controlOverride: ControlMode | null = null;
+  private calor = new Aquecedor((ativo) => preaquecer(this.cfg.provider, ativo));
 
   /** Nível de controle em vigor agora. */
   mode(): ControlMode { return effectiveControl(this.controlOverride, this.cfg.approval.mode); }
@@ -50,7 +53,14 @@ export class OpenCodeEngine implements Engine {
       this.controlOverride = m.override;
       console.log(`[node] nível de controle: ${this.mode()}${m.override ? " (global do Hub)" : ""}`);
     });
-    hub.on("message", (m: Extract<HubToNode, { type: "message" }>) => void this.onMessage(m).catch((e) => hub.event(m.conversationId, { kind: "error", message: (e as Error).message })));
+    hub.on("warm", (m: Extract<HubToNode, { type: "warm" }>) => {
+      this.calor.definir(m.conversationId, m.ativo);
+      if (m.ativo) void this.sessionFor(m.conversationId).catch(() => {});
+    });
+    hub.on("message", (m: Extract<HubToNode, { type: "message" }>) => {
+      this.calor.tocar(m.conversationId);
+      void this.onMessage(m).catch((e) => hub.event(m.conversationId, { kind: "error", message: (e as Error).message }));
+    });
     hub.on("approval.response", (m: Extract<HubToNode, { type: "approval.response" }>) => void this.onApproval(m));
     hub.on("question.answer", (m: Extract<HubToNode, { type: "question.answer" }>) => void this.onAnswer(m));
     hub.on("abort", (m: Extract<HubToNode, { type: "abort" }>) => {
@@ -104,16 +114,17 @@ export class OpenCodeEngine implements Engine {
         const preset = OPENAI_COMPAT_PRESETS[p.kind];
         const baseURL = p.baseURL ?? preset?.baseURL;
         model = `${p.kind}/${p.model}`;
+        const contexto = p.kind === "ollama" || p.kind === "lmstudio" ? numCtxDe([readPersona(this.cfg)], 2048) : 128_000;
         provider[p.kind] = {
           npm: "@ai-sdk/openai-compatible",
           name: preset?.label ?? p.kind,
           options: { baseURL, ...(p.apiKey ? { apiKey: "{env:MYBOTS_API_KEY}" } : {}) },
-          models: { ...(provider[p.kind]?.models ?? {}), [p.model]: { name: p.model, tool_call: true, limit: { context: 128_000, output: 16_000 } } },
+          models: { ...(provider[p.kind]?.models ?? {}), [p.model]: { name: p.model, tool_call: true, limit: { context: contexto, output: Math.min(16_000, Math.floor(contexto / 4)) }, ...(p.kind === "ollama" || p.kind === "lmstudio" ? { options: { num_ctx: contexto } } : {}) } },
         };
       }
     }
     const hubHttp = (this.cfg.opencode.hubHttp ?? this.cfg.hub.replace(/^ws/, "http")).replace(/\/$/, "");
-    const persona = [
+    const personaCheia = [
       readPersona(this.cfg).trim(),
       "",
       "## Contexto do MyBots",
@@ -135,6 +146,15 @@ export class OpenCodeEngine implements Engine {
       "- IDIOMA: esta casa é nativa em português, inglês e espanhol. Responda NO IDIOMA DE QUEM ESCREVEU quando for um desses três; se não der para saber, use o idioma da empresa. Status, nomes de arquivo e mensagens para colegas seguem o idioma da empresa. Nunca misture dois idiomas na mesma resposta.",
       "- Responda curto e direto, no idioma de quem escreveu.",
     ].join("\n");
+    const enxuto = (p.kind === "ollama" || p.kind === "lmstudio") && ehGerenteBot(this.cfg.bot);
+    const persona = enxuto
+      ? promptGerenteNoOllama({ persona: readPersona(this.cfg), nome: this.cfg.bot.name, id: this.cfg.bot.id, chefe: process.env.MYBOTS_USER_NAME ?? "o chefe", workspace: this.cfg.workspace })
+      : personaCheia;
+    if ((p.kind === "ollama" || p.kind === "lmstudio") && provider[p.kind]?.models?.[p.model]) {
+      const ctx = numCtxDe([persona], 2048);
+      provider[p.kind].models[p.model].limit = { context: ctx, output: Math.min(4096, Math.floor(ctx / 4)) };
+      provider[p.kind].models[p.model].options = { ...(provider[p.kind].models[p.model].options ?? {}), num_ctx: ctx };
+    }
     const cfg = {
       $schema: "https://opencode.ai/config.json",
       ...existing,

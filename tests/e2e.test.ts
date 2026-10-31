@@ -37,7 +37,7 @@ function makeNode(id: string, name: string, provider: { kind: string; model: str
     provider, approval: { shell: "sh" },
   }, null, 2));
   const nodeDir = path.join(ROOT, "packages/node");
-  return spawnTs(id, nodeDir, path.join(nodeDir, "src/index.ts"), {}, [path.join(dir, "mybots-node.json")]);
+  return spawnTs(id, nodeDir, path.join(nodeDir, "src/index.ts"), { MYBOTS_CACHE: "0", MYBOTS_ROTA_RAPIDA: "0" }, [path.join(dir, "mybots-node.json")]);
 }
 
 type Ev = any;
@@ -89,7 +89,7 @@ async function main() {
   // servidor STT de mentira (compatível com /v1/audio/transcriptions)
   const stt = http.createServer((req, res) => { req.on("data", () => {}); req.on("end", () => { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ text: "transcrição de mentira" })); }); });
   await new Promise<void>((r) => stt.listen(STT_PORT, "127.0.0.1", () => r()));
-  spawnTs("hub", hubDir, path.join(hubDir, "src/index.ts"), { MYBOTS_HUB_PORT: String(HUB_PORT), MYBOTS_HUB_TOKEN: TOKEN, MYBOTS_DB: path.join(tmp, "hub.sqlite"), MYBOTS_UI_DIST: path.join(ROOT, "packages/ui/dist"), MYBOTS_CHANNEL_WEBHOOK_URL: `http://127.0.0.1:${HOOK_PORT}/out`, MYBOTS_STT_URL: `http://127.0.0.1:${STT_PORT}/v1`, MYBOTS_TTS: "edge", MYBOTS_BOTS_DIR: path.join(tmp, "managed") });
+  spawnTs("hub", hubDir, path.join(hubDir, "src/index.ts"), { MYBOTS_HUB_PORT: String(HUB_PORT), MYBOTS_HUB_TOKEN: TOKEN, MYBOTS_DB: path.join(tmp, "hub.sqlite"), MYBOTS_UI_DIST: path.join(ROOT, "packages/ui/dist"), MYBOTS_CHANNEL_WEBHOOK_URL: `http://127.0.0.1:${HOOK_PORT}/out`, MYBOTS_STT_URL: `http://127.0.0.1:${STT_PORT}/v1`, MYBOTS_TTS: "edge", MYBOTS_BOTS_DIR: path.join(tmp, "managed"), MYBOTS_CACHE: "0", MYBOTS_ROTA_RAPIDA: "0" });
   await waitHttp(`http://127.0.0.1:${HUB_PORT}/api/health`);
   log("hub no ar");
 

@@ -91,6 +91,8 @@ export type HubToNode =
   | { type: "result"; callId: string; ok: boolean; data: unknown }
   /** o histórico daquela conversa mudou (rebobinar/editar/apagar): o nó troca o que tinha pelo que vem aqui */
   | { type: "history.reset"; conversationId: string; messages: Array<{ role: "user" | "assistant"; content: string }> }
+  /** a interface abriu ou fechou o chat: o nó aquece o modelo ou deixa esfriar */
+  | { type: "warm"; conversationId: string; ativo: boolean }
   /** fatal = não adianta tentar de novo (bot excluído, token recusado): o nó encerra. */
   | { type: "error"; message: string; fatal?: boolean };
 
@@ -191,7 +193,9 @@ export type UiToHub =
   /** botId = para ESTE bot inteiro (todas as conversas dele), não só esta conversa */
   | { type: "abort"; conversationId: string; botId?: string }
   /** PARAR TUDO: toda janela, todo bot, toda fala. O ⏹ grande, o Esc e o fechar da janela. */
-  | { type: "stop"; reason?: string };
+  | { type: "stop"; reason?: string }
+  /** abriu ou saiu de uma conversa: o Hub pede ao nó para manter o modelo quente */
+  | { type: "warm"; conversationId: string; ativo: boolean };
 
 /** Hub → Interface */
 export type HubToUi =

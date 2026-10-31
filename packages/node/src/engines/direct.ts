@@ -6,9 +6,14 @@ import os from "node:os";
 import { type Attachment, type CartaoDeAcao, type ControlMode, type HubToNode, type Risk, controlPromptLine, effectiveControl, newId, resourcePromptLine } from "@mybots/shared";
 import { type NodeConfig, readPersona } from "../config.js";
 import type { HubClient } from "../hubClient.js";
-import type { ChatMessage, Provider, ToolCall } from "../providers/types.js";
+import type { ChatMessage, ChatResponse, Provider, ToolCall, ToolDef } from "../providers/types.js";
+import { OpenAICompatProvider } from "../providers/openaiCompat.js";
 import { TOOL_DEFS, atualizarCatalogo, catalogoDeCapacidades, rememberApproval, runTool, type ToolContext } from "../tools.js";
 import { tetoDoProvedor, tetoSaidaDoProvedor, emTokens, ferramentasQueCabem } from "../orcamento.js";
+import { Aquecedor, preaquecer } from "../aquecer.js";
+import { CacheResposta, emitirEmPedacos } from "../cacheResposta.js";
+import { ehGerenteBot, numCtxDe, promptGerenteNoOllama } from "../promptEnxuto.js";
+import { podeCachear, promptCurto, rotaRapida } from "../roteamento.js";
 /** avisa uma vez por provedor, no log, quando o prompt precisou ser reduzido */
 const avisados = new Set<string>();
 import { limitsFromEnv } from "../resources.js";
@@ -33,6 +38,8 @@ export class DirectEngine implements Engine {
   private controlOverride: ControlMode | null = null;
   /** índice da base comum, mandado pelo Hub no hello */
   private knowledge = "";
+  private cache = new CacheResposta();
+  private calor = new Aquecedor((ativo) => preaquecer(this.cfg.provider, ativo));
 
   /** Nível de controle em vigor agora. */
   mode(): ControlMode { return effectiveControl(this.controlOverride, this.cfg.approval.mode); }
@@ -73,6 +80,9 @@ export class DirectEngine implements Engine {
     });
     // O chefe rebobinou, editou ou apagou alguma coisa no painel: o que eu tinha na
     // memória daquela conversa não vale mais. Vale o que o Hub acabou de mandar.
+    hub.on("warm", (m: Extract<HubToNode, { type: "warm" }>) => {
+      this.calor.definir(m.conversationId, m.ativo);
+    });
     hub.on("history.reset", (m: Extract<HubToNode, { type: "history.reset" }>) => {
       this.pararTrabalho(m.conversationId);
       this.saveHistory(m.conversationId, m.messages.map((x) => ({ role: x.role, content: x.content })) as ChatMessage[]);
@@ -150,6 +160,17 @@ export class DirectEngine implements Engine {
 
   private systemPrompt(conversationId: string): string {
     const persona = readPersona(this.cfg);
+    // No Ollama o Gerente não carrega o manual inteiro: o prefill fica caro
+    // e a janela (num_ctx) acompanha este texto, não 32 mil tokens vazios.
+    if ((this.provider.kind === "ollama" || this.provider.kind === "lmstudio") && ehGerenteBot(this.cfg.bot)) {
+      return promptGerenteNoOllama({
+        persona,
+        nome: this.cfg.bot.name,
+        id: this.cfg.bot.id,
+        chefe: process.env.MYBOTS_USER_NAME ?? "o chefe",
+        workspace: this.cfg.workspace,
+      });
+    }
     // Bot de idiomas precisa falar a língua que ensina. Contradizer a regra de
     // "tudo em português" confunde modelos pequenos, então a regra simplesmente
     // não entra para ele: quem manda no idioma é a persona.
@@ -278,6 +299,7 @@ export class DirectEngine implements Engine {
     const { conversationId } = t;
     const ac = new AbortController();
     this.aborts.set(conversationId, ac);
+    this.calor.tocar(conversationId);
     const history = this.loadHistory(conversationId);
     const base = t.fromKind === "bot" ? `[Mensagem do Bot ${t.fromName}]\n${t.text}` : t.text;
     const { texto, media } = await this.olhar(t, base, ac.signal);
@@ -317,30 +339,86 @@ export class DirectEngine implements Engine {
         console.log(`[node] ATENCAO: regras ${emTokens(fixo) + emTokens(volatil)} + historico ${gastoFixo - emTokens(fixo) - emTokens(volatil)} = ${gastoFixo} tokens, acima do teto de ${teto} do ${this.provider.kind}. Cortar ferramentas nao resolve: o peso esta na persona/regras.`);
       }
       const janela = this.janelaDoPrompt(history);
-      let res;
+      // Canal e conversa entre bots não entram no atalho: pode ter dado de cliente ou efeito.
+      const atalho = round === 0 && !t.attachments?.length && !conversationId.startsWith("channel:") && !conversationId.startsWith("pair:");
+      let res: ChatResponse | undefined;
       let inteiro = "";
+      let modeloDaVez = this.provider.model;
+      let saiuTexto = false;
       try {
-        const pedir = (msgs: ChatMessage[]) => this.provider.chat({
-          systemFixo: fixo,
-          system: volatil + (corte.cortadas.length ? `\n- SEM ESTAS FERRAMENTAS agora (nao cabem neste provedor): ${corte.cortadas.join(", ")}. Se precisar de uma delas, diga ao chefe em vez de tentar.` : ""),
-          messages: msgs, tools: corte.defs,
-          maxTokens: tetoSaidaDoProvedor(this.provider.kind, this.cfg.provider.maxTokens), temperature: this.cfg.provider.temperature, signal: ac.signal,
-          onText: (delta) => this.hub.event(conversationId, { kind: "text.delta", messageId, text: delta }),
-        });
-        res = await pedir(janela);
-        inteiro = res.text;
+        const pedir = (prov: Provider, kind: string, msgs: ChatMessage[], tools: ToolDef[], fixoUsado: string) => {
+          const system = volatil + (kind === this.provider.kind && corte.cortadas.length ? `\n- SEM ESTAS FERRAMENTAS agora (nao cabem neste provedor): ${corte.cortadas.join(", ")}. Se precisar de uma delas, diga ao chefe em vez de tentar.` : "");
+          const local = kind === "ollama" || kind === "lmstudio";
+          return prov.chat({
+            systemFixo: fixoUsado,
+            system,
+            messages: msgs,
+            tools,
+            maxTokens: tetoSaidaDoProvedor(kind, this.cfg.provider.maxTokens),
+            temperature: this.cfg.provider.temperature,
+            signal: ac.signal,
+            onText: (delta) => { saiuTexto = true; this.hub.event(conversationId, { kind: "text.delta", messageId, text: delta }); },
+            ollama: local ? {
+              num_ctx: numCtxDe([fixoUsado, system, ...msgs.map((m) => m.content), JSON.stringify(tools)], tetoSaidaDoProvedor(kind, this.cfg.provider.maxTokens)),
+              keep_alive: this.calor.keepAlive(),
+            } : undefined,
+          });
+        };
+        if (atalho) {
+          const hit = this.cache.ler(this.cfg.bot.id, t.text);
+          if (hit) {
+            await emitirEmPedacos(hit, (delta) => this.hub.event(conversationId, { kind: "text.delta", messageId, text: delta }));
+            res = { text: hit, toolCalls: [] };
+            inteiro = hit;
+            modeloDaVez = "cache";
+          }
+        }
+        let emendaProv: Provider = this.provider;
+        let emendaKind = this.provider.kind;
+        let emendaTools: ToolDef[] = corte.defs;
+        let emendaFixo = fixo;
+        if (!res && atalho) {
+          const rota = rotaRapida(this.provider.kind, t.text, false);
+          if (rota) {
+            const rapido = new OpenAICompatProvider(rota.kind, rota.model, rota.baseURL, rota.apiKey);
+            try {
+              const curto = promptCurto(this.cfg.bot.name, this.cfg.bot.id, readPersona(this.cfg));
+              res = await pedir(rapido, rota.kind, janela.slice(-2), [], curto);
+              inteiro = res.text;
+              modeloDaVez = rota.model;
+              emendaProv = rapido;
+              emendaKind = rota.kind;
+              emendaTools = [];
+              emendaFixo = curto;
+            } catch (e) {
+              // Sem token ainda: volta ao provedor do bot. Com texto na tela, não mistura duas respostas.
+              if (ac.signal.aborted || saiuTexto) throw e;
+              res = undefined;
+            }
+          }
+        }
+        if (!res) {
+          saiuTexto = false;
+          res = await pedir(this.provider, this.provider.kind, janela, corte.defs, fixo);
+          inteiro = res.text;
+          modeloDaVez = this.provider.model;
+          emendaProv = this.provider;
+          emendaKind = this.provider.kind;
+          emendaTools = corte.defs;
+          emendaFixo = fixo;
+        }
         // RESPOSTA CORTADA NAO E RESPOSTA. Quando o modelo bate no teto de saida ele
         // para no meio da frase e antes isso chegava como se tivesse terminado. Agora
         // pedimos a continuacao e colamos, ate fechar. O texto ja foi para a tela em
         // pedacos (onText), entao emendar aqui so completa o que faltava.
-        for (let emenda = 0; res.truncado && res.toolCalls.length === 0 && emenda < EMENDAS_MAX && !ac.signal.aborted; emenda++) {
+        for (let emenda = 0; modeloDaVez !== "cache" && res.truncado && res.toolCalls.length === 0 && emenda < EMENDAS_MAX && !ac.signal.aborted; emenda++) {
           this.hub.status("Terminando a resposta", true);
-          res = await pedir([
+          res = await pedir(emendaProv, emendaKind, [
             ...janela,
             { role: "assistant", content: inteiro },
             { role: "user", content: AVISO_CORTE },
-          ]);
-          if (res.usage) this.hub.send({ type: "uso", modelo: this.provider.model, entrada: res.usage.input, saida: res.usage.output, cacheLido: res.usage.cacheLido, cacheGravado: res.usage.cacheGravado });
+          ], emendaTools, emendaFixo);
+          if (res.usage) this.hub.send({ type: "uso", modelo: modeloDaVez, entrada: res.usage.input, saida: res.usage.output, cacheLido: res.usage.cacheLido, cacheGravado: res.usage.cacheGravado });
           inteiro += res.text;
         }
         if (res.truncado && res.toolCalls.length === 0) {
@@ -358,9 +436,10 @@ export class DirectEngine implements Engine {
       }
       // Conta o que essa volta custou. O Hub é quem converte em dinheiro e debita;
       // o nó só informa os tokens que o provedor devolveu.
-      if (res.usage) this.hub.send({ type: "uso", modelo: this.provider.model, entrada: res.usage.input, saida: res.usage.output, cacheLido: res.usage.cacheLido, cacheGravado: res.usage.cacheGravado });
+      if (res.usage) this.hub.send({ type: "uso", modelo: modeloDaVez, entrada: res.usage.input, saida: res.usage.output, cacheLido: res.usage.cacheLido, cacheGravado: res.usage.cacheGravado });
       if (res.toolCalls.length === 0) {
         const text = inteiro || "(sem resposta)";
+        if (atalho) this.cache.guardar(this.cfg.bot.id, t.text, text, false);
         history.push({ role: "assistant", content: text });
         this.hub.event(conversationId, { kind: "text.done", messageId, text });
         break;

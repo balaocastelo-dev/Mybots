@@ -34,7 +34,7 @@ function makeNode(id: string, name: string, cfg: Record<string, unknown>) {
   fs.writeFileSync(path.join(dir, "workspace", "arquivo-de-teste.txt"), "conteúdo");
   fs.writeFileSync(path.join(dir, "mybots-node.json"), JSON.stringify({ hub: `ws://127.0.0.1:${HUB_PORT}`, token: TOKEN, bot: { id, name, role: "Bot de teste" }, workspace: "./workspace", personaFile: "./persona.md", approval: { shell: "sh" }, ...cfg }, null, 2));
   const nodeDir = path.join(ROOT, "packages/node");
-  return spawnTs(id, nodeDir, path.join(nodeDir, "src/index.ts"), {}, [path.join(dir, "mybots-node.json")]);
+  return spawnTs(id, nodeDir, path.join(nodeDir, "src/index.ts"), { MYBOTS_CACHE: "0", MYBOTS_ROTA_RAPIDA: "0" }, [path.join(dir, "mybots-node.json")]);
 }
 
 class UiClient {

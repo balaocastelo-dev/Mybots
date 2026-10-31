@@ -12,6 +12,10 @@ export type FichaEmpresa = {
   segmento?: string;
   contatos?: { email?: string; telefone?: string; whatsapp?: string; endereco?: string; horario?: string };
   logo?: string;
+  cnpj?: string;
+  corPrimaria?: string;
+  corSecundaria?: string;
+  responsavel?: { nome?: string; email?: string; telefone?: string };
 };
 
 function textoFicha(s: unknown): string | undefined {
@@ -41,7 +45,17 @@ export function parseFicha(bruto: unknown): FichaEmpresa | undefined {
     resumo: textoFicha(j.resumo),
     segmento: textoFicha(j.segmento),
     logo: textoFicha(j.logo),
+    cnpj: textoFicha(j.cnpj),
+    corPrimaria: textoFicha(j.corPrimaria),
+    corSecundaria: textoFicha(j.corSecundaria),
     ...(Object.values(contatos).some(Boolean) ? { contatos } : {}),
+    ...(j.responsavel && typeof j.responsavel === "object" ? {
+      responsavel: {
+        nome: textoFicha(j.responsavel.nome),
+        email: textoFicha(j.responsavel.email),
+        telefone: textoFicha(j.responsavel.telefone),
+      },
+    } : {}),
   };
   return Object.values(ficha).some((v) => v !== undefined) ? ficha : undefined;
 }
@@ -55,6 +69,9 @@ function juntarFicha(anterior: FichaEmpresa | undefined, patch: FichaEmpresa | n
       if (!textoFicha(junta.contatos[k])) delete junta.contatos[k];
     }
     if (!Object.keys(junta.contatos).length) delete junta.contatos;
+  }
+  if (patch.responsavel || anterior?.responsavel) {
+    junta.responsavel = { ...(anterior?.responsavel ?? {}), ...(patch.responsavel ?? {}) };
   }
   const limpa = parseFicha(junta);
   return limpa ? JSON.stringify(limpa) : null;

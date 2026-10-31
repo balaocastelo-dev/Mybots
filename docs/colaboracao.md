@@ -192,7 +192,7 @@ registrarAuditoria(evento: {
 Ao parar, a delegação registra:
 
 ```ts
-import { registrarAoParar } from "./colab/parar.ts";
+import { registrarAoParar } from "./packages/hub/src/colab/parar.ts";
 
 registrarAoParar(({ alvo, por }) => {
   // por === "humano"

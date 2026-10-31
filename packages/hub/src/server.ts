@@ -33,6 +33,7 @@ import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
 import { registerPainel } from "./painel.js";
 import { estadoDaChave } from "./chaves.js";
+import { registrarRotasColab } from "./colab/rotas.js";
 
 export async function startServer(hub: Hub) {
   const app = Fastify({ logger: false, bodyLimit: 60 * 1024 * 1024 });
@@ -295,11 +296,13 @@ export async function startServer(hub: Hub) {
     return m;
   });
   app.get("/api/approvals", async () => hub.db.pendingApprovals());
-  app.post("/api/approvals/:id", async (req) => {
-    const body = req.body as { allow: boolean; remember?: boolean };
-    hub.resolveApproval((req.params as any).id, !!body.allow, body.remember);
+  app.post("/api/approvals/:id", async (req, reply) => {
+    const body = req.body as { allow: boolean; remember?: boolean; de?: string };
+    const r = hub.responderAprovacao((req.params as any).id, !!body.allow, body.remember, body.de);
+    if (!r.ok) return reply.code(403).send(r);
     return { ok: true };
   });
+  registrarRotasColab(app, hub);
   app.get("/api/questions", async () => hub.db.pendingQuestions());
   app.post("/api/questions/:id", async (req) => {
     const body = req.body as { answer: string };

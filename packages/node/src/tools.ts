@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { type ApprovalKind, type CartaoDeAcao, type ControlMode, type Risk, isHeavyCommand, needsHumanApproval } from "@mybots/shared";
+import { classificarAcaoSensivel, mensagemLiberaEnvioExterno } from "../../hub/src/colab/seguranca.ts";
 import { checkNow, describe, limitsFromEnv, waitForRoom } from "./resources.js";
 import type { NodeConfig } from "./config.js";
 import type { HubClient } from "./hubClient.js";
@@ -23,6 +24,8 @@ export type ToolContext = {
   signal: AbortSignal;
   /** nível de controle em vigor (o do nó, ou o global do Hub se houver) */
   mode: ControlMode;
+  /** Quem acordou este turno. Só "humano" libera envio externo. */
+  autorTurno?: string;
 };
 
 /** Processo da porta 8787 (Portal de Agentes do o chefe) é intocável, em qualquer modo. */
@@ -101,7 +104,13 @@ export function tocaCoracaoDoSistema(cmd: string): string | null {
  * Aprovações automáticas vão para a auditoria do Hub.
  */
 export async function approveByMode(ctx: ToolContext, kind: ApprovalKind, tool: string, input: unknown, risk: Risk, description: string): Promise<boolean> {
-  if (needsHumanApproval(ctx.mode, kind, risk)) {
+  const gate = classificarAcaoSensivel(tool, input, description);
+  if (gate === "envio" && !mensagemLiberaEnvioExterno(ctx.autorTurno)) {
+    ctx.hub.send({ type: "audit", action: "colab.bloqueio", detail: { motivo: "aprovacao", de: ctx.cfg.bot.id, ferramenta: tool, autor: ctx.autorTurno ?? null, conversationId: ctx.conversationId } });
+    return false;
+  }
+  // Envio, pagamento e exclusão passam pelo cartão mesmo no modo deus.
+  if (gate || needsHumanApproval(ctx.mode, kind, risk)) {
     ctx.setStatus("Aguardando aprovação do chefe");
     return ctx.approve(tool, input, risk, description);
   }
@@ -190,8 +199,8 @@ export const TOOL_DEFS: ToolDef[] = [
       required: ["acao", "bot"],
     },
   },
-  { name: "ask_bot", description: "Pergunta algo a outro Bot da equipe e espera a resposta dele.", parameters: { type: "object", properties: { bot: { type: "string", description: "id ou nome do Bot" }, question: { type: "string" } }, required: ["bot", "question"] } },
-  { name: "send_to_bot", description: "Manda uma mensagem a outro Bot sem esperar resposta.", parameters: { type: "object", properties: { bot: { type: "string" }, text: { type: "string" } }, required: ["bot", "text"] } },
+  { name: "ask_bot", description: "Pergunta algo a outro Bot da equipe e espera a resposta dele.", parameters: { type: "object", properties: { bot: { type: "string", description: "id ou nome do Bot" }, question: { type: "string" }, profundidade: { type: "number", description: "quantas delegações já estão empilhadas; acima de 3 o Hub recusa" } }, required: ["bot", "question"] } },
+  { name: "send_to_bot", description: "Manda uma mensagem a outro Bot sem esperar resposta. prioridade true acorda o colega agora; sem prioridade o texto fica para o próximo turno dele, marcado como vindo de você e não do chefe.", parameters: { type: "object", properties: { bot: { type: "string" }, text: { type: "string" }, prioridade: { type: "boolean" }, profundidade: { type: "number" }, contexto: { type: "string" } }, required: ["bot", "text"] } },
   { name: "set_status", description: "Atualiza o status curto mostrado na lista de contatos (ex.: 'Lendo o o ERP').", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
   { name: "notify_user", description: "Notifica o chefe sobre algo (terminou, precisa de atenção) sem esperar resposta.", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
   { name: "remember", description: "Guarda um fato na memória compartilhada da equipe.", parameters: { type: "object", properties: { key: { type: "string" }, value: { type: "string" } }, required: ["key", "value"] } },
@@ -337,11 +346,14 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
       }
       case "ask_bot": {
         ctx.setStatus(`Consultando ${String(args.bot)}`);
-        const r = await ctx.hub.call((callId) => ({ type: "ask_bot", callId, conversationId: ctx.conversationId, to: String(args.bot ?? ""), text: String(args.question ?? ""), wait: true }));
+        const r = await ctx.hub.call((callId) => ({ type: "ask_bot", callId, conversationId: ctx.conversationId, to: String(args.bot ?? ""), text: String(args.question ?? ""), wait: true, profundidade: Number(args.profundidade) || 0 }));
         return { output: String(r.data), ok: r.ok };
       }
       case "send_to_bot": {
-        const r = await ctx.hub.call((callId) => ({ type: "ask_bot", callId, conversationId: ctx.conversationId, to: String(args.bot ?? ""), text: String(args.text ?? ""), wait: false }), 15_000);
+        const r = await ctx.hub.call((callId) => ({
+          type: "ask_bot", callId, conversationId: ctx.conversationId, to: String(args.bot ?? ""), text: String(args.text ?? ""), wait: false,
+          prioridade: args.prioridade === true, profundidade: Number(args.profundidade) || 0, contexto: args.contexto ? String(args.contexto) : undefined,
+        }), 15_000);
         return { output: String(r.data), ok: r.ok };
       }
       case "set_status": ctx.setStatus(String(args.text ?? "").slice(0, 80)); return { output: "ok", ok: true };
@@ -817,7 +829,7 @@ async function redesSociais(args: Record<string, any>, ctx: ToolContext): Promis
     const permitido = await approveByMode(ctx, "publicacao", "redes_sociais",
       { rede, conta: args.conta ?? "ativa", arquivo: path.basename(r.abs), legenda }, "high",
       `Publicar ${video ? "vídeo" : "foto"} no ${rede} da loja (${args.conta ?? "conta ativa"}): "${legenda.slice(0, 180)}"`);
-    if (!permitido) return { output: `O chefe não aprovou. Nada foi publicado no ${rede}.`, ok: true };
+    if (!permitido) return { output: `Nada foi publicado no ${rede}. Só uma mensagem com autor 'humano' libera envio externo, e publicar passa pelo OK em /api/approvals. Aprovação de outro bot não conta.`, ok: false };
 
     ctx.setStatus(`Publicando no ${rede}`);
     return rodarScript("redes.py", [...base, "--de-verdade"], ctx, 900_000);
@@ -847,7 +859,7 @@ async function ferramentaEmail(args: Record<string, any>, ctx: ToolContext): Pro
     const permitido = await approveByMode(ctx, "publicacao", "email",
       { para, copia: args.copia ?? null, assunto, anexo: args.anexo ?? null, texto: texto.slice(0, 500) }, "high",
       `Enviar e-mail para ${para}${args.copia ? ` (cópia: ${args.copia})` : ""} — assunto "${assunto}"`);
-    if (!permitido) return { output: "O chefe não aprovou. O e-mail não foi enviado.", ok: true };
+    if (!permitido) return { output: "O e-mail não foi enviado. Só uma mensagem com autor 'humano' libera envio externo, e o envio passa pelo OK em /api/approvals. Aprovação de outro bot não conta.", ok: false };
 
     ctx.setStatus("Enviando e-mail");
     return rodarScript("email-tool.py", argv, ctx, 180_000);
@@ -939,7 +951,11 @@ async function ferramentaCelular(args: Record<string, any>, ctx: ToolContext): P
       && /\b(pagar|pagamento|pix|transferir|apagar|excluir|formatar|resetar|factory|enviar|mandar mensagem|whatsapp|banco)\b/i.test(`${texto} ${pacote}`));
   let aprovado = false;
   if (sensivel) {
-    aprovado = await ctx.approve("celular", { acao, pacote, texto: texto.slice(0, 80) }, "high", `No celular da empresa: ${acao}${pacote ? " " + pacote : ""}`);
+    const classe = classificarAcaoSensivel("celular", { acao, pacote, texto }, `${acao} ${texto} ${pacote}`);
+    if (classe === "envio" && !mensagemLiberaEnvioExterno(ctx.autorTurno)) {
+      return { output: "Não enviei pelo celular. Só uma mensagem com autor 'humano' libera envio externo. Aprovação de outro bot não conta.", ok: false };
+    }
+    aprovado = await ctx.approve("celular", { acao, pacote, texto: texto.slice(0, 80) }, "high", `No celular da empresa: ${acao}${pacote ? " " + pacote : ""} ${texto.slice(0, 80)}`);
     if (!aprovado) return { output: "O chefe não aprovou. Não mexi no celular.", ok: true };
   }
   ctx.setStatus(acao === "print" ? "Fotografando o celular" : "No celular");
@@ -1131,7 +1147,7 @@ async function ferramentaWhatsapp(args: Record<string, any>, ctx: ToolContext): 
   }
 
   const permitido = await approveByMode(ctx, "publicacao", "whatsapp", { acao, para, texto: args.texto ?? null, arquivo: args.arquivo ?? null }, "high", descricao);
-  if (!permitido) return { output: "O chefe não aprovou. Não mandei nada no WhatsApp.", ok: true };
+  if (!permitido) return { output: "Não mandei nada no WhatsApp. Só uma mensagem com autor 'humano' libera envio externo, e o envio ainda passa pelo OK em /api/approvals. Aprovação de outro bot não conta.", ok: false };
 
   ctx.setStatus("Mandando no WhatsApp");
   // Sempre pela conta da PRÓPRIA empresa. O servidor do CRM da loja só entra quando

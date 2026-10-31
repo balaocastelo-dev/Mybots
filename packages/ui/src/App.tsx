@@ -19,6 +19,7 @@ import { CelularDaEmpresa } from "./celular";
 import { TelaDoMac } from "./mac";
 import { Fragment } from "react";
 import { usePainelPrefs, nomeNaTela, ChipTrocas, FolhaAbrirTroca, TrocaEntreBots, DialogoTexto, type Troca, type PrefDoBot } from "./painel";
+import { agruparPorEmpresa } from "./lista";
 
 type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
 
@@ -98,19 +99,27 @@ export function App() {
         || nomeNaTela(a, painel.prefs).localeCompare(nomeNaTela(b, painel.prefs)));
   }, [state.bots, filter, painel.prefs, mostrarEscondidos, empresaAtiva]);
 
-  /** A mesma lista, com os cabeçalhos de seção no lugar certo. Fixados sempre
-   *  em cima; depois as seções na ordem em que ele criou; soltos por último. */
+  /** Fixados no topo. O resto entra na empresa dele; seção vira subtítulo. */
   const listaDaBarra = useMemo(() => {
-    const chave = (b: BotSummary) => painel.prefs[b.id]?.fixado ? "📌 Fixados" : (painel.prefs[b.id]?.secao || "");
-    const grupos = new Map<string, BotSummary[]>();
-    for (const b of bots) { const k = chave(b); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k)!.push(b); }
-    const peso = (n: string) => n.endsWith("Fixados") ? -1 : n === "" ? 99 : painel.secoes.indexOf(n);
+    const porId = new Map(bots.map((b) => [b.id, b]));
+    const grupos = agruparPorEmpresa(
+      bots.map((b) => ({
+        id: b.id,
+        fixado: !!painel.prefs[b.id]?.fixado,
+        secao: painel.prefs[b.id]?.secao || undefined,
+        empresaId: b.empresaId,
+      })),
+      empresas,
+    );
     const saida: Array<{ b: BotSummary; secao?: string }> = [];
-    for (const n of [...grupos.keys()].sort((a, b) => peso(a) - peso(b))) {
-      grupos.get(n)!.forEach((b, i) => saida.push({ b, secao: i === 0 && n ? n : undefined }));
+    for (const g of grupos) {
+      g.ids.forEach((id, i) => {
+        const b = porId.get(id);
+        if (b) saida.push({ b, secao: i === 0 ? g.titulo : undefined });
+      });
     }
     return saida;
-  }, [bots, painel.prefs, painel.secoes]);
+  }, [bots, painel.prefs, empresas]);
 
   const target: Target | null = useMemo(() => {
     if (!selected) return null;
@@ -215,7 +224,7 @@ export function App() {
             <li key={b.id} className={(dmConversation(b.id) === selected ? "active" : "") + (b.online ? "" : " offline")}
               onClick={() => { cutucar(b.id); setVerTrabalhos(false); setSelected(dmConversation(b.id)); if (window.innerWidth < 620) setSidebarOpen(false); }}
               onContextMenu={(e) => { e.preventDefault(); setSelected(dmConversation(b.id)); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
-              <Avatar key={cutuca.id === b.id ? cutuca.n : 0} bot={b} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
+              <Avatar key={cutuca.id === b.id ? cutuca.n : 0} bot={b} size={36} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
               <div className="bot-text">
                 <div className="bot-name">{(b.manages?.length || b.gerente) ? <span className="coroa" title={b.manages?.length ? `Gerencia ${b.manages.length} bot(s)` : "Gerente Geral da empresa"}>👑</span> : null}{painel.prefs[b.id]?.fixado ? <span className="pin" title="Fixado">📌</span> : null}{nomeNaTela(b, painel.prefs)}{pendingFor(b.id) > 0 && <span className="badge warn">{pendingFor(b.id)}</span>}{(b.unread ?? 0) > 0 && dmConversation(b.id) !== selected && <span className="badge">{b.unread}</span>}</div>
                 {b.role && <div className="papel">{b.role}</div>}
@@ -241,7 +250,7 @@ export function App() {
           )}
           {state.groups.map((g) => (
             <li key={g.id} className={groupConversation(g.id) === selected ? "active" : ""} onClick={() => { setVerTrabalhos(false); setSelected(groupConversation(g.id)); if (window.innerWidth < 620) setSidebarOpen(false); }}>
-              <div className="avatar group-avatar" style={{ width: 88, height: 88 }}>👥</div>
+              <div className="avatar group-avatar" style={{ width: 36, height: 36 }}>👥</div>
               <div className="bot-text">
                 <div className="bot-name">{g.name}</div>
                 <div className="bot-status">{g.members.map((m) => state.bots.find((b) => b.id === m)?.name.split(" ")[0] ?? m).join(", ")}</div>
@@ -1256,7 +1265,7 @@ function Conversation({ target, conversationId, bots, messages, tools, approvals
     <>
       <header className="chat-head">
         <button className="icon-btn only-mobile" onClick={onOpenSidebar} title="Bots">☰</button>
-        {bot ? <Avatar bot={bot} size={80} /> : <div className="avatar group-avatar" style={{ width: 80, height: 80 }}>👥</div>}
+        {bot ? <Avatar bot={bot} size={40} /> : <div className="avatar group-avatar" style={{ width: 40, height: 40 }}>👥</div>}
         <div className="chat-title">
           <b>{title}</b>
           <small><span className="sub-texto">{subtitle}</span>{bot?.model && <span className="chip">{bot.engine} · {bot.provider}/{bot.model}</span>}{bot?.online && <span className={"chip mode-" + effectiveControl(control.global, bot.controlMode)} title={CONTROL_DESCRIPTIONS[effectiveControl(control.global, bot.controlMode)]}>{CONTROL_LABELS[effectiveControl(control.global, bot.controlMode)]}{control.global ? " (global)" : ""}</span>}</small>
@@ -1405,6 +1414,8 @@ function Conversation({ target, conversationId, bots, messages, tools, approvals
           conversationId={conversationId}
           onFechar={alternarPc}
           onEvent={onEvent}
+          rotinas={routines.map((r) => ({ id: r.id, nome: r.name, cron: r.cron }))}
+          arquivos={messages.flatMap((m) => (m.meta?.files as Array<{ name: string; url: string }> | undefined) ?? []).slice(-12).reverse()}
         />
       )}
       </div>

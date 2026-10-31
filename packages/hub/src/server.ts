@@ -6,6 +6,7 @@ import path from "node:path";
 import { isControlMode } from "@mybots/shared";
 import { config, tokenAllows, botForToken, raizDoProjeto } from "./config.js";
 import { Hub } from "./hub.js";
+import type { FichaEmpresa } from "./db.js";
 import { registerMcp } from "./mcp.js";
 import { sugerirEmpresa } from "./sugerirEmpresa.js";
 import { DOCS_LEGAIS, VERSAO_LEGAL } from "./legal.js";
@@ -540,7 +541,15 @@ export async function startServer(hub: Hub) {
       return { url: f.url, name: f.name };
     };
     try {
-      return await pecaDaDemo(passo, { nome: String(b.nome ?? "a empresa"), site: b.site, resumo: b.resumo, regras: b.regras }, salvar, b.imagem);
+      return await pecaDaDemo(passo, {
+        nome: String(b.nome ?? "a empresa"),
+        site: b.site, instagram: b.instagram, facebook: b.facebook, segmento: b.segmento,
+        resumo: b.resumo, regras: b.regras,
+        contatos: b.contatos && typeof b.contatos === "object" ? b.contatos : undefined,
+        time: Array.isArray(b.time) ? b.time : undefined,
+        anotacoes: Array.isArray(b.anotacoes) ? b.anotacoes : undefined,
+        logo: b.logo, arte: b.arte,
+      }, salvar, b.imagem);
     } catch (e) {
       return reply.code(500).send({ error: (e as Error).message });
     }
@@ -556,7 +565,13 @@ export async function startServer(hub: Hub) {
     const id = String(b.id ?? b.nome).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
     if (!id) return reply.code(400).send({ error: "nome inválido" });
-    const e = hub.db.saveEmpresa({ id, nome: b.nome.trim(), regras: b.regras ?? "", cor: b.cor, idioma: b.idioma ?? "pt" });
+    const e = hub.db.saveEmpresa({
+      id, nome: b.nome.trim(), regras: b.regras ?? "", cor: b.cor, idioma: b.idioma ?? "pt",
+      ficha: {
+        site: b.site, instagram: b.instagram, facebook: b.facebook,
+        resumo: b.resumo, segmento: b.segmento, contatos: b.contatos, logo: b.logo,
+      },
+    });
     hub.db.audit(null, "empresa.salva", { id });
     hub.broadcastKnowledge();
     // Empresa nasce com o WhatsApp dela subindo: o QR aparece no painel em segundos.
@@ -578,7 +593,15 @@ export async function startServer(hub: Hub) {
     const atual = hub.db.getEmpresa(id);
     if (!atual) return reply.code(404).send({ error: "empresa não encontrada" });
     const b = req.body as any;
-    const e = hub.db.saveEmpresa({ id, nome: b.nome ?? atual.nome, regras: b.regras ?? atual.regras, cor: b.cor ?? atual.cor, idioma: b.idioma ?? atual.idioma });
+    const fichaPatch: FichaEmpresa = {};
+    for (const k of ["site", "instagram", "facebook", "resumo", "segmento", "logo"] as const) {
+      if (b[k] !== undefined) fichaPatch[k] = String(b[k]);
+    }
+    if (b.contatos && typeof b.contatos === "object") fichaPatch.contatos = b.contatos;
+    const e = hub.db.saveEmpresa({
+      id, nome: b.nome ?? atual.nome, regras: b.regras ?? atual.regras, cor: b.cor ?? atual.cor, idioma: b.idioma ?? atual.idioma,
+      ...(Object.keys(fichaPatch).length ? { ficha: fichaPatch } : {}),
+    });
     hub.db.audit(null, "empresa.salva", { id });
     hub.broadcastKnowledge();   // as regras da empresa vão no prompt: todo bot dela recebe agora
     return e;

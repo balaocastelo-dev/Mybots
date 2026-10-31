@@ -3,6 +3,63 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Saber, SaberHit, BotInfo, Group, PendingApproval, PendingQuestion, Routine, Sender, StoredMessage, Risk } from "@mybots/shared";
 
+/** O que a tela da primeira empresa e o Gerente guardam além do nome e das regras. */
+export type FichaEmpresa = {
+  site?: string;
+  instagram?: string;
+  facebook?: string;
+  resumo?: string;
+  segmento?: string;
+  contatos?: { email?: string; telefone?: string; whatsapp?: string; endereco?: string; horario?: string };
+  logo?: string;
+};
+
+function textoFicha(s: unknown): string | undefined {
+  const t = String(s ?? "").replace(/\s+/g, " ").trim();
+  return t || undefined;
+}
+
+export function parseFicha(bruto: unknown): FichaEmpresa | undefined {
+  if (!bruto) return undefined;
+  let j: any = bruto;
+  if (typeof bruto === "string") {
+    try { j = JSON.parse(bruto); } catch { return undefined; }
+  }
+  if (!j || typeof j !== "object") return undefined;
+  const contatosBrutos = j.contatos && typeof j.contatos === "object" ? j.contatos : {};
+  const contatos = {
+    email: textoFicha(contatosBrutos.email),
+    telefone: textoFicha(contatosBrutos.telefone),
+    whatsapp: textoFicha(contatosBrutos.whatsapp),
+    endereco: textoFicha(contatosBrutos.endereco),
+    horario: textoFicha(contatosBrutos.horario),
+  };
+  const ficha: FichaEmpresa = {
+    site: textoFicha(j.site),
+    instagram: textoFicha(j.instagram),
+    facebook: textoFicha(j.facebook),
+    resumo: textoFicha(j.resumo),
+    segmento: textoFicha(j.segmento),
+    logo: textoFicha(j.logo),
+    ...(Object.values(contatos).some(Boolean) ? { contatos } : {}),
+  };
+  return Object.values(ficha).some((v) => v !== undefined) ? ficha : undefined;
+}
+
+function juntarFicha(anterior: FichaEmpresa | undefined, patch: FichaEmpresa | null): string | null {
+  if (patch === null) return null;
+  const junta: FichaEmpresa = { ...anterior, ...parseFicha(patch) };
+  if (patch.contatos || anterior?.contatos) {
+    junta.contatos = { ...(anterior?.contatos ?? {}), ...(patch.contatos ?? {}) };
+    for (const k of Object.keys(junta.contatos) as Array<keyof NonNullable<FichaEmpresa["contatos"]>>) {
+      if (!textoFicha(junta.contatos[k])) delete junta.contatos[k];
+    }
+    if (!Object.keys(junta.contatos).length) delete junta.contatos;
+  }
+  const limpa = parseFicha(junta);
+  return limpa ? JSON.stringify(limpa) : null;
+}
+
 export class Db {
   private db: Database.Database;
 
@@ -205,18 +262,22 @@ export class Db {
   }
 
   // ---- empresas ----
-  listEmpresas(): Array<{ id: string; nome: string; regras: string; cor?: string; criadaEm: number; bots: number }> {
+  listEmpresas(): Array<{ id: string; nome: string; regras: string; cor?: string; idioma?: "pt" | "en" | "es"; ficha?: FichaEmpresa; criadaEm: number; bots: number }> {
     const rows = this.db.prepare(`SELECT * FROM empresas ORDER BY nome`).all() as any[];
     return rows.map((r) => ({
-      id: r.id, nome: r.nome, regras: r.regras ?? "", cor: r.cor ?? undefined, idioma: (r.idioma ?? "pt") as "pt" | "en" | "es", criadaEm: r.criada_em,
+      id: r.id, nome: r.nome, regras: r.regras ?? "", cor: r.cor ?? undefined, idioma: (r.idioma ?? "pt") as "pt" | "en" | "es",
+      ficha: parseFicha(r.ficha), criadaEm: r.criada_em,
       bots: (this.db.prepare(`SELECT COUNT(*) c FROM bots WHERE empresa_id=?`).get(r.id) as any).c,
     }));
   }
   getEmpresa(id: string) { return this.listEmpresas().find((e) => e.id === id); }
-  saveEmpresa(e: { id: string; nome: string; regras?: string; cor?: string; idioma?: string }) {
-    this.db.prepare(`INSERT INTO empresas (id, nome, regras, cor, idioma, criada_em) VALUES (?,?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET nome=excluded.nome, regras=excluded.regras, cor=excluded.cor, idioma=excluded.idioma`)
-      .run(e.id, e.nome, e.regras ?? "", e.cor ?? null, e.idioma ?? "pt", Date.now());
+  saveEmpresa(e: { id: string; nome: string; regras?: string; cor?: string; idioma?: string; ficha?: FichaEmpresa | null }) {
+    this.adicionarColuna("empresas", "ficha", "TEXT");
+    const atual = this.db.prepare(`SELECT ficha FROM empresas WHERE id=?`).get(e.id) as { ficha?: string } | undefined;
+    const fichaJson = e.ficha === undefined ? (atual?.ficha ?? null) : juntarFicha(parseFicha(atual?.ficha), e.ficha);
+    this.db.prepare(`INSERT INTO empresas (id, nome, regras, cor, idioma, criada_em, ficha) VALUES (?,?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET nome=excluded.nome, regras=excluded.regras, cor=excluded.cor, idioma=excluded.idioma, ficha=excluded.ficha`)
+      .run(e.id, e.nome, e.regras ?? "", e.cor ?? null, e.idioma ?? "pt", Date.now(), fichaJson);
     return this.getEmpresa(e.id)!;
   }
   /** So apaga empresa vazia: bot orfao sem empresa vira bot do sistema sem querer. */
@@ -296,6 +357,9 @@ export class Db {
     this.adicionarColuna("saberes", "empresa_id", "TEXT");
     // Idioma nativo da empresa: pt, en ou es. É o que os bots dela falam por padrão.
     this.adicionarColuna("empresas", "idioma", "TEXT NOT NULL DEFAULT 'pt'");
+    // Site, Instagram, resumo, segmento, contatos e logo. JSON para não espalhar coluna
+    // cada vez que a ficha ganha um campo — e para empresa antiga simplesmente não ter.
+    this.adicionarColuna("empresas", "ficha", "TEXT");
     // Registro de aceite dos documentos legais, por empresa. Guarda a VERSÃO aceita:
     // documento que muda depois exige aceite de novo, senão o registro mente.
     this.db.exec(`CREATE TABLE IF NOT EXISTS consentimentos (
@@ -673,6 +737,12 @@ export class Db {
     const rows = this.db.prepare(`SELECT * FROM saberes WHERE empresa_id IS NULL OR empresa_id = ? ORDER BY tipo, titulo`)
       .all(empresaId ?? null) as any[];
     return rows.map((r) => this.saberDe(r));
+  }
+  /** Só o que foi anotado DESTA empresa. A base universal não entra: senão a folha
+   *  de uma casa nova herdaria texto de outra instalação. */
+  saberesDaEmpresa(empresaId: string): Saber[] {
+    return (this.db.prepare(`SELECT * FROM saberes WHERE empresa_id = ? ORDER BY tipo, titulo`).all(empresaId) as any[])
+      .map((r) => this.saberDe(r));
   }
   /** Tudo, sem escopo: só para o painel e a manutenção. */
   listSaberesTodos(): Saber[] {

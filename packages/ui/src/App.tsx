@@ -2062,7 +2062,7 @@ function EmpresasDialog({ empresas, bots, onClose }: { empresas: Array<{ id: str
   };
   const criar = async () => {
     if (!nome.trim()) return;
-    const r = await api("/empresas", { method: "POST", body: JSON.stringify({ nome, regras: sugestao?.regras ?? "" }) });
+    const r = await api("/empresas", { method: "POST", body: JSON.stringify({ nome, regras: sugestao?.regras ?? "", site, instagram: insta, resumo: sugestao?.resumo ?? "" }) });
     if (!r.ok) { setErr((await r.json()).error ?? "erro"); return; }
     const e = await r.json();
     setNome(""); setSite(""); setInsta(""); setSugestao(null);

@@ -1535,9 +1535,26 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
 .pc-comandos { display: flex; flex-wrap: wrap; gap: 6px; flex: none; }
 .pc-comandos .btn { font-size: 12.5px; padding: 5px 10px; }
 .pc-comandos .btn.gravando { border-color: var(--danger, #d4453c); color: var(--danger, #d4453c); }
-.pc-abas { display: flex; gap: 6px; padding: 8px 10px 0; }
-.pc-abas button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
-.pc-abas button.on { background: var(--panel-2); border-color: var(--accent); }
+.pc-segmento {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;
+  margin: 10px 10px 0; padding: 4px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px;
+  flex: none;
+}
+.pc-segmento button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-width: 0; min-height: 58px; padding: 8px 4px;
+  border: 0; border-radius: 11px; background: transparent; color: var(--muted);
+  font: 600 11.5px/1.15 var(--fonte); cursor: pointer;
+}
+.pc-segmento button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-segmento button.on {
+  background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 1px var(--line);
+}
+.pc-segmento button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lado-trabalho { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow: auto; min-height: 0; }
+.lado-trabalho > b { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--fraco); }
 .cel-emp { display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 0; overflow: auto; }
 .cel-emp-passo { font-size: 12.5px; margin: 0; }
 .cel-visor { min-height: 220px; }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { HubToUi, UsoDoPc } from "@mybots/shared";
 import { CelularDaEmpresaPainel } from "./celularEmpresa";
+import { Icone } from "./icones";
 
 /**
  * O PC da empresa, do lado do chat.
@@ -238,7 +239,13 @@ function VisaoDaEmpresa({ nome, empresaId, rotinas, arquivos }: { nome: string; 
   );
 }
 
-type AbaLado = "visao" | "pc" | "celular" | "rotinas" | "arquivos";
+type AbaLado = "pc" | "celular" | "trabalho";
+
+const ABAS: { id: AbaLado; rotulo: string; icone: "pc" | "celular" | "trabalho" }[] = [
+  { id: "pc", rotulo: "Tela do PC", icone: "pc" },
+  { id: "celular", rotulo: "Celular", icone: "celular" },
+  { id: "trabalho", rotulo: "Trabalho", icone: "trabalho" },
+];
 
 export function PainelDoPc({
   empresaId, nome, onFechar, onEvent, conversationId, rotinas = [], arquivos = [],
@@ -286,26 +293,29 @@ export function PainelDoPc({
         </div>
         <button className="icon-btn" type="button" title="Recolher o painel" onClick={onFechar}>›</button>
       </header>
-      <div className="pc-abas" role="tablist">
-        {(["visao", "pc", "celular", "rotinas", "arquivos"] as const).map((id) => (
-          <button key={id} type="button" role="tab" aria-selected={aba === id} className={aba === id ? "on" : ""} onClick={() => setAba(id)}>
-            {id === "visao" ? "Geral" : id === "pc" ? "PC" : id === "celular" ? "Celular" : id === "rotinas" ? "Rotinas" : "Arquivos"}
+      <div className="pc-segmento" role="tablist" aria-label="O que ver neste painel">
+        {ABAS.map((item) => (
+          <button key={item.id} type="button" role="tab" aria-selected={aba === item.id} className={aba === item.id ? "on" : ""} onClick={() => setAba(item.id)}>
+            <Icone nome={item.icone} />
+            <span>{item.rotulo}</span>
           </button>
         ))}
       </div>
-      {aba === "visao" && <VisaoDaEmpresa nome={nome} empresaId={empresaId} rotinas={rotinas.length} arquivos={arquivos.length} />}
       {!empresaId && (aba === "pc" || aba === "celular") && <p className="pc-sem-empresa">Este bot não está numa empresa. O PC e o celular são um de cada, compartilhados pelos bots dela.</p>}
       {empresaId && aba === "pc" && <TelaDaEmpresa empresaId={empresaId} nome={nome} onEvent={onEvent} conversationId={conversationId} compacto />}
       {empresaId && aba === "celular" && <CelularDaEmpresaPainel empresaId={empresaId} nome={nome} conversationId={conversationId} onEvent={onEvent} aoVivo />}
-      {aba === "rotinas" && (
-        <ul className="pc-hist lado-lista">
-          {rotinas.length ? rotinas.map((r) => <li key={r.id}><b>{r.nome}</b><span>{r.cron}</span></li>) : <p className="muted">Nenhuma rotina neste bot.</p>}
-        </ul>
-      )}
-      {aba === "arquivos" && (
-        <ul className="pc-hist lado-lista">
-          {arquivos.length ? arquivos.map((a, i) => <li key={a.url + i}><a href={comChave(a.url)}>{a.name}</a></li>) : <p className="muted">Os arquivos desta conversa aparecem aqui.</p>}
-        </ul>
+      {aba === "trabalho" && (
+        <div className="lado-trabalho">
+          <VisaoDaEmpresa nome={nome} empresaId={empresaId} rotinas={rotinas.length} arquivos={arquivos.length} />
+          <b>Rotinas</b>
+          <ul className="pc-hist lado-lista">
+            {rotinas.length ? rotinas.map((r) => <li key={r.id}><b>{r.nome}</b><span>{r.cron}</span></li>) : <li className="muted">Nenhuma rotina neste bot.</li>}
+          </ul>
+          <b>Arquivos</b>
+          <ul className="pc-hist lado-lista">
+            {arquivos.length ? arquivos.map((a, i) => <li key={a.url + i}><a href={comChave(a.url)}>{a.name}</a></li>) : <li className="muted">Os arquivos desta conversa aparecem aqui.</li>}
+          </ul>
+        </div>
       )}
     </aside>
   );

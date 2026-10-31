@@ -20,6 +20,7 @@ import { config, tokenAllows , raizDoProjeto } from "./config.js";
 import { nextRunOf, validateCron } from "./scheduler.js";
 import { voiceConfig } from "./voice.js";
 import { splitThoughts } from "./thoughts.js";
+import { devePublicar } from "./fluxo.js";
 import { MediaService } from "./media.js";
 import { SalaDeConversa } from "./sala.js";
 import type { Attachment, ColabEvento, MediaKind, MediaResult, UsoDoPc } from "@mybots/shared";
@@ -36,6 +37,8 @@ import {
 } from "./celularEmpresa.js";
 import { argumentosScrcpy } from "./scrcpy.js";
 import { spawn } from "node:child_process";
+import { ehHumano, FilaDeTarefas } from "./colab/fila.js";
+import { notificarParada, registrarAoParar } from "./colab/parar.js";
 
 type NodeConn = {
   ws: WebSocket;
@@ -209,6 +212,11 @@ export class Hub {
   /** imagens/vídeos: geração com cota e preparo de vídeos recebidos */
   readonly media: MediaService;
 
+  /** Fila de tarefas delegadas entre bots. Persistente. */
+  readonly tarefas: FilaDeTarefas;
+  private relogioTarefas: NodeJS.Timeout | null = null;
+  private soltarParar: (() => void) | null = null;
+
   /** O WhatsApp de cada empresa: conta propria, QR propria. */
   readonly whats: WhatsAppDasEmpresas;
 
@@ -273,6 +281,28 @@ export class Hub {
     });
     USER.name = this.userName;
     this.media = new MediaService(this.db, (botId, name, mime, data) => this.saveFile(botId, name, mime, data), (id) => this.db.getFile(id) ?? undefined);
+    this.tarefas = new FilaDeTarefas(this.db, {
+      emitir: (ev) => this.broadcastUi({ type: "colab", ...ev }),
+      online: (botId) => {
+        const n = this.nodes.get(botId);
+        return !!n && n.ws.readyState === n.ws.OPEN;
+      },
+      acordar: (p) => {
+        const sender: Sender = ehHumano(p.autorId)
+          ? { kind: "user", id: p.autorId, name: this.userName }
+          : this.botSender(p.autorId);
+        const m = this.storeMessage(p.conversationId, sender, p.texto, { tarefa: p.tarefaId });
+        if (ehHumano(p.botId)) return true;
+        return this.sendNode(p.botId, { type: "message", conversationId: p.conversationId, messageId: m.id, from: sender, text: p.texto });
+      },
+    });
+    this.tarefas.vencerPrazos();
+    this.relogioTarefas = setInterval(() => {
+      this.tarefas.vencerPrazos();
+      for (const id of this.nodes.keys()) this.tarefas.despachar(id);
+    }, 5_000);
+    if (typeof this.relogioTarefas.unref === "function") this.relogioTarefas.unref();
+    this.soltarParar = registrarAoParar((e) => { this.tarefas.receberParar(e); });
     for (const a of this.db.pendingApprovals()) this.approvalOwner.set(a.id, a.botId);
     for (const q of this.db.pendingQuestions()) this.questionOwner.set(q.id, q.botId);
     this.passos.retomar(this.db.pendingQuestions());
@@ -289,6 +319,14 @@ export class Hub {
       acharBot: (de, para) => this.acharBotColab(de, para),
     });
     this.cleanOldThoughts();
+  }
+
+  /** Para o relógio da fila. Os testes usam; o processo do Hub morre com o intervalo. */
+  encerrarTarefas() {
+    if (this.relogioTarefas) clearInterval(this.relogioTarefas);
+    this.relogioTarefas = null;
+    this.soltarParar?.();
+    this.soltarParar = null;
   }
 
   entregarNo(botId: string, msg: HubToNode) { return this.sendNode(botId, msg); }
@@ -402,6 +440,20 @@ export class Hub {
   private mcpWaiters = new Map<string, (r: { ok: boolean; data: unknown }) => void>();
   private questionWaiters = new Map<string, (answer: string) => void>();
   private approvalWaiters = new Map<string, (allow: boolean) => void>();
+
+  /** Quem deve aquecer quando esta conversa está aberta. */
+  private botsDaConversa(conversationId: string): string[] {
+    const dm = botOfConversation(conversationId);
+    if (dm) return [dm];
+    const g = groupOfConversation(conversationId);
+    if (g) return this.db.getGroup(g)?.members ?? [];
+    if (conversationId.startsWith("pair:")) return conversationId.slice(5).split(":").filter(Boolean);
+    if (conversationId.startsWith("channel:")) {
+      const bot = conversationId.split(":").pop();
+      return bot ? [bot] : [];
+    }
+    return [];
+  }
 
   private sendNode(botId: string, msg: HubToNode): boolean {
     // Chamadas feitas pelo servidor MCP não têm nó atrás: resolvem promessas locais.
@@ -1236,6 +1288,7 @@ export class Hub {
         ws.send(JSON.stringify({ type: "control", override: this.control().global } satisfies HubToNode));
         this.botUpdate(botId);
         this.colab.reidratar(botId);
+        this.tarefas.aoConectar(botId);
         console.log(`[hub] bot online: ${msg.bot.name} (${botId}) engine=${msg.engine} ${msg.provider}/${msg.model}`);
         return;
       }
@@ -1442,10 +1495,8 @@ export class Hub {
         // Só sai o que já é resposta. O raciocínio em inglês fica no filtro até o fim.
         const { answer } = splitThoughts(s.text, { permiteIngles: this.falamOutroIdioma().has(botId), aoVivo: true });
         const mostrado = s.mostrado ?? "";
-        // Frase pela metade que ainda pode ser raciocínio não vai para a tela.
-        // Com 40 caracteres ou um ponto final, já é resposta e pode ir saindo.
-        const pronto = /[.!?…]\s*$/.test(answer) || answer.length >= 40;
-        if (pronto && answer !== mostrado) {
+        // Pensamento não entra. A primeira palavra já vai para a tela; o resto acompanha o modelo.
+        if (devePublicar(answer, mostrado)) {
           if (answer.startsWith(mostrado)) {
             this.broadcastUi({ type: "message.delta", conversationId, messageId: ev.messageId, text: answer.slice(mostrado.length) });
           } else {
@@ -1492,6 +1543,7 @@ export class Hub {
           this.pendingAsks.delete(key);
           this.sendNode(p.fromBotId, { type: "result", callId: p.callId, ok: true, data: text });
         }
+        this.tarefas.aoResponder(botId, conversationId, text);
         return;
       }
       case "tool.start": {
@@ -1594,6 +1646,9 @@ export class Hub {
       case "send":
         this.sendUserMessage(msg.conversationId, msg.text, msg.attachments);
         return;
+      case "warm":
+        for (const id of this.botsDaConversa(msg.conversationId)) this.sendNode(id, { type: "warm", conversationId: msg.conversationId, ativo: msg.ativo });
+        return;
       case "approval.response":
         this.resolveApproval(msg.requestId, msg.allow, msg.remember);
         return;
@@ -1601,6 +1656,9 @@ export class Hub {
         this.answerQuestion(msg.questionId, msg.answer);
         return;
       case "stop": { this.pararTudo(msg.reason || "⏹ no painel"); return; }
+      case "colab.parar":
+        notificarParada({ alvo: msg.alvo, por: msg.por });
+        return;
       case "abort": {
         // Com botId: para aquele bot inteiro (é o ⏹ ao lado do nome na lista).
         if (msg.botId) { this.pararBot(msg.botId, "⏹ no painel"); return; }

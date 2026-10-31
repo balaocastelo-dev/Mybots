@@ -240,6 +240,36 @@ export function tarefasDaEmpresa(
   return tarefas.filter((t) => t.empresaId === empresaId || ids.has(t.para) || ids.has(t.de));
 }
 
+/** Quem está em running ou waiting está ajudando quem pediu a tarefa. */
+export function ajudandoDasTarefas(tarefas: Tarefa[]): PacoteColab["ajudando"] {
+  const mapa: PacoteColab["ajudando"] = {};
+  for (const t of tarefas) {
+    if ((t.status === "running" || t.status === "waiting") && t.para && t.de) {
+      mapa[t.para] = { ajudando: t.de, tarefaId: t.id };
+    }
+  }
+  return mapa;
+}
+
+/** O GET não traz histórico. A recarga não pode apagar os passos que o WebSocket já mostrou. */
+export function conservarTarefas(velhas: Tarefa[], novas: Tarefa[]): Tarefa[] {
+  return novas.map((t) => {
+    const velha = velhas.find((x) => x.id === t.id);
+    if (!velha) return t;
+    let historico = velha.historico.length >= t.historico.length ? [...velha.historico] : [...t.historico];
+    const ultimo = historico[historico.length - 1];
+    if (!ultimo || ultimo.status !== t.status) {
+      historico.push({
+        em: t.atualizadaEm,
+        status: t.status,
+        texto: t.resultado?.resumo || t.resultado?.motivo || ROTULO_STATUS[t.status],
+      });
+    }
+    const progresso = t.status === velha.status ? Math.max(t.progresso, velha.progresso) : t.progresso;
+    return { ...t, historico, progresso };
+  });
+}
+
 export function podeCancelar(t: Tarefa): boolean {
   return t.status === "queued" || t.status === "running" || t.status === "waiting";
 }

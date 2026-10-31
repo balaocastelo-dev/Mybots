@@ -38,6 +38,7 @@ const NIVEL: Record<string, number> = {
   // nao sai. anotar_empresa alimenta a base da empresa, que todos leem depois.
   criar_bot: 2, anotar_empresa: 3,
   whatsapp: 3, email: 3, gerar_pdf: 3, schedule: 3, ask_bot: 3, send_to_bot: 3, list_bots: 3,
+  delegate_task: 3, check_task: 3, cancel_task: 3,
   navegador: 4, gravar_tela: 4, celular: 4, generate_image: 4, generate_video: 4, audio: 4, screenshot: 4,
   fill_credential: 3,
   learn_knowledge: 4, list_routines: 4, cancel_routine: 4, gerenciar_bot: 4,

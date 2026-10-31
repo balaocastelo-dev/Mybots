@@ -12,13 +12,13 @@ import { useState } from "react";
  * ligado "Visualizadores VNC podem controlar a tela com senha" no Compartilhamento
  * de Tela -- e essa e a senha que vai aqui.
  */
-export function TelaDoMac({ onFechar }: { onFechar: () => void }) {
+export function TelaDoMac({ onFechar, embutido }: { onFechar?: () => void; embutido?: boolean }) {
   const [senha, setSenha] = useState("");
   const [ligado, setLigado] = useState(false);
 
-  return (
-    <div className="modal-bg" onClick={onFechar}>
-      <div className="modal wide pc" onClick={(e) => e.stopPropagation()}>
+  const miolo = (
+    <>
+      {!embutido && (
         <div className="pc-topo">
           <div>
             <h3>Tela do Mac</h3>
@@ -28,28 +28,39 @@ export function TelaDoMac({ onFechar }: { onFechar: () => void }) {
             </p>
           </div>
           <div className="pc-botoes">
-            <button className="btn" onClick={onFechar}>Fechar</button>
+            <button className="btn" type="button" onClick={onFechar}>Fechar</button>
           </div>
         </div>
+      )}
 
-        {!ligado ? (
-          <form className="mac-liga" onSubmit={(e) => { e.preventDefault(); if (senha) setLigado(true); }}>
-            <label>Senha VNC do Mac
-              <input type="password" autoFocus value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="a senha que você definiu no Mac" />
-            </label>
-            <button className="btn primary" type="submit" disabled={!senha}>Ligar na tela</button>
-            <p className="muted mac-dica">
-              Ainda não ligou a senha no Mac? Ajustes do Sistema → Geral → Compartilhamento →
-              Compartilhamento de Tela → Configurações do Computador → marque "Visualizadores VNC
-              podem controlar a tela com senha" e defina uma senha.
-            </p>
-          </form>
-        ) : (
-          <div className="pc-tela">
-            <iframe src={`/tela-vnc.html?destino=mac&senha=${encodeURIComponent(senha)}${(() => { const k = new URLSearchParams(location.search).get("k"); return k ? `&k=${encodeURIComponent(k)}` : ""; })()}`} title="Tela do Mac"
-              allow="clipboard-read; clipboard-write" />
-          </div>
-        )}
+      {!ligado ? (
+        <form className="mac-liga" onSubmit={(e) => { e.preventDefault(); if (senha) setLigado(true); }}>
+          {embutido && <h3>Tela do Mac</h3>}
+          <label>Senha VNC do Mac
+            <input type="password" autoFocus value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="a senha que você definiu no Mac" />
+          </label>
+          <button className="btn primary" type="submit" disabled={!senha}>Ligar na tela</button>
+          <p className="muted mac-dica">
+            Ainda não ligou a senha no Mac? Ajustes do Sistema → Geral → Compartilhamento →
+            Compartilhamento de Tela → Configurações do Computador → marque "Visualizadores VNC
+            podem controlar a tela com senha" e defina uma senha.
+          </p>
+        </form>
+      ) : (
+        <div className={embutido ? "mac-tela-embutida" : "pc-tela"}>
+          <iframe src={`/tela-vnc.html?destino=mac&senha=${encodeURIComponent(senha)}${(() => { const k = new URLSearchParams(location.search).get("k"); return k ? `&k=${encodeURIComponent(k)}` : ""; })()}`} title="Tela do Mac"
+            allow="clipboard-read; clipboard-write" />
+        </div>
+      )}
+    </>
+  );
+
+  if (embutido) return <div className="mac-embutido">{miolo}</div>;
+
+  return (
+    <div className="modal-bg" onClick={onFechar}>
+      <div className="modal wide pc" onClick={(e) => e.stopPropagation()}>
+        {miolo}
       </div>
     </div>
   );

@@ -585,6 +585,7 @@ function personaGerente(nome: string, funcao: string, equipe: string[], info: (i
     "Como você trabalha:",
     "- O chefe fala com VOCÊ. Você distribui o trabalho e volta com o resultado.",
     "- Para pedir algo a alguém da equipe use ask_bot (quando precisa da resposta) ou send_to_bot (quando é só repassar).",
+    "- Para um trabalho com objetivo, critério de pronto e prazo, use delegate_task. O colega faz, o resultado volta e te acorda. Acompanhe com check_task e desista com cancel_task. Você não aprova essa delegação.",
     "- Quebre pedidos grandes em tarefas e mande cada uma para quem é da área. Vários podem trabalhar ao mesmo tempo.",
     "- NÃO faça você mesmo o que alguém da equipe faz melhor; sua função é coordenar e conferir.",
     "- Confira o que voltou antes de entregar. Se veio ruim, devolva para a pessoa com o que precisa corrigir.",

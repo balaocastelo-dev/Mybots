@@ -1,6 +1,7 @@
 import { api } from "../api";
 import { amostra } from "./amostra";
 import {
+  ajudandoDasTarefas,
   normalizarAuditoria,
   normalizarConversas,
   normalizarMensagens,
@@ -72,15 +73,16 @@ export async function carregarColab(forcarExemplo: boolean): Promise<PacoteColab
   ]);
   const conversas = conversasRes.ok ? normalizarConversas(conversasRes.json) : [];
   const mensagens = await mensagensDas(conversas);
+  const tarefas = normalizarTarefas(tarefasRes.json);
   return {
     fonte: "api",
     aviso: "",
-    tarefas: normalizarTarefas(tarefasRes.json),
+    tarefas,
     conversas,
     mensagens,
     salas: salasRes.ok ? normalizarSalas(salasRes.json) : [],
     auditoria: audRes.ok ? normalizarAuditoria(audRes.json) : [],
-    ajudando: {},
+    ajudando: ajudandoDasTarefas(tarefas),
   };
 }
 

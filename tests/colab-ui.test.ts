@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { pairConversation } from "@mybots/shared";
 import {
+  ajudandoDasTarefas,
   aplicarEvento,
   colunaDe,
+  conservarTarefas,
   fundirTarefa,
   marcarCancelada,
   normalizarMensagens,
@@ -112,6 +114,20 @@ test("colab.parar cancela as tarefas ativas do alvo", () => {
   assert.equal(p.tarefas.find((t) => t.id === "t1")?.status, "cancelled");
   assert.equal(p.tarefas.find((t) => t.id === "t2")?.status, "running");
   assert.equal(p.tarefas.find((t) => t.id === "t3")?.status, "done");
+});
+
+test("a fila real marca quem está ajudando e a recarga guarda o histórico", () => {
+  const lista = normalizarTarefas([{ id: "t1", de: "ana", para: "bruno", objetivo: "Estoque", status: "running", criadaEm: 1, atualizadaEm: 2 }]);
+  assert.deepEqual(ajudandoDasTarefas(lista).bruno, { ajudando: "ana", tarefaId: "t1" });
+  const comPassos = conservarTarefas([{
+    ...lista[0],
+    historico: [
+      { em: 1, status: "queued", texto: "Na fila" },
+      { em: 2, status: "running", texto: "Fazendo" },
+    ],
+  }], lista);
+  assert.equal(comPassos[0].historico.length, 2);
+  assert.equal(comPassos[0].historico[0].texto, "Na fila");
 });
 
 test("quadro filtra por bot e por empresa; simular tira da fila", () => {

@@ -41,6 +41,11 @@ export type ChatRequest = {
    * o bot começar a falar na primeira frase em vez de depois do texto inteiro.
    */
   onText?: (delta: string) => void;
+  /**
+   * Só o Ollama (e o LM Studio) usam isto. num_ctx é a janela desta chamada;
+   * keep_alive mantém o modelo na memória enquanto o chat está aberto.
+   */
+  ollama?: { num_ctx?: number; keep_alive?: string | number };
 };
 
 export type ChatResponse = {

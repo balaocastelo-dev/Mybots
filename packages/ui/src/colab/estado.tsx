@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HubToUi } from "@mybots/shared";
 import { carregarColab, pedirCancelamento, pedirTarefa } from "./api";
-import { aplicarEvento, fundirTarefa, marcarCancelada, simularAndamento } from "./normalizar";
+import { ajudandoDasTarefas, aplicarEvento, conservarTarefas, fundirTarefa, marcarCancelada, simularAndamento } from "./normalizar";
 import type { PacoteColab } from "./tipos";
 
 type Ouvir = (l: (m: HubToUi) => void) => () => void;
@@ -28,7 +28,16 @@ export function useColab(onEvent: Ouvir, exemplo: boolean) {
     if (!pacote || pacote.fonte !== "api") return;
     const t = window.setInterval(() => {
       void carregarColab(false).then((novo) => {
-        if (novo.fonte === "api") setPacote((atual) => atual && atual.fonte === "api" ? { ...novo, ajudando: atual.ajudando } : novo);
+        if (novo.fonte === "api") setPacote((atual) => {
+          if (!atual || atual.fonte !== "api") return novo;
+          const tarefas = conservarTarefas(atual.tarefas, novo.tarefas);
+          return {
+            ...novo,
+            tarefas,
+            ajudando: ajudandoDasTarefas(tarefas),
+            mensagens: novo.mensagens.length ? novo.mensagens : atual.mensagens,
+          };
+        });
       });
     }, 8000);
     return () => window.clearInterval(t);
@@ -47,9 +56,11 @@ export function useColab(onEvent: Ouvir, exemplo: boolean) {
     const fresca = await pedirTarefa(id);
     setPacote((p) => {
       if (!p) return p;
-      const tarefa = fresca ?? fundirTarefa(p.tarefas.find((t) => t.id === id), corpo);
-      if (!tarefa) return p;
-      return { ...p, tarefas: p.tarefas.map((t) => (t.id === id ? tarefa : t)) };
+      const anterior = p.tarefas.find((t) => t.id === id);
+      const vinda = fresca ?? (anterior ? fundirTarefa(anterior, corpo) : fundirTarefa(undefined, corpo));
+      if (!vinda) return p;
+      const tarefa = conservarTarefas(anterior ? [anterior] : [], [vinda])[0];
+      return { ...p, tarefas: p.tarefas.map((t) => (t.id === id ? tarefa : t)), ajudando: ajudandoDasTarefas(p.tarefas.map((t) => (t.id === id ? tarefa : t))) };
     });
   };
 

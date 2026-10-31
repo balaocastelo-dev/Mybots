@@ -70,7 +70,7 @@ export function idDaTela(url: string): string | null {
   return m ? m[1] : null;
 }
 
-/** Caminho que segue para o container. A senha da interface (k) não vai junto. */
+/** Caminho que o navegador pediu em /pc/<id>/... A senha da interface (k) não vai junto. */
 export function caminhoDaTela(url: string): string | null {
   if (caminhoSuspeito(url) || !idDaTela(url)) return null;
   try {
@@ -78,6 +78,28 @@ export function caminhoDaTela(url: string): string | null {
     if (u.pathname.includes("..")) return null;
     u.searchParams.delete("k");
     return u.pathname + u.search;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * O que o container recebe. O Selkies 2.1.0 serve o desktop na raiz (/) e o
+ * websocket em /api/websockets. A subpasta /pc/<id>/ fica só no Hub.
+ */
+export function caminhoNoContainer(url: string): string | null {
+  const cheio = caminhoDaTela(url);
+  const id = idDaTela(url);
+  if (!cheio || !id) return null;
+  try {
+    const u = new URL(cheio, "http://127.0.0.1");
+    const prefixo = `/pc/${id}`;
+    let path = u.pathname;
+    if (path === prefixo) path = "/";
+    else if (path.startsWith(prefixo + "/")) path = path.slice(prefixo.length) || "/";
+    else return null;
+    if (!path.startsWith("/")) path = "/" + path;
+    return path + u.search;
   } catch {
     return null;
   }

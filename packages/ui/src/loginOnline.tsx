@@ -34,6 +34,22 @@ export function LoginOnline({ onOk }: Props) {
 
   return (
     <div className="login-online">
+      <style>{`
+        .login-online-card{overflow:visible!important;padding-top:12px!important}
+        .login-online .time-amebas{overflow:visible!important;margin:-8px auto 0!important;padding:6px 0 12px!important}
+        .login-online .time-amebas-fila{overflow:visible!important;min-height:clamp(110px,28vw,160px)!important;padding-bottom:10px!important}
+        .login-online .time-ameba{animation-name:time-hop-login!important}
+        @keyframes time-hop-login{
+          0%,100%{transform:translateY(calc(var(--y,0px)*0.15 - 12px)) scale(var(--s,1))}
+          40%{transform:translateY(calc(var(--y,0px)*0.15 - 18px)) scale(var(--s,1))}
+          55%{transform:translateY(calc(var(--y,0px)*0.15 - 12px)) scale(var(--s,1))}
+        }
+        @media (max-width:430px){
+          .login-online-card{padding:10px 14px 18px!important}
+          .login-online .time-amebas{margin:-10px auto 0!important;padding:4px 0 10px!important}
+          .login-online .time-amebas-fila{min-height:124px!important;padding-bottom:12px!important}
+        }
+      `}</style>
       <div className="login-online-card">
         <TimeAmebas />
         <TituloMyBots />

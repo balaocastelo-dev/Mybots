@@ -1413,9 +1413,22 @@ export async function startServer(hub: Hub) {
   }
 
   if (fs.existsSync(config.uiDist)) {
-    await app.register(fastifyStatic, { root: config.uiDist, prefix: "/" });
+    await app.register(fastifyStatic, {
+      root: config.uiDist,
+      prefix: "/",
+      setHeaders(res, pathName) {
+        if (pathName.endsWith("index.html") || pathName.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+        } else if (/\.(?:js|css)$/.test(pathName)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith("/api/") || req.url.startsWith("/mcp")) return reply.code(404).send({ error: "nÃ£o encontrado" });
+      if (req.url.startsWith("/api/") || req.url.startsWith("/mcp")) return reply.code(404).send({ error: "não encontrado" });
+      reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
+      reply.header("Pragma", "no-cache");
       return reply.sendFile("index.html");
     });
   } else {

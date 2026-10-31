@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type ControlMode, isControlMode, newId } from "@mybots/shared";
+import type { Plano } from "@mybots/soul-bank";
+import { materializar, prepararNascimento } from "./almas.js";
 import { config } from "./config.js";
 import { motivoDaQueda, recadoDaQueda } from "./diagnostico.js";
 import type { Hub } from "./hub.js";
@@ -31,6 +33,8 @@ export type ManagedBotDef = {
   protegido?: boolean;
   /** gerente da empresa: ganha a coroa no painel, mesmo antes de ter equipe */
   gerente?: boolean;
+  /** alma com que nasceu, se nasceu com uma */
+  alma?: string;
 };
 
 export type ManagedBotStatus = ManagedBotDef & { running: boolean; pid?: number; restarts: number; lastExit?: number | null };
@@ -96,9 +100,15 @@ export class BotManager {
     return name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "bot";
   }
 
-  create(input: Partial<ManagedBotDef> & { name: string }): ManagedBotDef | { error: string } {
+  create(input: Partial<ManagedBotDef> & { name: string; alma?: string | null; opcionais?: string[]; confirmarAlma?: boolean }): ManagedBotDef | { error: string } {
     const id = BotManager.slug(input.id || input.name);
     if (this.hub.db.getManaged(id)) return { error: `Já existe um bot com id "${id}".` };
+    let plano: Plano | null = null;
+    if (input.alma || input.opcionais?.length) {
+      const nasc = prepararNascimento({ almaId: input.alma, opcionais: input.opcionais, confirmar: input.confirmarAlma === true });
+      if (!nasc.ok) return { error: nasc.erro };
+      plano = nasc.plano;
+    }
     // Todo bot nasce no Claude, motor direto: e o que o dono pediu como padrao.
     // So sai disso quem escolher outra coisa no formulario, de proposito.
     const engine = input.engine === "opencode" ? "opencode" : "direct";
@@ -121,16 +131,17 @@ export class BotManager {
     const def: ManagedBotDef = {
       id,
       name: input.name.trim(),
-      role: (input.role ?? "Assistente").trim(),
-      avatar: input.avatar?.trim() || "🧑‍💻",
+      role: (input.role?.trim() || plano?.funcao || "Assistente").trim(),
+      avatar: input.avatar?.trim() || plano?.avatar || "🧑‍💻",
       voice: input.voice?.trim() || undefined,
       color: input.color,
       engine,
       provider: { kind, model: (input.provider?.model ?? preset?.defaultModel ?? "").trim(), apiKey: input.provider?.apiKey?.trim() || undefined, baseURL: input.provider?.baseURL?.trim() || (preset as any)?.defaultBaseURL },
       manages: input.manages?.length ? [...new Set(input.manages.filter((x) => x && x !== id))] : undefined,
-      persona: input.persona?.trim() || (input.manages?.length
-        ? personaGerente(input.name.trim(), (input.role ?? "Gerente da equipe").trim(), input.manages, (botId) => this.hub.summaries().find((b) => b.id === botId))
-        : defaultPersona(input.name.trim(), (input.role ?? "Assistente").trim())),
+      persona: input.persona?.trim() || plano?.persona.trim() || (input.manages?.length
+        ? personaGerente(input.name.trim(), (input.role ?? plano?.funcao ?? "Gerente da equipe").trim(), input.manages, (botId) => this.hub.summaries().find((b) => b.id === botId))
+        : defaultPersona(input.name.trim(), (input.role ?? plano?.funcao ?? "Assistente").trim())),
+      alma: plano?.id || undefined,
       autoStart: input.autoStart ?? true,
       controlMode: isControlMode(input.controlMode) ? input.controlMode : "supervisionado",
       opencodePort: port,
@@ -143,7 +154,15 @@ export class BotManager {
     this.hub.db.desmarcarExcluido(id);
     this.hub.db.upsertManaged(def);
     this.writeFiles(def);
-    this.hub.db.audit(id, "bot.created", { engine, provider: kind, model: def.provider.model });
+    if (plano) {
+      try { materializar(plano, path.join(this.botsDir, def.id)); }
+      catch (e) {
+        this.hub.db.deleteManaged(def.id);
+        fs.rmSync(path.join(this.botsDir, def.id), { recursive: true, force: true });
+        return { error: `Não consegui gravar a alma: ${(e as Error).message}` };
+      }
+    }
+    this.hub.db.audit(id, "bot.created", { engine, provider: kind, model: def.provider.model, alma: plano?.id ?? null, opcionais: plano?.opcionais ?? [] });
     if (def.autoStart) this.start(id);
     return def;
   }

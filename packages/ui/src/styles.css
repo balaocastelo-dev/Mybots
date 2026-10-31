@@ -1867,3 +1867,23 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   .linha-atividade { margin: 0 12px 6px; }
   .cartao-arquivo, .cartao-tela { width: 100%; }
 }
+
+.almas { display: flex; flex-direction: column; gap: 8px; }
+.almas > b { font-size: 14px; }
+.almas-grade {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  max-height: 280px; overflow: auto; padding-right: 2px;
+}
+.alma-card {
+  text-align: left; border: 1px solid var(--line); background: var(--panel-2);
+  border-radius: 12px; padding: 8px 10px; cursor: pointer; display: grid; gap: 2px; color: var(--text);
+}
+.alma-card b { font-size: 13px; }
+.alma-card small { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+.alma-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.alma-confirma {
+  border: 1px solid var(--line); border-left: 3px solid var(--accent-2, #1e9e62);
+  background: var(--panel-2); border-radius: 12px; padding: 8px 10px;
+}
+.alma-confirma label { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: 13px; margin: 0; }
+@media (max-width: 640px) { .almas-grade { grid-template-columns: 1fr; } }

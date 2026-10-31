@@ -7,6 +7,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type ControlMode, type HubToNode, type Risk, controlPromptLine, effectiveControl, needsHumanApproval, resourcePromptLine } from "@mybots/shared";
+import { mcpsDaAlma, textoDaAlma } from "../almaPrompt.js";
 import { OPENAI_COMPAT_PRESETS, type NodeConfig, readPersona } from "../config.js";
 import type { HubClient } from "../hubClient.js";
 import { limitsFromEnv } from "../resources.js";
@@ -113,6 +114,7 @@ export class OpenCodeEngine implements Engine {
       }
     }
     const hubHttp = (this.cfg.opencode.hubHttp ?? this.cfg.hub.replace(/^ws/, "http")).replace(/\/$/, "");
+    const blocoAlma = textoDaAlma(this.cfg.workspace);
     const persona = [
       readPersona(this.cfg).trim(),
       "",
@@ -134,6 +136,7 @@ export class OpenCodeEngine implements Engine {
       "- Você ENXERGA imagens e vídeos que o chefe anexar: eles chegam junto com a mensagem (vídeo vem como quadros + transcrição do áudio). Olhe antes de responder e nunca peça link de um arquivo que já veio anexado.",
       "- IDIOMA: esta casa é nativa em português, inglês e espanhol. Responda NO IDIOMA DE QUEM ESCREVEU quando for um desses três; se não der para saber, use o idioma da empresa. Status, nomes de arquivo e mensagens para colegas seguem o idioma da empresa. Nunca misture dois idiomas na mesma resposta.",
       "- Responda curto e direto, no idioma de quem escreveu.",
+      ...(blocoAlma ? ["", blocoAlma] : []),
     ].join("\n");
     const cfg = {
       $schema: "https://opencode.ai/config.json",
@@ -152,6 +155,7 @@ export class OpenCodeEngine implements Engine {
       },
       mcp: {
         ...(existing.mcp ?? {}),
+        ...mcpsDaAlma(this.cfg.workspace),
         mybots: {
           type: "remote",
           url: `${hubHttp}/mcp`,

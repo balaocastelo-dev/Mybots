@@ -24,6 +24,7 @@ const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900
 import { PROVEDORES } from "@mybots/shared";
 import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
+import { registrarAlmas } from "./almas.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA } from "./botManager.js";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
 import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
@@ -335,6 +336,7 @@ export async function startServer(hub: Hub) {
 
   // --- bots criados pela interface (hospedados neste PC) ---
   const manager = new BotManager(hub);
+  registrarAlmas(app);
   hub.managedIds = () => new Set(manager.list().map((b) => b.id));
   hub.protegidosIds = () => new Set(manager.list().filter((b) => b.protegido).map((b) => b.id));
   // mesma regra que o nó usa no prompt: a persona diz se o bot fala outro idioma

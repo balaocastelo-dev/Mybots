@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { type Attachment, type CartaoDeAcao, type ControlMode, type HubToNode, type Risk, controlPromptLine, effectiveControl, newId, resourcePromptLine } from "@mybots/shared";
+import { textoDaAlma } from "../almaPrompt.js";
 import { type NodeConfig, readPersona } from "../config.js";
 import type { HubClient } from "../hubClient.js";
 import type { ChatMessage, Provider, ToolCall } from "../providers/types.js";
@@ -154,6 +155,7 @@ export class DirectEngine implements Engine {
     // "tudo em português" confunde modelos pequenos, então a regra simplesmente
     // não entra para ele: quem manda no idioma é a persona.
     const ensinaIdiomas = /poliglota|professor(a)? de idiomas|professor(a)? de (ingl[eê]s|espanhol|franc[eê]s|italiano|alem[aã]o)|language (tutor|teacher|coach)|tutor de idiomas/i.test(persona);
+    const blocoAlma = textoDaAlma(this.cfg.workspace);
     return [
       persona.trim(),
       "",
@@ -211,6 +213,7 @@ export class DirectEngine implements Engine {
         "",
         "LEMBRE AGORA, antes de responder: se o chefe escreveu no idioma da aula, comece a sua resposta CORRIGINDO o erro mais importante da frase dele (ex.: \"Almost! We say: 'Yesterday I sold three notebooks.'\"), e só depois continue a conversa NO IDIOMA, terminando com uma pergunta curta. Não responda em português uma frase que ele escreveu em outro idioma.",
       ] : []),
+      ...(blocoAlma ? ["", blocoAlma] : []),
     ].join("\n");
   }
 

@@ -11,6 +11,7 @@ import { api } from "./api";
 import { confirmDeus } from "./controles";
 import { RetratoPreview } from "./avatar";
 import { CRON_PRESETS } from "./mensagem";
+import { SeletorDeAlma, useAlmas, type AlmaUi } from "./almas";
 
 export function RoutinesPanel({ bot, routines, onClose }: { bot: BotSummary; routines: Routine[]; onClose: () => void }) {
   const [name, setName] = useState("");
@@ -220,19 +221,40 @@ export function NewGerenteDialog({ bots, onClose, onCreated }: { bots: BotSummar
 
 export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva = "todas", onCriou }: { onClose: () => void; onCreated: (id: string) => void; empresas?: Array<{ id: string; nome: string }>; empresaAtiva?: string; onCriou?: () => void }) {
   const { providers, voices } = usePresets();
+  const banco = useAlmas();
   const [where, setWhere] = useState<"hub" | "other">("hub");
   // Com uma empresa só na casa, "Todas" não é motivo para o bot nascer órfão.
   const [empresa, setEmpresa] = useState(
     empresaAtiva !== "todas" ? empresaAtiva : (empresas.length === 1 ? empresas[0].id : ""),
   );
   const [ponte, setPonte] = useState(false);
+  const [almaId, setAlmaId] = useState<string | null>(null);
+  const [opcionais, setOpcionais] = useState<string[]>([]);
+  const [confirmei, setConfirmei] = useState(false);
+  const [trava, setTrava] = useState({ name: false, role: false, avatar: false });
   const [v, setV] = useState<any>({ name: "", role: "", avatar: "", voice: "", ...PADRAO_DA_CASA, persona: personaTemplate("", "") });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const id = slug(v.name || "bot");
+  const alma = banco.almas.find((a) => a.id === almaId) ?? null;
+  const complementoPedeOk = banco.complementos.some((c) => opcionais.includes(c.id) && c.exigeConfirmacao);
+  const precisaConfirmar = !!alma?.exigeConfirmacao || complementoPedeOk;
+  const escolherAlma = (escolha: AlmaUi | null) => {
+    setAlmaId(escolha?.id ?? null);
+    setConfirmei(false);
+    if (!escolha) return;
+    setV((atual: any) => ({
+      ...atual,
+      role: trava.role ? atual.role : escolha.funcao,
+      avatar: trava.avatar ? atual.avatar : escolha.avatar,
+      persona: escolha.persona,
+      personaTouched: true,
+      name: trava.name || atual.name.trim() ? atual.name : escolha.nome,
+    }));
+  };
   const create = async () => {
     setBusy(true); setErr("");
-    const r = await api("/managed", { method: "POST", body: JSON.stringify({ ...v, id, empresa: empresa || null, ponte }) });
+    const r = await api("/managed", { method: "POST", body: JSON.stringify({ ...v, id, empresa: empresa || null, ponte, alma: almaId, opcionais, confirmarAlma: precisaConfirmar ? confirmei : false }) });
     setBusy(false);
     if (!r.ok) { setErr((await r.json()).error ?? "erro"); return; }
     onCriou?.();
@@ -256,13 +278,21 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
         {!empresas.length && <p className="muted">Nenhuma empresa cadastrada ainda — crie a empresa primeiro, em ＋ gerenciar empresas.</p>}
         <label className="linha-check"><input type="checkbox" checked={ponte} onChange={(e) => setPonte(e.target.checked)} /> Ponte: pode falar com bots de outras empresas</label>
 
-        <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew />
+        <SeletorDeAlma almas={banco.almas} complementos={banco.complementos} erro={banco.erro} almaId={almaId} opcionais={opcionais} confirmei={confirmei} onAlma={escolherAlma} onOpcionais={(ids) => { setOpcionais(ids); setConfirmei(false); }} onConfirmar={setConfirmei} />
+        <BotForm value={v} onChange={(nv) => {
+          setTrava((t) => ({
+            name: t.name || nv.name !== v.name,
+            role: t.role || nv.role !== v.role,
+            avatar: t.avatar || nv.avatar !== v.avatar,
+          }));
+          setV({ ...nv, personaTouched: nv.persona !== v.persona ? true : nv.personaTouched });
+        }} providers={providers} voices={voices} isNew />
         {where === "other" && (
           <div className="hint-box">Na pasta <code>mybots</code> do outro PC, rode no PowerShell:<pre>{cmd}</pre>Depois inicie com <code>bots\{id}\start-bot.cmd</code>. O bot aparece aqui assim que conectar.</div>
         )}
         {err && <div className="err">{err}</div>}
         <div className="card-actions">
-          {where === "hub" ? <button className="btn primary" disabled={!v.name.trim() || !empresa || busy} onClick={create}>{busy ? "Criando…" : `Criar e iniciar (${id})`}</button> : <button className="btn primary" onClick={() => { navigator.clipboard?.writeText(cmd); onClose(); }}>Copiar comando e fechar</button>}
+          {where === "hub" ? <button className="btn primary" disabled={!v.name.trim() || !empresa || busy || (precisaConfirmar && !confirmei)} onClick={create}>{busy ? "Criando…" : `Criar e iniciar (${id})`}</button> : <button className="btn primary" onClick={() => { navigator.clipboard?.writeText(cmd); onClose(); }}>Copiar comando e fechar</button>}
           <button className="btn" onClick={onClose}>Cancelar</button>
         </div>
       </div>

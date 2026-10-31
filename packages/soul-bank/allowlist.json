@@ -1,0 +1,615 @@
+{
+  "versao": 1,
+  "regra": "Cada item é pinado num commit, numa versão npm com integridade, ou num contrato com sha256. Não existe latest. Mudança só por pull request.",
+  "itens": [
+    {
+      "id": "anthropics.mcp-builder",
+      "tipo": "skill",
+      "nome": "mcp-builder",
+      "repositorio": "https://github.com/anthropics/skills",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "pastaVendor": "vendor/anthropics/skills/mcp-builder",
+      "pastaDestino": "mcp-builder",
+      "arquivos": [
+        {
+          "caminho": "LICENSE.txt",
+          "sha256": "bc6b3af2f331cbc7fb0da1344efb2cbe5877a31498b4d70dbc7000f3405a1362"
+        },
+        {
+          "caminho": "SKILL.md",
+          "sha256": "b483b56d6673134497e45489c317f26ae0f1429c194db0297e43073e17e6748c"
+        },
+        {
+          "caminho": "reference/evaluation.md",
+          "sha256": "8c99479f8a2d22a636c38e274537aac3610879e26f34e0709825077c4576f427"
+        },
+        {
+          "caminho": "reference/mcp_best_practices.md",
+          "sha256": "80fb4369a349447cf18ecdd7494fe7938b6065377e9f08c077cec411093a3007"
+        },
+        {
+          "caminho": "reference/node_mcp_server.md",
+          "sha256": "ee3c95d812e450f6168b734390d0c9ef6f8ebeef041d73a122c972dfbd4d476a"
+        },
+        {
+          "caminho": "reference/node_mcp_server_v2.md",
+          "sha256": "49b2fe48f33910b743ae3a56353fffa5d5f252f531053f24f2da4e5914c0d3aa"
+        },
+        {
+          "caminho": "reference/python_mcp_server.md",
+          "sha256": "2da52f77e675191014ca2e146a4b95aa04d0ca7dd7e2b100322df15ade685e80"
+        },
+        {
+          "caminho": "scripts/connections.py",
+          "sha256": "9403668a2041568772082a8b334122c1f88daf0541fb393af4522d0094a47a6e"
+        },
+        {
+          "caminho": "scripts/evaluation.py",
+          "sha256": "49ed1d17cdce5da101b210197740713f49b935c29d4f339542a14b132658e6f7"
+        },
+        {
+          "caminho": "scripts/example_evaluation.xml",
+          "sha256": "9272b348ddcc4b06ba562367ccd0770e018158c0068ac5116d5e34aaeff8777a"
+        },
+        {
+          "caminho": "scripts/requirements.txt",
+          "sha256": "d5d7558b2368ecea9dfeed7d1fbc71ee9e0750bebd1282faa527d528a344c3c7"
+        }
+      ]
+    },
+    {
+      "id": "anthropics.webapp-testing",
+      "tipo": "skill",
+      "nome": "webapp-testing",
+      "repositorio": "https://github.com/anthropics/skills",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "pastaVendor": "vendor/anthropics/skills/webapp-testing",
+      "pastaDestino": "webapp-testing",
+      "arquivos": [
+        {
+          "caminho": "LICENSE.txt",
+          "sha256": "bc6b3af2f331cbc7fb0da1344efb2cbe5877a31498b4d70dbc7000f3405a1362"
+        },
+        {
+          "caminho": "SKILL.md",
+          "sha256": "51b7349e77ec63b7744a6f63647e7566a0b4d2e301121cc10e8c2113af6556a2"
+        },
+        {
+          "caminho": "examples/console_logging.py",
+          "sha256": "ea46877289acb82da7e7ce59d0bc37c8977cd57e2a006d0c88d7a1c625bf95da"
+        },
+        {
+          "caminho": "examples/element_discovery.py",
+          "sha256": "d63c89604a22f8845d724e95dda45db49b1bf57c25ce0a83afbb7b8da3d402f0"
+        },
+        {
+          "caminho": "examples/static_html_automation.py",
+          "sha256": "9d533aafb875ee3ab8b8ebf8f5b9003ac8d999da3d09b285cce252e623140064"
+        },
+        {
+          "caminho": "scripts/with_server.py",
+          "sha256": "b0dcf4918935b795f4eda9821579b9902119235ff4447f687a30286e7d0925fd"
+        }
+      ]
+    },
+    {
+      "id": "anthropics.frontend-design",
+      "tipo": "skill",
+      "nome": "frontend-design",
+      "repositorio": "https://github.com/anthropics/skills",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "pastaVendor": "vendor/anthropics/skills/frontend-design",
+      "pastaDestino": "frontend-design",
+      "arquivos": [
+        {
+          "caminho": "LICENSE.txt",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "caminho": "SKILL.md",
+          "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3"
+        }
+      ]
+    },
+    {
+      "id": "anthropics.canvas-design",
+      "tipo": "skill",
+      "nome": "canvas-design",
+      "repositorio": "https://github.com/anthropics/skills",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "pastaVendor": "vendor/anthropics/skills/canvas-design",
+      "pastaDestino": "canvas-design",
+      "descricao": "SKILL.md e a licença. As fontes OFL em canvas-fonts ficam no commit e não foram copiadas (binários grandes).",
+      "arquivos": [
+        {
+          "caminho": "LICENSE.txt",
+          "sha256": "bc6b3af2f331cbc7fb0da1344efb2cbe5877a31498b4d70dbc7000f3405a1362"
+        },
+        {
+          "caminho": "SKILL.md",
+          "sha256": "a1f288079624402f30682753c1d43920b6664785698d21d3e7aa197450a6448b"
+        }
+      ]
+    },
+    {
+      "id": "anthropics.algorithmic-art",
+      "tipo": "skill",
+      "nome": "algorithmic-art",
+      "repositorio": "https://github.com/anthropics/skills",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "pastaVendor": "vendor/anthropics/skills/algorithmic-art",
+      "pastaDestino": "algorithmic-art",
+      "arquivos": [
+        {
+          "caminho": "LICENSE.txt",
+          "sha256": "bc6b3af2f331cbc7fb0da1344efb2cbe5877a31498b4d70dbc7000f3405a1362"
+        },
+        {
+          "caminho": "SKILL.md",
+          "sha256": "3bc4092c09804853186524c826bc0621b940bb6122c05b84496dff95388e6eef"
+        },
+        {
+          "caminho": "templates/generator_template.js",
+          "sha256": "9ee0f1da52ef8f7bbfde1917123654880890d43f2d388642d71eab6dd78f94c4"
+        },
+        {
+          "caminho": "templates/viewer.html",
+          "sha256": "86c79d7ce97d2599ebe4bd9b97fdeb7295c9d3ed61ceeb513cbe1b2bb5d1ce29"
+        }
+      ]
+    },
+    {
+      "id": "anthropics.theme-factory",
+      "tipo": "skill",
+      "nome": "theme-factory",
+      "repositorio": "https://github.com/anthropics/skills",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "pastaVendor": "vendor/anthropics/skills/theme-factory",
+      "pastaDestino": "theme-factory",
+      "arquivos": [
+        {
+          "caminho": "LICENSE.txt",
+          "sha256": "bc6b3af2f331cbc7fb0da1344efb2cbe5877a31498b4d70dbc7000f3405a1362"
+        },
+        {
+          "caminho": "SKILL.md",
+          "sha256": "c35893e221e28895c52143cc11bf30e41a44817796b39d4b15727dadc9796552"
+        },
+        {
+          "caminho": "theme-showcase.pdf",
+          "sha256": "3e126eca9fe99088051f7cb984c97cedb31c7d9e09ce0ba5d61bd01e70a0d253"
+        },
+        {
+          "caminho": "themes/arctic-frost.md",
+          "sha256": "868a75a8fb5b2a61d0f0ab87c437fe632d3cbab6371c418f06aa2816ac109ae0"
+        },
+        {
+          "caminho": "themes/botanical-garden.md",
+          "sha256": "222cb8e7496abc9b75b29453c809fb9839e7e4b01fa45deecdd896b38d087765"
+        },
+        {
+          "caminho": "themes/desert-rose.md",
+          "sha256": "bd065b8629be3b64655183927e248e3d892a27b8d184b009cfba89c96102744f"
+        },
+        {
+          "caminho": "themes/forest-canopy.md",
+          "sha256": "ecb722efa24688e808b5bf323c334ca2349e989cfddd72ce8400ce5d4c4bd3e7"
+        },
+        {
+          "caminho": "themes/golden-hour.md",
+          "sha256": "3444a00df971d3c2f06b665e21a2e9eb5d7d7d6f6281f2758773b8345776a139"
+        },
+        {
+          "caminho": "themes/midnight-galaxy.md",
+          "sha256": "0e134c4c0324df41e34ac314269aa6829cd378cf3c304b31858d0cd158d2f944"
+        },
+        {
+          "caminho": "themes/modern-minimalist.md",
+          "sha256": "b8bc572b75948d4df69c401af703b9262ed6820a3ceb270da30a529e92763614"
+        },
+        {
+          "caminho": "themes/ocean-depths.md",
+          "sha256": "a7ad8eec85341dbfcb2665da827a4b6a4baee08ab3335ac02421f18e6b46b2e2"
+        },
+        {
+          "caminho": "themes/sunset-boulevard.md",
+          "sha256": "658af11ab04be4923692571081ffb42a428141ae537703117b9236d9f8ee22a3"
+        },
+        {
+          "caminho": "themes/tech-innovation.md",
+          "sha256": "183648163026dd5eeba3df5effa335b55ba333c3ee1fe215278605e55f40a52a"
+        }
+      ]
+    },
+    {
+      "id": "vercel.react-best-practices",
+      "tipo": "skill",
+      "nome": "react-best-practices",
+      "repositorio": "https://github.com/vercel-labs/agent-skills",
+      "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "pastaVendor": "vendor/vercel/agent-skills/react-best-practices",
+      "pastaDestino": "react-best-practices",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "71ed7794962fa6e803ee83030517b5b93a9f70fbfeb431ec4535c5480a8d8355"
+        }
+      ]
+    },
+    {
+      "id": "vercel.web-design-guidelines",
+      "tipo": "skill",
+      "nome": "web-design-guidelines",
+      "repositorio": "https://github.com/vercel-labs/agent-skills",
+      "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "pastaVendor": "vendor/vercel/agent-skills/web-design-guidelines",
+      "pastaDestino": "web-design-guidelines",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "f4647ca866a3accf763777f83e7682954f0187cd6bea7eea0399796652414e8f"
+        }
+      ]
+    },
+    {
+      "id": "vercel.deploy-to-vercel",
+      "tipo": "skill",
+      "nome": "deploy-to-vercel",
+      "repositorio": "https://github.com/vercel-labs/agent-skills",
+      "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "pastaVendor": "vendor/vercel/agent-skills/deploy-to-vercel",
+      "pastaDestino": "deploy-to-vercel",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "418ca2a60d35c551e6cb645f4e82c1b704a8335486ffe74b1b3d0617a17504e5"
+        }
+      ]
+    },
+    {
+      "id": "casa.atendimento-whatsapp",
+      "tipo": "skill",
+      "nome": "atendimento-whatsapp",
+      "versao": "1.0.0",
+      "pastaVendor": "skills-casa/atendimento-whatsapp",
+      "pastaDestino": "atendimento-whatsapp",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "fd614f2e172998824864fcb9e0caff9ad87ba9139c1e3301e521f5fa24a89e53"
+        }
+      ]
+    },
+    {
+      "id": "casa.financeiro-balao",
+      "tipo": "skill",
+      "nome": "financeiro-balao",
+      "versao": "1.0.0",
+      "pastaVendor": "skills-casa/financeiro-balao",
+      "pastaDestino": "financeiro-balao",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "215a23aff8954ca094679e33fa47458ef88d01e8d8f7eebe06edbe6afaf7588d"
+        }
+      ]
+    },
+    {
+      "id": "casa.professor-ingles",
+      "tipo": "skill",
+      "nome": "professor-ingles",
+      "versao": "1.0.0",
+      "pastaVendor": "skills-casa/professor-ingles",
+      "pastaDestino": "professor-ingles",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "9f64e4f49e81895451325a05205cc9aad6f235f44ae724779603027cb9261b90"
+        }
+      ]
+    },
+    {
+      "id": "casa.corretor",
+      "tipo": "skill",
+      "nome": "corretor-do-futuro",
+      "versao": "1.0.0",
+      "pastaVendor": "skills-casa/corretor",
+      "pastaDestino": "corretor-do-futuro",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "4cec827612d61bc87aa9a5cd0314e05491e9c6634938d89ff1e7ac47b2059dca"
+        }
+      ]
+    },
+    {
+      "id": "casa.vendedor-marketplace",
+      "tipo": "skill",
+      "nome": "vendedor-marketplace",
+      "versao": "1.0.0",
+      "pastaVendor": "skills-casa/vendedor-marketplace",
+      "pastaDestino": "vendedor-marketplace",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "f214b3265b249306cb8dedd6e8292a888aa8710fd31f30f9af1f5d33c2eba417"
+        }
+      ]
+    },
+    {
+      "id": "casa.pesquisador",
+      "tipo": "skill",
+      "nome": "pesquisador",
+      "versao": "1.0.0",
+      "pastaVendor": "skills-casa/pesquisador",
+      "pastaDestino": "pesquisador",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "77a23d7d5c47c2db83198c429cd17d72111ea93e4171e327c10e3d2c331d3a58"
+        }
+      ]
+    },
+    {
+      "id": "casa.bling-opcional",
+      "tipo": "skill",
+      "nome": "bling-opcional",
+      "versao": "1.0.0",
+      "pastaVendor": "skills-casa/bling-opcional",
+      "pastaDestino": "bling-opcional",
+      "arquivos": [
+        {
+          "caminho": "SKILL.md",
+          "sha256": "f9c8cb5c3365c71de846837287624813f2e2d8a1ee18403898448ba56e64ee85"
+        }
+      ]
+    },
+    {
+      "id": "meta.whatsapp-business-tools",
+      "tipo": "mcp",
+      "nome": "WhatsApp Business Tools",
+      "descricao": "MCP oficial da Meta. Hospedado, sem commit público. O pin é a URL exata mais o sha256 do contrato.",
+      "url": "https://mcp.facebook.com/whatsapp_business_tools",
+      "versao": "2026-09-03",
+      "contrato": "contratos/whatsapp-business.json",
+      "opencode": {
+        "type": "remote",
+        "url": "https://mcp.facebook.com/whatsapp_business_tools",
+        "enabled": true
+      },
+      "segredos": [
+        {
+          "cofreId": "balao.meta.whatsapp",
+          "uso": "OAuth do WhatsApp Business na Meta. A alma não guarda token."
+        }
+      ],
+      "contratoSha256": "19d7687152c63736b0bc5c8ed4f81bcebe5ca0f134e98de62a69fe14dea223c7"
+    },
+    {
+      "id": "balao-sistema",
+      "tipo": "mcp",
+      "nome": "ERP do Balão",
+      "descricao": "MCP do sistema próprio da loja. Sem repositório público neste workspace: o pin é o sha256 do contrato.",
+      "versao": "1.0.0",
+      "contrato": "contratos/balao-sistema.json",
+      "opencode": {
+        "type": "remote",
+        "url": "{env:BALAO_SISTEMA_URL}",
+        "headers": {
+          "Authorization": "Bearer {env:BALAO_SISTEMA_TOKEN}"
+        },
+        "enabled": true
+      },
+      "segredos": [
+        {
+          "cofreId": "balao.sistema.url",
+          "uso": "Endereço do ERP da loja.",
+          "env": "BALAO_SISTEMA_URL"
+        },
+        {
+          "cofreId": "balao.sistema.token",
+          "uso": "Token do ERP da loja.",
+          "env": "BALAO_SISTEMA_TOKEN"
+        }
+      ],
+      "contratoSha256": "7438e31a84226cc75639cb4902f89f6c902abaa5f75985a53a1dcb161a54f725"
+    },
+    {
+      "id": "bling.mcp",
+      "tipo": "mcp",
+      "nome": "Bling",
+      "descricao": "MCP oficial do Bling. Opcional e desligado. Não substitui o financeiro da loja.",
+      "url": "https://mcp.bling.com.br/mcp",
+      "versao": "2026-10-31",
+      "contrato": "contratos/bling.json",
+      "opcional": true,
+      "padrao": false,
+      "skill": "casa.bling-opcional",
+      "opencode": {
+        "type": "remote",
+        "url": "https://mcp.bling.com.br/mcp",
+        "enabled": true
+      },
+      "permissoes": {
+        "rede": "sim",
+        "enviarMensagens": "nao",
+        "gravarDados": "confirma",
+        "gastarDinheiro": "confirma",
+        "apagar": "confirma",
+        "publicar": "nao"
+      },
+      "segredos": [
+        {
+          "cofreId": "bling.oauth",
+          "uso": "OAuth do Bling. A alma não guarda token."
+        }
+      ],
+      "contratoSha256": "dc1ccb07eb9de692eb6eca4f061dbb08a92d03efca4f76e855ea12c4230d56d6"
+    },
+    {
+      "id": "github.mcp-server",
+      "tipo": "mcp",
+      "nome": "GitHub MCP Server",
+      "repositorio": "https://github.com/github/github-mcp-server",
+      "commit": "b98d115bbb080e9555466a96656ec4df605aea21",
+      "versao": "2.0.3",
+      "artefato": "https://github.com/github/github-mcp-server/releases/download/v2.0.3/github-mcp-server_Linux_x86_64.tar.gz",
+      "checksums": {
+        "linux-x64": "f797c20fe02a755865d0e2d46184ab47e31bf1619b0855b8d89c531e45a651c2",
+        "linux-arm64": "5d2ddc71273fec8917e8f42cf19f26a6bd7acbb679b3a57de2917018b2eadf82",
+        "windows-x64": "f0e1b9880a1b88730d1250d1c25cfee39617ec3e800a7a252f2279cd0c8394e0",
+        "darwin-arm64": "5c95c01f75a7ec2370607e989b2968d314b02a54d78af8a9fdf38f3dfe6135f4"
+      },
+      "comando": [
+        "github-mcp-server",
+        "stdio"
+      ],
+      "opencode": {
+        "type": "local",
+        "command": [
+          "github-mcp-server",
+          "stdio"
+        ],
+        "environment": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+        },
+        "enabled": true
+      },
+      "segredos": [
+        {
+          "cofreId": "github.token",
+          "uso": "Token do GitHub para o MCP oficial.",
+          "env": "GITHUB_PERSONAL_ACCESS_TOKEN"
+        }
+      ]
+    },
+    {
+      "id": "microsoft.playwright-mcp",
+      "tipo": "mcp",
+      "nome": "Playwright MCP",
+      "repositorio": "https://github.com/microsoft/playwright-mcp",
+      "commit": "be26c080edfae7c761db1e757c4aff9f6453b4d7",
+      "npm": "@playwright/mcp",
+      "versao": "0.0.84",
+      "integridade": "sha512-weqLrA7/D8MJzNV9/t3Hnjp100tS2sxFXKeb2gH6Nhktqmdfvx5qRA9AZ5Mhjnre1jY0wltsrRK5VZS5NBgcvw==",
+      "comando": [
+        "npx",
+        "--yes",
+        "@playwright/mcp@0.0.84"
+      ],
+      "opencode": {
+        "type": "local",
+        "command": [
+          "npx",
+          "--yes",
+          "@playwright/mcp@0.0.84"
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "id": "modelcontextprotocol.fetch",
+      "tipo": "mcp",
+      "nome": "Fetch",
+      "repositorio": "https://github.com/modelcontextprotocol/servers",
+      "commit": "194cc86e3ae6400958555bd4116849d822d69263",
+      "versao": "2026.10.28",
+      "pastaVendor": "vendor/modelcontextprotocol/fetch",
+      "comando": [
+        "uvx",
+        "--from",
+        "git+https://github.com/modelcontextprotocol/servers@194cc86e3ae6400958555bd4116849d822d69263#subdirectory=src/fetch",
+        "mcp-server-fetch"
+      ],
+      "opencode": {
+        "type": "local",
+        "command": [
+          "uvx",
+          "--from",
+          "git+https://github.com/modelcontextprotocol/servers@194cc86e3ae6400958555bd4116849d822d69263#subdirectory=src/fetch",
+          "mcp-server-fetch"
+        ],
+        "enabled": true
+      },
+      "arquivos": [
+        {
+          "caminho": "LICENSE",
+          "sha256": "8cc7c6e33b24ed4ee8fcccc33eccf102549d04fa4cb9737cecc9770dad1080ff"
+        },
+        {
+          "caminho": "pyproject.toml",
+          "sha256": "593388e68d77c50f7a5aef6fe52a36c807ed0c16d28cc739f38f1fa7a79b8b3b"
+        },
+        {
+          "caminho": "server.py",
+          "sha256": "a8977c14fa1ea9560e72f3a35cc219ef1570920e6fde8dc2a96cbfd21e53a7db"
+        }
+      ]
+    },
+    {
+      "id": "casa.corretor-do-futuro",
+      "tipo": "mcp",
+      "nome": "Adaptador Corretor do Futuro",
+      "versao": "1.0.0",
+      "contrato": "contratos/corretordofuturo.json",
+      "pastaVendor": "src/adaptadores",
+      "comando": [
+        "node",
+        "--import",
+        "tsx",
+        "packages/soul-bank/src/adaptadores/stdio.ts"
+      ],
+      "opencode": {
+        "type": "local",
+        "command": [
+          "node",
+          "--import",
+          "tsx",
+          "packages/soul-bank/src/adaptadores/stdio.ts"
+        ],
+        "environment": {
+          "CORRETOR_BASE_URL": "{env:CORRETOR_BASE_URL}",
+          "CORRETOR_TOKEN": "{env:CORRETOR_TOKEN}"
+        },
+        "enabled": true
+      },
+      "segredos": [
+        {
+          "cofreId": "corretor.base-url",
+          "uso": "URL base da API do corretordofuturo.app.",
+          "env": "CORRETOR_BASE_URL"
+        },
+        {
+          "cofreId": "corretor.token",
+          "uso": "Token da API do corretordofuturo.app.",
+          "env": "CORRETOR_TOKEN"
+        }
+      ],
+      "arquivos": [
+        {
+          "caminho": "corretorDoFuturo.ts",
+          "sha256": "b0f744229beb04c68e8d042e9f354462b5317c2584c790d393d1e2a9ff6f3748"
+        },
+        {
+          "caminho": "stdio.ts",
+          "sha256": "ca61165b8f3898eceba45911e25509c508d6826cb9f169ba25c28a34e022180d"
+        }
+      ],
+      "contratoSha256": "c6207a77eb0c8f177c18ace00a82037eee454036f939d6dfb8525eabe76430fc"
+    }
+  ],
+  "proibidos": [
+    {
+      "id": "whatsapp-web-nao-oficial",
+      "motivo": "Não habilitar automaticamente MCPs de WhatsApp Web. O canal oficial é o MCP da Meta.",
+      "padroes": [
+        "baileys",
+        "whatsapp-web",
+        "wwebjs",
+        "whiskeysockets",
+        "lharries/whatsapp-mcp",
+        "@open-wa"
+      ]
+    }
+  ]
+}

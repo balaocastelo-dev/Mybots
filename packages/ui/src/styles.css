@@ -1508,7 +1508,7 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   position: relative;
   flex: none;
   min-width: 280px;
-  max-width: min(760px, 46%);
+  max-width: min(860px, 58%);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1554,12 +1554,14 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 1px var(--line);
 }
 .pc-segmento button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pc-segmento.varias { display: flex; flex-wrap: wrap; }
+.pc-segmento.varias button { flex: 1 1 calc(33.33% - 4px); min-height: 52px; }
 .bots li.atalhos-wrap { display: block; padding: 2px 0 8px; cursor: default; background: transparent; box-shadow: none; }
 .bots li.atalhos-wrap:hover { background: transparent; }
 .lista-atalhos { margin: 4px 2px 0; }
 .lista-atalhos button { min-height: 52px; padding: 6px 2px; font-size: 10.5px; }
 .lista-atalhos button span { white-space: normal; text-overflow: clip; line-height: 1.15; }
-.lado-trabalho { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow: auto; min-height: 0; }
+.lado-trabalho { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow: auto; min-height: 0; flex: 1; }
 .lado-trabalho > b { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--fraco); }
 .cel-emp { display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 0; overflow: auto; }
 .cel-emp-passo { font-size: 12.5px; margin: 0; }
@@ -2006,3 +2008,131 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   .ajustes-maq { grid-template-columns: 1fr; }
   .ajustes-cofre > li { flex-direction: column; align-items: stretch; }
 }
+
+/* Telas do bot: PC e Android no tamanho exato da tela remota. */
+.telas-bot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  overflow: auto;
+}
+.telas-fit {
+  flex: 1 1 auto;
+  min-height: 200px;
+  display: grid;
+  place-items: center;
+}
+.telas-par {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  max-width: 100%;
+  max-height: 100%;
+}
+.telas-par.empilhado { flex-direction: column; }
+.quadro {
+  position: relative;
+  flex: none;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  min-width: 0;
+}
+.quadro-pc { aspect-ratio: 16 / 9; border-radius: 8px; box-shadow: 0 0 0 1px #2a2a2e; }
+.quadro-android { aspect-ratio: 9 / 19.5; border-radius: 18px; box-shadow: 0 0 0 3px #1a1a1e; }
+.telas-par.empilhado .quadro { width: 100%; height: auto; }
+.quadro iframe,
+.quadro-estado {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000;
+}
+.quadro-pc iframe { pointer-events: none; }
+.quadro-estado {
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  text-align: center;
+  color: #c8c8c8;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.quadro-abre {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.quadro-abre:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.android-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.android-parear { flex: none; }
+.android-dica { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.android-erro { margin: 0; color: var(--danger, #d4453c); font-size: 13px; }
+.pc-ampliado-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(8, 8, 10, .72);
+  display: grid;
+  place-items: center;
+  padding: 36px;
+}
+.pc-ampliado {
+  position: relative;
+  width: min(calc(100vw - 72px), calc((100dvh - 72px) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  max-height: calc(100dvh - 72px);
+}
+.pc-ampliado-tela,
+.pc-ampliado iframe,
+.pc-ampliado .quadro-estado {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: #000;
+}
+.pc-ampliado iframe { display: block; }
+.pc-ampliado .quadro-estado { display: grid; }
+.pc-ampliado-x {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #111;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+}
+.mac-embutido { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.mac-embutido h3 { margin: 0; font-size: 15px; }
+.mac-tela-embutida { flex: 1; min-height: 220px; border-radius: 12px; overflow: hidden; background: #000; position: relative; }
+.mac-tela-embutida iframe { width: 100%; height: 100%; min-height: 220px; border: 0; display: block; }
+.trabalhos.embutido { height: auto; min-height: 0; flex: 1; padding: 10px 12px 18px; }
+.trabalhos.embutido .trab-grade { grid-template-columns: 1fr; }

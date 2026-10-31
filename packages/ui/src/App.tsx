@@ -8,15 +8,9 @@ import { ContextMenu, useToqueLongo, type ItemMenu } from "./ContextMenu";
 import { desintegrarAvatar } from "./particulas";
 import { LendoSite } from "./lendo";
 import { ArteDoBot, EscolhaAparencia, lerAparencia } from "./aparencia";
-import { Trabalhos } from "./trabalhos";
 import { Abertura, PrimeiraEmpresa, EscolhaIdioma } from "./abertura";
 import { TelaLegal } from "./legal";
 import { TelaCreditos } from "./creditos";
-import { PcDaEmpresa } from "./pc";
-import { AtalhoCelular, CelularDaEmpresaPainel } from "./celularEmpresa";
-import { PainelDoPc } from "./painelPc";
-import { CelularDaEmpresa } from "./celular";
-import { TelaDoMac } from "./mac";
 import { Fragment } from "react";
 import { usePainelPrefs, nomeNaTela, ChipTrocas, FolhaAbrirTroca, TrocaEntreBots, DialogoTexto, type Troca, type PrefDoBot } from "./painel";
 import { montarLista } from "./lista";
@@ -50,9 +44,6 @@ export function App() {
   const [verConfig, setVerConfig] = useState<AbaConfig | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [newGroup, setNewGroup] = useState(false);
-  const [verTrabalhos, setVerTrabalhos] = useState(false);
-  const [verCelular, setVerCelular] = useState(false);
-  const [verMac, setVerMac] = useState(false);
   const [newBot, setNewBot] = useState(false);
   // Empresas: cada uma com seus bots, gerentes e regras. O conhecimento continua universal.
   const [empresas, setEmpresas] = useState<Array<{ id: string; nome: string; regras: string; idioma?: string; bots: number }>>([]);
@@ -138,7 +129,7 @@ export function App() {
   const busca = filter.trim().toLowerCase();
   const gruposVisiveis = state.groups.filter((g) => !busca || g.name.toLowerCase().includes(busca));
   const linhaGrupo = (g: Group) => (
-    <li key={g.id} className={(groupConversation(g.id) === selected ? "active" : "")} onClick={() => { setVerTrabalhos(false); setSelected(groupConversation(g.id)); if (window.innerWidth < 720) setSidebarOpen(false); }}>
+    <li key={g.id} className={(groupConversation(g.id) === selected ? "active" : "")} onClick={() => { setSelected(groupConversation(g.id)); if (window.innerWidth < 720) setSidebarOpen(false); }}>
       <div className="avatar group-avatar" style={{ width: 36, height: 36 }}>👥</div>
       <div className="bot-text">
         <div className="bot-name">{g.name}</div>
@@ -238,25 +229,6 @@ export function App() {
         <GlobalControl control={state.control} />
         {(buscaAberta || filter) && <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />}
         <ul className="bots">
-          <li className="atalhos-wrap">
-            <div className="pc-segmento lista-atalhos" role="tablist" aria-label="Atalhos da lista">
-              <button type="button" aria-pressed={verCelular} className={verCelular ? "on" : ""} onClick={() => {
-                const ligar = !verCelular;
-                setVerCelular(ligar); setVerMac(false); setVerTrabalhos(false);
-                if (ligar && window.innerWidth < 720) setSidebarOpen(false);
-              }} title="Celular"><Icone nome="celular" /><span>Celular</span></button>
-              <button type="button" aria-pressed={verMac} className={verMac ? "on" : ""} onClick={() => {
-                const ligar = !verMac;
-                setVerMac(ligar); setVerCelular(false); setVerTrabalhos(false);
-                if (ligar && window.innerWidth < 720) setSidebarOpen(false);
-              }} title="Tela do Mac"><Icone nome="mac" /><span>Tela do Mac</span></button>
-              <button type="button" aria-pressed={verTrabalhos} className={verTrabalhos ? "on" : ""} onClick={() => {
-                const ligar = !verTrabalhos;
-                setVerTrabalhos(ligar); setVerCelular(false); setVerMac(false);
-                if (ligar && window.innerWidth < 720) setSidebarOpen(false);
-              }} title="Trabalhos"><Icone nome="pasta" /><span>Trabalhos</span></button>
-            </div>
-          </li>
           <li className="section empresa-linha">
             <select className="empresa-sel" value={empresaAtiva} onChange={(e) => { if (e.target.value === "+nova") { setVerEmpresas(true); return; } setEmpresaAtiva(e.target.value); }}>
               <option value="todas">Todas as empresas</option>
@@ -282,7 +254,7 @@ export function App() {
                   const conv = dmConversation(b.id);
                   return (
                     <li key={b.id} className={conv === selected ? "ativo" : ""}
-                      onClick={() => { cutucar(b.id); setVerTrabalhos(false); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
+                      onClick={() => { cutucar(b.id); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
                       onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
                       <span className="grade-rosto">
                         <Avatar bot={b} size={64} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
@@ -305,7 +277,7 @@ export function App() {
                 const conv = dmConversation(b.id);
                 return (
                   <li key={b.id} className={"linha-bot" + (conv === selected ? " active" : "") + (b.online ? "" : " offline")}
-                    onClick={() => { cutucar(b.id); setVerTrabalhos(false); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
+                    onClick={() => { cutucar(b.id); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
                     onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
                     <Avatar bot={b} size={36} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
                     <div className="bot-text">
@@ -338,8 +310,6 @@ export function App() {
       <main className="chat" style={target?.kind === "bot" ? ({ "--bot": colorFor(target.bot.id) } as any) : undefined}>
         {verTroca ? (
           <TrocaEntreBots conversationId={verTroca} bots={state.bots} Avatar={Avatar} onFechar={() => setVerTroca(null)} />
-        ) : verTrabalhos ? (
-          <Trabalhos bots={state.bots} onClose={() => setVerTrabalhos(false)} />
         ) : target && selected ? (
           <Conversation
             key={selected}
@@ -358,7 +328,7 @@ export function App() {
             send={send}
             onEvent={onEvent}
             onOpenSidebar={() => setSidebarOpen(true)}
-            onAbrirTroca={(conv) => { setVerTrabalhos(false); setVerTroca(conv); }}
+            onAbrirTroca={(conv) => { setVerTroca(conv); }}
             control={state.control}
             initialPanel={panel && panel.conv === selected ? panel : null}
             empresaNome={target.kind === "bot" && target.bot.empresaId ? (empresas.find((e) => e.id === target.bot.empresaId)?.nome ?? "") : ""}
@@ -420,8 +390,6 @@ export function App() {
       )}
       {legalPara && <TelaLegal empresaId={legalPara} empresaNome={empresas.find((e) => e.id === legalPara)?.nome ?? legalPara}
         onClose={() => { setLegalPara(null); setVerEmpresas(true); }} />}
-      {verCelular && <AtalhoCelular empresas={empresas} ativa={empresaAtiva} onFechar={() => setVerCelular(false)} />}
-      {verMac && <TelaDoMac onFechar={() => setVerMac(false)} />}
       {verEmpresas && <EmpresasDialog empresas={empresas} bots={state.bots} onClose={() => { setVerEmpresas(false); void carregarEmpresas(); }} />}
       {newBot && <NewBotDialog empresas={empresas} empresaAtiva={empresaAtiva} onCriou={() => void carregarEmpresas()} onClose={() => setNewBot(false)} onCreated={(id) => { setNewBot(false); setSelected(dmConversation(id)); }} />}
 

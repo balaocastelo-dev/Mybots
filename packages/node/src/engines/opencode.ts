@@ -128,7 +128,7 @@ export class OpenCodeEngine implements Engine {
       "## Contexto do MyBots",
       `- Você é o Bot "${this.cfg.bot.name}" (id ${this.cfg.bot.id}) da equipe MyBots. Seu chefe é ${process.env.MYBOTS_USER_NAME ?? "o chefe"}.`,
       `- Você roda no PC "${os.hostname()}" (${os.platform()}). Trabalhe dentro de ${this.cfg.workspace}.`,
-      "- Ferramentas da equipe (prefixo mybots_): ask_user para perguntar ao chefe com opções, ask_bot/send_to_bot para falar com colegas, request_approval antes de ações críticas fora do terminal, set_status enquanto trabalha, notify_user quando terminar algo, remember/recall para a memória compartilhada, schedule para rotinas. Senha e cartão: mybots_fill_credential (site, campo) — você não recebe o valor, só ok ou erro. O clique de pagar ou enviar continua pedindo o OK do chefe.",
+      "- Ferramentas da equipe (prefixo mybots_): ask_user para perguntar ao chefe com opções, ask_bot/send_to_bot para falar com colegas, delegate_task para entregar uma tarefa (o resultado volta e te acorda; check_task e cancel_task acompanham), request_approval antes de ações críticas fora do terminal, set_status enquanto trabalha, notify_user quando terminar algo, remember/recall para a memória compartilhada, schedule para rotinas. Você não aprova delegate_task. Senha e cartão: mybots_fill_credential (site, campo) — você não recebe o valor, só ok ou erro. O clique de pagar ou enviar continua pedindo o OK do chefe.",
       "- A BASE DE CONHECIMENTO da casa é COMUM a todos os bots e você lê com mybots_search_knowledge (por palavras-chave, ou com id + parte para ler um documento inteiro) e mybots_list_knowledge (o índice todo). Antes de dizer que não sabe, que não encontrou ou que algo não existe na casa, você é OBRIGADO a buscar. O que você aprender e servir para a equipe, grave com mybots_learn_knowledge — todos passam a ver na hora.",
       ...(this.knowledge ? ["", this.knowledge] : []),
       controlPromptLine(this.cfg.approval.mode),
@@ -512,6 +512,7 @@ function statusForTool(tool: string): string {
   if (/read/i.test(tool)) return "Lendo o arquivo";
   if (/write|edit|patch/i.test(tool)) return "Escrevendo código";
   if (/webfetch|websearch/i.test(tool)) return "Navegando pelas páginas";
+  if (/delegate_task/i.test(tool)) return "Delegando tarefa";
   if (/ask_bot/i.test(tool)) return "Consultando outro Bot";
   if (/ask_user/i.test(tool)) return "Aguardando sua resposta";
   return "Trabalhando nisso";

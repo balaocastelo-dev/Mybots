@@ -2,13 +2,15 @@ import type { WebSocket } from "ws";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  type BotEvent, type BotInfo, type BotSummary, type ControlMode, type ControlState, type FaseAtividade, type Group, type HubToNode, type HubToUi, type NodeToHub,
+  type ApprovalKind, type BotEvent, type BotInfo, type BotSummary, type ControlMode, type ControlState, type FaseAtividade, type Group, type HubToNode, type HubToUi, type NodeToHub,
   type PendingApproval, type PendingQuestion, type Routine, type Sender, type StoredMessage, type UiToHub,
   type Saber,
   type SaberTipo,
   botOfConversation, cortarFala, dmConversation, effectiveControl, faseDoStatus, groupOfConversation, isControlMode, needsHumanApproval, newId, pairConversation, PROTOCOL_VERSION, SABER_LABELS,
 } from "@mybots/shared";
 import { Db } from "./db.js";
+import { Cofre } from "./cofre.js";
+import { redigir, semSegredo, textoSeguro } from "./redacao.js";
 import { WhatsAppDasEmpresas } from "./whatsapp.js";
 import { PrimeirosPassos } from "./primeirospassos.js";
 import { logoNaPasta } from "./folha.js";
@@ -26,6 +28,7 @@ import { aprovacaoDoPainel, classificarAcaoSensivel, mensagemLiberaEnvioExterno,
 import { UsosDoPc } from "./usoDoPc.js";
 import { Gravacoes, codificarMp4, ligarCdp, portaCdpPermitida, temFfmpeg, limitesDaGravacao } from "./gravacao.js";
 import { estadoDa as estadoDaMaquina } from "./maquinas.js";
+import { acordarPc, botPadraoDaEmpresa, temRegistro, tocarPc, type BotParaPc } from "./pcs.js";
 import * as celular from "./celular.js";
 import {
   TravaDosCelulares, acaoSensivel, enderecoParaReconectar, lerMdns, lerPareamento, pacoteValido, resumoDoCelular,
@@ -212,8 +215,12 @@ export class Hub {
   /** O roteiro dos primeiros passos de uma empresa nova. */
   readonly passos: PrimeirosPassos;
 
+  /** Credenciais cifradas. O valor não volta para bot nem para a interface. */
+  readonly cofre: Cofre;
+
   constructor(dbFile: string, public readonly userName = process.env.MYBOTS_USER_NAME ?? "o chefe") {
     this.db = new Db(dbFile);
+    this.cofre = new Cofre(this.db.sqlite);
     this.whats = new WhatsAppDasEmpresas(path.dirname(dbFile), (estado) => this.broadcastUi({ type: "whatsapp", estado }));
     // Sessao ja escaneada volta sozinha quando o Hub sobe: ninguem escaneia duas vezes.
     setTimeout(() => { for (const id of this.whats.salvas()) void this.whats.conectar(id).catch(() => {}); }, 1500);
@@ -412,6 +419,10 @@ export class Hub {
     }
     const n = this.nodes.get(botId);
     if (!n || n.ws.readyState !== n.ws.OPEN) return false;
+    if (msg.type === "message" && temRegistro(botId)) {
+      tocarPc(botId);
+      void acordarPc(botId).catch((e) => console.error(`[pc] ${botId}: ${(e as Error).message}`));
+    }
     n.ws.send(JSON.stringify(msg));
     return true;
   }
@@ -913,10 +924,28 @@ export class Hub {
     return this.usos.ver(empresaId);
   }
 
+  private botsParaPc(): BotParaPc[] {
+    const managed = new Map(this.db.listManaged().map((d: { id: string; name?: string; gerente?: boolean; createdAt?: number }) => [d.id, d]));
+    return this.db.listBots().map((b) => ({
+      id: b.id,
+      nome: managed.get(b.id)?.name ?? b.name,
+      empresaId: b.empresaId ?? null,
+      gerente: !!managed.get(b.id)?.gerente,
+      createdAt: managed.get(b.id)?.createdAt ?? 0,
+    }));
+  }
+
+  /** O bot ainda está no meio de uma tarefa: o PC dele não conta como ocioso. */
+  estaOcupado(botId: string): boolean {
+    return !!this.nodes.get(botId)?.busy;
+  }
+
   private async fonteDaTela(empresaId: string, onFrame: (jpeg: Buffer) => boolean) {
-    const m = await estadoDaMaquina(empresaId);
+    const padrao = botPadraoDaEmpresa(empresaId, this.botsParaPc());
+    const m = padrao ? await acordarPc(padrao) : await estadoDaMaquina(empresaId);
+    if (!m) return { erro: "o PC desta empresa está desligado" };
     if (m.estado === "sem-docker") return { erro: "o Docker não está no ar nesta máquina" };
-    if (m.estado !== "ligada") return { erro: "o PC desta empresa está desligado" };
+    if (m.estado !== "ligada") return { erro: m.erro || "o PC desta empresa está desligado" };
     if (!portaCdpPermitida(m.portaCdp)) return { erro: "a porta do navegador está fora da faixa deste Hub" };
     return ligarCdp(m.portaCdp, onFrame, limitesDaGravacao().fps);
   }
@@ -1269,7 +1298,7 @@ export class Hub {
         }
         void this.manageBot(msg.acao, msg.bot, msg.apagarArquivos === true)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.msg }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "criar_bot": {
@@ -1280,7 +1309,7 @@ export class Hub {
         }
         void this.criarBot({ nome: msg.nome, funcao: msg.funcao, persona: msg.persona, empresaId: this.empresaDe(botId).id, gerenteId: botId })
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.msg }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "remember":
@@ -1304,17 +1333,23 @@ export class Hub {
         this.broadcastUi({ type: "creditos", empresaId: emp, saldoCentavos: cob.saldo });
         return;
       }
+      case "fill_credential": {
+        void this.cofre.preencher({ botId, empresaId: this.empresaDe(botId).id, site: msg.site, campo: msg.campo })
+          .then((texto) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: texto === "ok", data: texto }))
+          .catch(() => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: "erro: não consegui preencher" }));
+        return;
+      }
       case "gravar_tela": {
         const onde = msg.onde === "celular" ? "celular" : "pc";
         void this.atenderGravacao(botId, msg.acao, msg.conversationId, msg.legenda, onde)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "celular": {
         void this.atenderCelular(botId, msg)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "whatsapp_send": {
@@ -1342,7 +1377,7 @@ export class Hub {
           : this.whats.enviar(emp, String(msg.para ?? ""), String(msg.texto ?? ""));
         void envio
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.detalhe }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "learn_knowledge": {
@@ -1365,7 +1400,7 @@ export class Hub {
           this.db.audit(botId, "file.sent", { name: f.name, size: f.size });
           return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: `Arquivo enviado ao chefe: ${f.name} (${config.publicUrl}${f.url})` });
         } catch (e) {
-          return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message });
+          return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) });
         }
       }
       case "schedule": {
@@ -1391,7 +1426,7 @@ export class Hub {
     try {
       await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...(config.channelWebhookKey ? { authorization: `Bearer ${config.channelWebhookKey}` } : {}) }, body: JSON.stringify({ channel, to: from, botId, text }), signal: AbortSignal.timeout(15_000) });
     } catch (e) {
-      this.storeMessage(conversationId, SYSTEM, `Falha ao entregar no canal ${channel}: ${(e as Error).message}`, { error: true });
+      this.storeMessage(conversationId, SYSTEM, `Falha ao entregar no canal ${channel}: ${textoSeguro(e)}`, { error: true });
     }
   }
 
@@ -1461,9 +1496,10 @@ export class Hub {
       }
       case "tool.start": {
         this.ensureStream(ev.messageId, conversationId, botId, sender);
-        this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, input: ev.input, done: false });
-        this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "start", input: ev.input });
-        this.db.audit(botId, "tool.start", { tool: ev.tool, input: ev.input, conversationId });
+        const entrada = semSegredo(ev.input);
+        this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, input: entrada, done: false });
+        this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "start", input: entrada });
+        this.db.audit(botId, "tool.start", { tool: ev.tool, input: entrada, conversationId });
         this.anotarTela(botId, ev.tool, ev.input);
         this.anotarCelular(botId, ev.tool, ev.input);
         this.definirAtividade(botId, "Trabalhando", true, "trabalhando");
@@ -1471,8 +1507,9 @@ export class Hub {
       }
       case "tool.done": {
         this.ensureStream(ev.messageId, conversationId, botId, sender);
-        this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, output: ev.output.slice(0, 4000), ok: ev.ok, done: true });
-        this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "done", output: ev.output.slice(0, 4000), ok: ev.ok });
+        const saida = redigir(ev.output).slice(0, 4000);
+        this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, output: saida, ok: ev.ok, done: true });
+        this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "done", output: saida, ok: ev.ok });
         return;
       }
       case "approval.request": {
@@ -1494,8 +1531,9 @@ export class Hub {
         this.storeMessage(conversationId, sender, `Enviou ${ev.name}`, { file: { name: ev.name, path: ev.path, mime: ev.mime } });
         return;
       case "error":
-        this.storeMessage(conversationId, SYSTEM, `Erro em ${sender.name}: ${ev.message}`, { error: true });
-        this.db.audit(botId, "error", { message: ev.message, conversationId });
+        const msgErro = redigir(ev.message);
+        this.storeMessage(conversationId, SYSTEM, `Erro em ${sender.name}: ${msgErro}`, { error: true });
+        this.db.audit(botId, "error", { message: msgErro, conversationId });
         return;
     }
   }
@@ -1903,7 +1941,7 @@ export class Hub {
     });
   }
 
-  requestApprovalFromMcp(botId: string, tool: string, input: unknown, risk: PendingApproval["risk"], description: string): Promise<boolean> {
+  requestApprovalFromMcp(botId: string, tool: string, input: unknown, risk: PendingApproval["risk"], description: string, kind: ApprovalKind = "action"): Promise<boolean> {
     const gate = classificarAcaoSensivel(tool, input, description);
     if (gate === "envio" && !mensagemLiberaEnvioExterno(this.colab.autorDe(botId))) {
       registrarAuditoria({ acao: "colab.bloqueio", de: botId, para: "externo", detalhe: { motivo: "aprovacao", ferramenta: tool, via: "mcp" } });
@@ -1911,7 +1949,7 @@ export class Hub {
       return Promise.resolve(false);
     }
     const mode = this.effectiveModeFor(botId);
-    if (!gate && !needsHumanApproval(mode, "action", risk)) {
+    if (!gate && !needsHumanApproval(mode, kind, risk)) {
       this.db.audit(botId, "approval.auto", { mode, tool, input, risk, description, via: "mcp" });
       return Promise.resolve(true);
     }
@@ -1934,6 +1972,7 @@ export class Hub {
     const n = this.nodes.get(botId);
     const resolvida = faseDoStatus(text, busy, fase);
     if (n) { n.status = text; n.busy = busy; n.fase = resolvida; }
+    if (busy && temRegistro(botId)) tocarPc(botId);
     this.broadcastUi({ type: "status", botId, text, busy, fase: resolvida });
     if (!busy) this.finalizeStreams(botId);
   }

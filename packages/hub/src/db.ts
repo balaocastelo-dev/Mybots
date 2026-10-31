@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import type { Saber, SaberHit, BotInfo, Group, PendingApproval, PendingQuestion, Routine, Sender, StoredMessage, Risk } from "@mybots/shared";
+import { redigir } from "./redacao.js";
 
 /** O que a tela da primeira empresa e o Gerente guardam além do nome e das regras. */
 export type FichaEmpresa = {
@@ -833,8 +834,12 @@ export class Db {
   }
 
   audit(botId: string | null, action: string, detail?: unknown) {
-    this.db.prepare(`INSERT INTO audit (ts, bot_id, action, detail) VALUES (?, ?, ?, ?)`).run(Date.now(), botId, action, detail === undefined ? null : JSON.stringify(detail));
+    const cru = detail === undefined ? null : JSON.stringify(detail);
+    this.db.prepare(`INSERT INTO audit (ts, bot_id, action, detail) VALUES (?, ?, ?, ?)`).run(Date.now(), botId, action, cru == null ? null : redigir(cru));
   }
+
+  /** Conexão do cofre, que mora neste mesmo banco. */
+  get sqlite(): Database.Database { return this.db; }
 
   auditTail(limit = 100) {
     return this.db.prepare(`SELECT * FROM audit ORDER BY id DESC LIMIT ?`).all(limit);

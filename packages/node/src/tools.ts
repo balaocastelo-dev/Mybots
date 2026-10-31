@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { type ApprovalKind, type CartaoDeAcao, type ControlMode, type Risk, isHeavyCommand, needsHumanApproval } from "@mybots/shared";
+import { type ApprovalKind, type CartaoDeAcao, type ControlMode, type Risk, isHeavyCommand, needsHumanApproval, tipoDeAprovacao } from "@mybots/shared";
 import { classificarAcaoSensivel, mensagemLiberaEnvioExterno } from "../../hub/src/colab/seguranca.ts";
 import { checkNow, describe, limitsFromEnv, waitForRoom } from "./resources.js";
 import type { NodeConfig } from "./config.js";
@@ -141,7 +141,8 @@ export const TOOL_DEFS: ToolDef[] = [
   { name: "email", description: "E-mail do chefe (Gmail). 'conferir' diz se está configurado e quantos não lidos. 'caixa' lista as últimas. 'buscar' procura por termo. 'ler' abre uma pelo id. 'enviar' manda — e enviar SEMPRE pede o OK do chefe, em qualquer modo de controle.", parameters: { type: "object", properties: { acao: { type: "string", enum: ["conferir", "caixa", "buscar", "ler", "enviar"] }, termo: { type: "string" }, id: { type: "string", description: "id da mensagem, vem da ação caixa" }, quantos: { type: "number" }, nao_lidos: { type: "boolean" }, para: { type: "string" }, copia: { type: "string" }, assunto: { type: "string" }, texto: { type: "string" }, anexo: { type: "string", description: "caminho de um arquivo do seu workspace" } }, required: ["acao"] } },
   { name: "gerar_video_h3", description: "Gera vídeo com o MiniMax H3 LOCAL na RTX 4090 (com áudio e fala em pt-BR, vertical para Reels). USE SOMENTE quando o chefe pedir \"H3\" ou \"H3 MiniMax\" com essas palavras. Para qualquer outro pedido de vídeo, use generate_video. Demora minutos e exige a placa livre: se a VRAM estiver ocupada a ferramenta recusa e diz o que fechar.", parameters: { type: "object", properties: { prompt: { type: "string", description: "o que deve aparecer no vídeo, em português, bem descrito (cena, câmera, luz, e a fala se houver)" }, imagem: { type: "string", description: "caminho de uma imagem de referência no workspace, para o vídeo partir dela (opcional)" }, segundos: { type: "number", description: "duração; 6 por padrão, use mais só se o chefe pedir" }, largura: { type: "number", description: "768 por padrão" }, altura: { type: "number", description: "1344 por padrão (vertical/Reels); use 768x768 para quadrado e 1344x768 para horizontal" }, so_conferir: { type: "boolean", description: "true só verifica se a placa está livre, sem gerar nada" } }, required: ["prompt"] } },
   { name: "system_resources", description: "Mostra a memória livre deste PC (RAM e vídeo) e se dá para começar um trabalho pesado sem invadir a reserva do sistema. Use ANTES de vídeo, ComfyUI, modelos locais ou builds grandes.", parameters: { type: "object", properties: { need_ram_gb: { type: "number", description: "quanto de RAM o trabalho deve consumir, se souber" }, need_vram_gb: { type: "number" } } } },
-  { name: "request_approval", description: "Pede aprovação do chefe antes de algo crítico que não passa por run_command (pagar, enviar mensagem/e-mail, publicar). Retorna 'aprovado' ou 'negado'.", parameters: { type: "object", properties: { action: { type: "string" }, detail: { type: "string" }, risk: { type: "string", enum: ["low", "medium", "high"] } }, required: ["action"] } },
+  { name: "request_approval", description: "Pede aprovação do chefe antes de algo crítico que não passa por run_command (pagar, enviar mensagem/e-mail, publicar). Retorna 'aprovado' ou 'negado'. Pagar e enviar pedem o chefe mesmo no modo deus.", parameters: { type: "object", properties: { action: { type: "string" }, detail: { type: "string" }, risk: { type: "string", enum: ["low", "medium", "high"] } }, required: ["action"] } },
+  { name: "fill_credential", description: "Preenche login ou cartão no navegador, com o cofre do Hub. Você NÃO recebe a senha, o número nem o cvv: a resposta é só ok ou erro. site é o endereço da página (ou o nome do cartão, se houver mais de um). campo: usuario, senha, notas, titular, numero, validade ou cvv. Não clica em pagar, enviar ou comprar — esse clique pede o OK do chefe, sempre. Sem permissão explícita, volta erro.", parameters: { type: "object", properties: { site: { type: "string" }, campo: { type: "string", description: "usuario, senha, titular, numero, validade ou cvv" } }, required: ["site", "campo"] } },
   { name: "list_bots", description: "Lista os outros Bots da equipe e se estão online.", parameters: { type: "object", properties: {} } },
   {
     name: "criar_bot",
@@ -292,8 +293,15 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
       }
       case "request_approval": {
         const risk = (["low", "medium", "high"].includes(String(args.risk)) ? args.risk : "medium") as Risk;
-        const ok = await approveByMode(ctx, "action", "action", { action: args.action, detail: args.detail }, risk, String(args.action ?? "ação"));
+        const frase = `${args.action ?? ""} ${args.detail ?? ""}`;
+        const ok = await approveByMode(ctx, tipoDeAprovacao(frase), "action", { action: args.action, detail: args.detail }, risk, String(args.action ?? "ação"));
         return { output: ok ? "aprovado" : "negado", ok: true };
+      }
+      case "fill_credential": {
+        const r = await ctx.hub.call((callId) => ({ type: "fill_credential", callId, site: String(args.site ?? ""), campo: String(args.campo ?? "") }), 30_000);
+        const texto = typeof r.data === "string" ? r.data : "erro: não consegui preencher";
+        const seguro = texto === "ok" || texto.startsWith("erro:") ? texto : "erro: não consegui preencher";
+        return { output: seguro, ok: seguro === "ok" };
       }
       case "gerenciar_bot": {
         const acao = String(args.acao ?? "");
@@ -897,7 +905,8 @@ async function navegador(args: Record<string, any>, ctx: ToolContext): Promise<{
     const texto = String(args.texto ?? "").trim();
     if (!texto) return { output: "Diga o texto do botão ou link a clicar.", ok: false };
     if (CLIQUE_IRREVERSIVEL.test(texto)) {
-      const permitido = await approveByMode(ctx, "publicacao", "navegador",
+      const kind = tipoDeAprovacao(texto) === "pagamento" ? "pagamento" : "publicacao";
+      const permitido = await approveByMode(ctx, kind, "navegador",
         { acao: "clicar", botao: texto, pagina: await paginaAtual(script, ctx) }, "high",
         `Clicar em "${texto}" no navegador — isso muda algo de verdade (comprar, enviar, publicar ou excluir)`);
       if (!permitido) return { output: `O chefe não aprovou. Não cliquei em "${texto}".`, ok: true };

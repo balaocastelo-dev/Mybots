@@ -1,18 +1,19 @@
+import { UI_BASE } from "./api";
 // Voz na interface.
-//  - Fala (TTS): pelo Hub (/api/tts — Edge/Piper/OpenAI) ou, se o Hub não tiver, pela voz do navegador.
-//  - Escuta (STT): pelo Hub (/api/stt — whisper) gravando com MediaRecorder + detector de silêncio,
-//    ou pelo reconhecimento do navegador (Chrome/Edge). Nos dois casos, quando você para de falar a frase é enviada sozinha.
+//  - Fala (TTS): pelo Hub (/api/tts â€” Edge/Piper/OpenAI) ou, se o Hub nÃ£o tiver, pela voz do navegador.
+//  - Escuta (STT): pelo Hub (/api/stt â€” whisper) gravando com MediaRecorder + detector de silÃªncio,
+//    ou pelo reconhecimento do navegador (Chrome/Edge). Nos dois casos, quando vocÃª para de falar a frase Ã© enviada sozinha.
 
 import { cleanForSpeech, ehRuido, pareceEco, toSpeech } from "@mybots/shared";
 
 export type VoiceCaps = { stt: boolean; tts: boolean; ttsEngine: string; sttEngine: string };
 
-const q = () => location.search; // mantém ?k=senha
+const q = () => location.search; // mantÃ©m ?k=senha
 
 // ---------------- MICROFONE ----------------
-// Numa máquina com webcam, headset e placa de som, o navegador usa a "entrada padrão
-// do sistema" — que quase nunca é o microfone em que a pessoa está falando. Daí o
-// áudio chegar longe, baixo e cheio de sala, e a transcrição sair diferente do dito.
+// Numa mÃ¡quina com webcam, headset e placa de som, o navegador usa a "entrada padrÃ£o
+// do sistema" â€” que quase nunca Ã© o microfone em que a pessoa estÃ¡ falando. DaÃ­ o
+// Ã¡udio chegar longe, baixo e cheio de sala, e a transcriÃ§Ã£o sair diferente do dito.
 const CHAVE_MIC = "mybots.microfone";
 
 export function microfoneEscolhido(): string {
@@ -21,7 +22,7 @@ export function microfoneEscolhido(): string {
 export function escolherMicrofone(deviceId: string): void {
   try { deviceId ? localStorage.setItem(CHAVE_MIC, deviceId) : localStorage.removeItem(CHAVE_MIC); } catch { /* navegador sem storage */ }
 }
-/** Lista as entradas de áudio. Os nomes só aparecem depois de o microfone ter sido liberado uma vez. */
+/** Lista as entradas de Ã¡udio. Os nomes sÃ³ aparecem depois de o microfone ter sido liberado uma vez. */
 export async function microfones(): Promise<{ id: string; nome: string }[]> {
   try {
     const todos = await navigator.mediaDevices.enumerateDevices();
@@ -33,10 +34,10 @@ export async function microfones(): Promise<{ id: string; nome: string }[]> {
 /**
  * O que se pede ao navegador na hora de abrir o microfone.
  *  - cancelamento de eco FICA: sem ele o alto-falante volta pelo microfone e o bot se ouve.
- *  - ganho automático e supressão de ruído SAEM: os dois deformam a onda (o ganho bombeia
- *    o chiado no silêncio, a supressão apaga consoante fraca) e o Whisper acerta mais no
- *    áudio cru do que no "tratado" pelo navegador.
- *  - um canal, 16 kHz: é o formato que o Whisper usa por dentro; mandar pronto evita
+ *  - ganho automÃ¡tico e supressÃ£o de ruÃ­do SAEM: os dois deformam a onda (o ganho bombeia
+ *    o chiado no silÃªncio, a supressÃ£o apaga consoante fraca) e o Whisper acerta mais no
+ *    Ã¡udio cru do que no "tratado" pelo navegador.
+ *  - um canal, 16 kHz: Ã© o formato que o Whisper usa por dentro; mandar pronto evita
  *    uma reamostragem a mais pelo caminho.
  */
 function restricoesDeAudio(): MediaStreamConstraints {
@@ -55,9 +56,9 @@ function restricoesDeAudio(): MediaStreamConstraints {
 // ---------------- FALA ----------------
 
 let current: HTMLAudioElement | null = null;
-/** sobe a cada stopSpeaking/novo speak: pedaço de geração velha não toca */
+/** sobe a cada stopSpeaking/novo speak: pedaÃ§o de geraÃ§Ã£o velha nÃ£o toca */
 let geracao = 0;
-/** busca de áudio em andamento, para o "parar" cancelar também o que está vindo */
+/** busca de Ã¡udio em andamento, para o "parar" cancelar tambÃ©m o que estÃ¡ vindo */
 let emVoo: AbortController | null = null;
 let speaking = false;
 const speakListeners = new Set<(on: boolean) => void>();
@@ -66,9 +67,9 @@ const setSpeaking = (on: boolean) => { speaking = on; for (const l of speakListe
 export const isSpeaking = () => speaking;
 
 /**
- * Fala uma resposta do bot. Por padrão lê só o "lead" (1–2 frases) quando a mensagem é longa
- * ou estruturada (roteiro, bullets, tabela) e avisa que os detalhes estão no chat.
- * `full = true` lê o texto inteiro (limpo) — botão 🔊 na bolha.
+ * Fala uma resposta do bot. Por padrÃ£o lÃª sÃ³ o "lead" (1â€“2 frases) quando a mensagem Ã© longa
+ * ou estruturada (roteiro, bullets, tabela) e avisa que os detalhes estÃ£o no chat.
+ * `full = true` lÃª o texto inteiro (limpo) â€” botÃ£o ðŸ”Š na bolha.
  */
 export async function speak(text: string, botId: string, caps: VoiceCaps, preferredVoice?: string, full = false): Promise<void> {
   stopSpeaking();
@@ -80,13 +81,13 @@ export async function speak(text: string, botId: string, caps: VoiceCaps, prefer
 }
 
 export function stopSpeaking() {
-  viva?.cancelar();          // a fala da chamada (frase a frase) também morre aqui
-  geracao++;                 // o que já foi pedido não toca mais
-  emVoo?.abort();            // e o que está vindo do Hub nem chega
+  viva?.cancelar();          // a fala da chamada (frase a frase) tambÃ©m morre aqui
+  geracao++;                 // o que jÃ¡ foi pedido nÃ£o toca mais
+  emVoo?.abort();            // e o que estÃ¡ vindo do Hub nem chega
   emVoo = null;
-  if (current) { current.pause(); current.src = ""; try { current.load(); } catch { /* já descartado */ } current = null; }
-  // O Chrome IGNORA o cancel quando a fala está pausada: cancelar, soltar a pausa e cancelar
-  // de novo é o que de fato cala. Sem isso, "parar" durante uma pausa não parava nada.
+  if (current) { current.pause(); current.src = ""; try { current.load(); } catch { /* jÃ¡ descartado */ } current = null; }
+  // O Chrome IGNORA o cancel quando a fala estÃ¡ pausada: cancelar, soltar a pausa e cancelar
+  // de novo Ã© o que de fato cala. Sem isso, "parar" durante uma pausa nÃ£o parava nada.
   if (typeof speechSynthesis !== "undefined") {
     try { speechSynthesis.cancel(); speechSynthesis.resume(); speechSynthesis.cancel(); } catch { /* navegador sem voz */ }
   }
@@ -94,12 +95,12 @@ export function stopSpeaking() {
 }
 
 /**
- * Quebra a fala em pedaços. O primeiro é curto de propósito: é ele que decide quanto
- * tempo passa entre o bot terminar de escrever e o primeiro som sair. Os seguintes são
- * maiores (menos idas ao Hub) e chegam enquanto o anterior ainda está tocando.
+ * Quebra a fala em pedaÃ§os. O primeiro Ã© curto de propÃ³sito: Ã© ele que decide quanto
+ * tempo passa entre o bot terminar de escrever e o primeiro som sair. Os seguintes sÃ£o
+ * maiores (menos idas ao Hub) e chegam enquanto o anterior ainda estÃ¡ tocando.
  */
 export function emPedacos(texto: string, primeiro = 90, depois = 320): string[] {
-  const frases = (texto.replace(/\s+/g, " ").match(/[^.!?…]+[.!?…]*/g) ?? [texto])
+  const frases = (texto.replace(/\s+/g, " ").match(/[^.!?â€¦]+[.!?â€¦]*/g) ?? [texto])
     .map((x) => x.trim())
     .filter(Boolean);
   if (!frases.length) return [];
@@ -114,7 +115,7 @@ export function emPedacos(texto: string, primeiro = 90, depois = 320): string[] 
   return out;
 }
 
-/** Toca um pedaço e espera acabar. Não mexe no estado "falando": quem cuida é o laço. */
+/** Toca um pedaÃ§o e espera acabar. NÃ£o mexe no estado "falando": quem cuida Ã© o laÃ§o. */
 /** Velocidade de fala da casa. O Hub ja entrega o audio acelerado no proprio SSML
  *  (voz acelerada sem ficar fina); aqui so compensamos quando o motor nao aceita
  *  velocidade, como o piper. Reaplicamos no loadedmetadata porque o algoritmo de
@@ -143,8 +144,8 @@ function tocar(blob: Blob): Promise<void> {
 }
 
 /**
- * Fala pelo Hub, pedaço a pedaço, buscando o próximo enquanto o atual toca.
- * Devolve false só quando nada saiu (aí quem chamou cai para a voz do navegador).
+ * Fala pelo Hub, pedaÃ§o a pedaÃ§o, buscando o prÃ³ximo enquanto o atual toca.
+ * Devolve false sÃ³ quando nada saiu (aÃ­ quem chamou cai para a voz do navegador).
  */
 async function falarPeloHub(texto: string, botId: string): Promise<boolean> {
   const pedacos = emPedacos(texto);
@@ -153,7 +154,7 @@ async function falarPeloHub(texto: string, botId: string): Promise<boolean> {
   const ac = new AbortController();
   emVoo = ac;
   const pedir = (p: string) =>
-    fetch(`/api/tts${q()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: p, botId }), signal: ac.signal })
+    fetch(`${UI_BASE}/api/tts${q()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: p, botId }), signal: ac.signal })
       .then((r) => { if (!r.ok) return null; const v = Number(r.headers.get("x-fala-vel")); if (v > 0) velDoServidor = v; return r.blob(); })
       .catch(() => null);
 
@@ -217,16 +218,16 @@ export function speechSupported(caps?: VoiceCaps) {
 }
 
 export type ListenHandlers = {
-  onPartial: (text: string) => void;      // texto parcial (só no modo navegador)
-  onFinal: (text: string) => void;        // frase pronta → enviar
+  onPartial: (text: string) => void;      // texto parcial (sÃ³ no modo navegador)
+  onFinal: (text: string) => void;        // frase pronta â†’ enviar
   onEnd: () => void;                      // parou de escutar (por qualquer motivo)
   onLevel?: (level: number) => void;      // 0..1, para animar o microfone
 };
 
-const SILENCE_MS = 1300;   // quanto de silêncio depois da fala fecha a frase
-const NO_SPEECH_MS = 9000; // sem fala nenhuma → desliga
+const SILENCE_MS = 1300;   // quanto de silÃªncio depois da fala fecha a frase
+const NO_SPEECH_MS = 9000; // sem fala nenhuma â†’ desliga
 
-/** Escuta uma frase e devolve uma função para parar. Fecha sozinha quando você para de falar. */
+/** Escuta uma frase e devolve uma funÃ§Ã£o para parar. Fecha sozinha quando vocÃª para de falar. */
 export function listenOnce(caps: VoiceCaps, h: ListenHandlers): () => void {
   if (caps.stt && typeof navigator.mediaDevices?.getUserMedia === "function") return listenWithRecorder(h);
   return listenWithBrowser(h);
@@ -303,7 +304,7 @@ function listenWithRecorder(h: ListenHandlers): () => void {
       if (spoke && chunks.length) {
         const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
         try {
-          const res = await fetch(`/api/stt${q()}`, { method: "POST", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
+          const res = await fetch(`${UI_BASE}/api/stt${q()}`, { method: "POST", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
           if (res.ok) { const j = await res.json(); if (j.text?.trim()) h.onFinal(j.text.trim()); }
         } catch { /* ignora */ }
       }
@@ -316,11 +317,11 @@ function listenWithRecorder(h: ListenHandlers): () => void {
 }
 
 // ===========================================================================
-// CHAMADA DE VOZ — telefone de verdade
+// CHAMADA DE VOZ â€” telefone de verdade
 //
-// Duas peças, e as duas rodam ao mesmo tempo (é isso que faz parecer telefone):
-//   • criarFala()      — vai falando enquanto o bot ainda escreve, frase por frase.
-//   • escutaContinua() — o microfone NUNCA fecha; quando o chefe fala, o bot cala.
+// Duas peÃ§as, e as duas rodam ao mesmo tempo (Ã© isso que faz parecer telefone):
+//   â€¢ criarFala()      â€” vai falando enquanto o bot ainda escreve, frase por frase.
+//   â€¢ escutaContinua() â€” o microfone NUNCA fecha; quando o chefe fala, o bot cala.
 // ===========================================================================
 
 
@@ -329,17 +330,17 @@ export type FalaViva = {
   alimentar(texto: string): void;
   /** a resposta acabou: fala o que sobrou e encerra */
   fim(): void;
-  /** silêncio imediato e esquece o que não foi falado */
+  /** silÃªncio imediato e esquece o que nÃ£o foi falado */
   cancelar(): void;
-  /** cala na hora, guardando o lugar (o chefe começou a falar) */
+  /** cala na hora, guardando o lugar (o chefe comeÃ§ou a falar) */
   pausar(): void;
-  /** volta de onde parou (era só um ruído) */
+  /** volta de onde parou (era sÃ³ um ruÃ­do) */
   retomar(): void;
-  /** o que está sendo falado agora — serve de filtro de eco para o microfone */
+  /** o que estÃ¡ sendo falado agora â€” serve de filtro de eco para o microfone */
   dito(): string;
 };
 
-/** a fala viva desta chamada; stopSpeaking() também mata ela */
+/** a fala viva desta chamada; stopSpeaking() tambÃ©m mata ela */
 let viva: FalaViva | null = null;
 
 export function criarFala(botId: string, caps: VoiceCaps, preferredVoice?: string): FalaViva {
@@ -350,11 +351,11 @@ export function criarFala(botId: string, caps: VoiceCaps, preferredVoice?: strin
   let ditoAgora = "";
 
   const pedir = (p: string) =>
-    fetch(`/api/tts${q()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: p, botId }), signal: ac.signal })
+    fetch(`${UI_BASE}/api/tts${q()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: p, botId }), signal: ac.signal })
       .then((r) => { if (!r.ok) return null; const v = Number(r.headers.get("x-fala-vel")); if (v > 0) velDoServidor = v; return r.blob(); })
       .catch(() => null);
 
-  /** mantém os dois próximos pedaços já sendo gerados enquanto o atual toca */
+  /** mantÃ©m os dois prÃ³ximos pedaÃ§os jÃ¡ sendo gerados enquanto o atual toca */
   const abastecer = () => { if (caps.tts) for (const it of fila.slice(0, 2)) if (!it.promessa) it.promessa = pedir(it.texto); };
 
   const tocarBlob = (blob: Blob) => new Promise<void>((resolve) => {
@@ -429,34 +430,34 @@ export function criarFala(botId: string, caps: VoiceCaps, preferredVoice?: strin
   return api;
 }
 
-// ---------------- ESCUTA CONTÍNUA (o microfone não fecha) ----------------
+// ---------------- ESCUTA CONTÃNUA (o microfone nÃ£o fecha) ----------------
 
 export type EscutaViva = { parar(): void; mudo(on: boolean): void };
 export type EscutaHandlers = {
-  /** frase fechada do chefe (já descartado eco e ruído) */
+  /** frase fechada do chefe (jÃ¡ descartado eco e ruÃ­do) */
   onFinal: (texto: string) => void;
-  /** ele começou a falar: cale o bot AGORA */
+  /** ele comeÃ§ou a falar: cale o bot AGORA */
   onVoz?: () => void;
-  /** o que parecia fala não era nada (eco, tosse): pode voltar a falar */
+  /** o que parecia fala nÃ£o era nada (eco, tosse): pode voltar a falar */
   onFalsoAlarme?: () => void;
   onLevel?: (x: number) => void;
   onEstado?: (ouvindo: boolean) => void;
-  /** o bot está falando agora? (sobe a régua do microfone, para o alto-falante não se ouvir) */
+  /** o bot estÃ¡ falando agora? (sobe a rÃ©gua do microfone, para o alto-falante nÃ£o se ouvir) */
   botFalando?: () => boolean;
-  /** o que o bot está dizendo neste instante (filtro de eco) */
+  /** o que o bot estÃ¡ dizendo neste instante (filtro de eco) */
   ecoDoBot?: () => string;
 };
 
-const VOZ_BASE = 0.030;        // régua normal
-const VOZ_COM_BOT_FALANDO = 0.075;  // régua alta: o alto-falante volta pelo microfone
-const CONFIRMA_MS = 140;       // tempo acima da régua para valer como fala
+const VOZ_BASE = 0.030;        // rÃ©gua normal
+const VOZ_COM_BOT_FALANDO = 0.075;  // rÃ©gua alta: o alto-falante volta pelo microfone
+const CONFIRMA_MS = 140;       // tempo acima da rÃ©gua para valer como fala
 const CONFIRMA_COM_BOT_MS = 300;
-const FIM_DA_FRASE_MS = 1000;  // silêncio que fecha a frase; curto demais corta quem pensa no meio
-const GIRO_MS = 3000;          // de quanto em quanto tempo o gravador recomeça, no silêncio
-const QUIETO_PARA_GIRAR_MS = 700; // ...e só se não houver som nenhum há esse tempo (ver novoGravador)
-const PRE_SOM = 0.5;           // fração da régua que já conta como "tem som" e trava o giro
-const FALA_MINIMA_MS = 350;    // mais curto que isso é tosse, clique, porta batendo
-const FATIA_MS = 200;          // de quanto em quanto tempo o gravador entrega um pedaço
+const FIM_DA_FRASE_MS = 1000;  // silÃªncio que fecha a frase; curto demais corta quem pensa no meio
+const GIRO_MS = 3000;          // de quanto em quanto tempo o gravador recomeÃ§a, no silÃªncio
+const QUIETO_PARA_GIRAR_MS = 700; // ...e sÃ³ se nÃ£o houver som nenhum hÃ¡ esse tempo (ver novoGravador)
+const PRE_SOM = 0.5;           // fraÃ§Ã£o da rÃ©gua que jÃ¡ conta como "tem som" e trava o giro
+const FALA_MINIMA_MS = 350;    // mais curto que isso Ã© tosse, clique, porta batendo
+const FATIA_MS = 200;          // de quanto em quanto tempo o gravador entrega um pedaÃ§o
 
 /** Microfone aberto o tempo todo. Cada frase vira texto sozinha; a chamada nunca para de ouvir. */
 export function escutaContinua(caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
@@ -478,13 +479,13 @@ function escutaComGravador(_caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
   /**
    * Troca o gravador, e opcionalmente faz algo com o que o anterior gravou.
    *
-   * O defeito que isto conserta: antes todos os gravadores empurravam os pedaços para a
-   * MESMA lista. O último pedaço de um gravador chega DEPOIS do stop() — ou seja, depois
-   * de a lista ter sido trocada — e caía no começo do arquivo seguinte, antes do cabeçalho.
-   * O arquivo nascia inválido: era o "Invalid data found when processing input" do stt.log,
-   * e nos casos em que não quebrava de vez, o decodificador descartava o começo em silêncio
+   * O defeito que isto conserta: antes todos os gravadores empurravam os pedaÃ§os para a
+   * MESMA lista. O Ãºltimo pedaÃ§o de um gravador chega DEPOIS do stop() â€” ou seja, depois
+   * de a lista ter sido trocada â€” e caÃ­a no comeÃ§o do arquivo seguinte, antes do cabeÃ§alho.
+   * O arquivo nascia invÃ¡lido: era o "Invalid data found when processing input" do stt.log,
+   * e nos casos em que nÃ£o quebrava de vez, o decodificador descartava o comeÃ§o em silÃªncio
    * e o Whisper transcrevia uma frase sem a primeira palavra. Agora cada gravador tem a
-   * lista dele, fechada no próprio closure.
+   * lista dele, fechada no prÃ³prio closure.
    */
   const novoGravador = (aoFechar?: (t: Trecho) => void) => {
     if (!stream || parado) return;
@@ -494,9 +495,9 @@ function escutaComGravador(_caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
     rec.ondataavailable = (e) => { if (e.data.size) pedacos.push(e.data); };
     rec.start(FATIA_MS);
     atual = { rec, pedacos };
-    // o novo já está gravando antes de o velho parar: não há buraco entre os dois
+    // o novo jÃ¡ estÃ¡ gravando antes de o velho parar: nÃ£o hÃ¡ buraco entre os dois
     if (velho) {
-      velho.rec.onstop = () => aoFechar?.(velho);   // o onstop vem depois do último pedaço
+      velho.rec.onstop = () => aoFechar?.(velho);   // o onstop vem depois do Ãºltimo pedaÃ§o
       try { velho.rec.stop(); } catch { aoFechar?.(velho); }
     }
   };
@@ -504,16 +505,16 @@ function escutaComGravador(_caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
   const enviar = async (t: Trecho) => {
     if (parado || !t.pedacos.length) return;
     const blob = new Blob(t.pedacos, { type: t.rec.mimeType || "audio/webm" });
-    if (blob.size < 2000) return h.onFalsoAlarme?.();   // nem meio segundo de som: não vale transcrever
+    if (blob.size < 2000) return h.onFalsoAlarme?.();   // nem meio segundo de som: nÃ£o vale transcrever
     try {
-      const res = await fetch(`/api/stt${q()}`, { method: "POST", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
+      const res = await fetch(`${UI_BASE}/api/stt${q()}`, { method: "POST", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
       const texto = res.ok ? String((await res.json()).text ?? "").trim() : "";
       if (!texto || ehRuido(texto) || pareceEco(texto, h.ecoDoBot?.() ?? "")) return h.onFalsoAlarme?.();
       h.onFinal(texto);
     } catch { h.onFalsoAlarme?.(); }
   };
 
-  /** Fecha a frase: o gravador atual vira arquivo e um novo começa na mesma hora. */
+  /** Fecha a frase: o gravador atual vira arquivo e um novo comeÃ§a na mesma hora. */
   const fecharFrase = (curtaDemais = false) => {
     novoGravador(curtaDemais ? () => h.onFalsoAlarme?.() : (t) => void enviar(t));
   };
@@ -543,7 +544,7 @@ function escutaComGravador(_caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
       const regua = botFala ? VOZ_COM_BOT_FALANDO : VOZ_BASE;
       const confirma = botFala ? CONFIRMA_COM_BOT_MS : CONFIRMA_MS;
 
-      if (rms > regua * PRE_SOM) ultimoSom = agora;   // um sopro abaixo da régua já trava o giro
+      if (rms > regua * PRE_SOM) ultimoSom = agora;   // um sopro abaixo da rÃ©gua jÃ¡ trava o giro
 
       if (rms > regua) {
         abaixoDesde = 0;
@@ -557,10 +558,10 @@ function escutaComGravador(_caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
           ultimoGiro = agora;
           fecharFrase(abaixoDesde - falaDesde < FALA_MINIMA_MS);
         } else if (!emFala && agora - ultimoGiro >= GIRO_MS && agora - ultimoSom >= QUIETO_PARA_GIRAR_MS) {
-          // O giro existe para o arquivo não crescer sem fim durante o silêncio — mas ele
+          // O giro existe para o arquivo nÃ£o crescer sem fim durante o silÃªncio â€” mas ele
           // DESCARTA o que foi gravado. Girar no comecinho da fala comia a primeira palavra
-          // (a fala só é confirmada depois de CONFIRMA_MS acima da régua, e o giro podia cair
-          // bem nesse meio). Por isso agora só gira quando não há som nenhum há um tempo.
+          // (a fala sÃ³ Ã© confirmada depois de CONFIRMA_MS acima da rÃ©gua, e o giro podia cair
+          // bem nesse meio). Por isso agora sÃ³ gira quando nÃ£o hÃ¡ som nenhum hÃ¡ um tempo.
           ultimoGiro = agora;
           novoGravador();
         }
@@ -574,7 +575,7 @@ function escutaComGravador(_caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
     parar() {
       parado = true;
       clearTimeout(timer);
-      if (atual) { atual.rec.onstop = null as any; try { atual.rec.stop(); } catch { /* já parado */ } }
+      if (atual) { atual.rec.onstop = null as any; try { atual.rec.stop(); } catch { /* jÃ¡ parado */ } }
       stream?.getTracks().forEach((t) => t.stop());
       ctx?.close().catch(() => {});
       h.onEstado?.(false);
@@ -587,7 +588,7 @@ function escutaComGravador(_caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
   };
 }
 
-/** Sem whisper no Hub: reconhecimento do navegador, também sem fechar entre as frases. */
+/** Sem whisper no Hub: reconhecimento do navegador, tambÃ©m sem fechar entre as frases. */
 function escutaComNavegador(h: EscutaHandlers): EscutaViva {
   const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   if (!Ctor) { h.onEstado?.(false); return { parar() {}, mudo() {} }; }
@@ -605,11 +606,12 @@ function escutaComNavegador(h: EscutaHandlers): EscutaViva {
       h.onFinal(texto);
     }
   };
-  rec.onerror = () => { /* o onend recomeça */ };
-  rec.onend = () => { if (!parado) { try { rec.start(); } catch { /* já rodando */ } } else h.onEstado?.(false); };
+  rec.onerror = () => { /* o onend recomeÃ§a */ };
+  rec.onend = () => { if (!parado) { try { rec.start(); } catch { /* jÃ¡ rodando */ } } else h.onEstado?.(false); };
   try { rec.start(); h.onEstado?.(true); } catch { h.onEstado?.(false); }
   return {
-    parar() { parado = true; try { rec.abort(); } catch { /* já parado */ } },
+    parar() { parado = true; try { rec.abort(); } catch { /* jÃ¡ parado */ } },
     mudo(on) { mudo = on; },
   };
 }
+

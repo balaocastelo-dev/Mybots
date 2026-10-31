@@ -1,3 +1,4 @@
+import { UI_BASE } from "./api";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -28,7 +29,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
 
   const lerLista = async () => {
     try {
-      const r = await fetch("/api/celulares");
+      const r = await fetch(`${UI_BASE}/api/celulares`);
       if (!r.ok) return;
       const d = await r.json();
       setTemAdb(!!d.adb);
@@ -46,7 +47,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
     const laco = async () => {
       while (!parar.current) {
         try {
-          const r = await fetch(`/api/celulares/${encodeURIComponent(qual)}/tela?t=${Date.now()}`);
+          const r = await fetch(`${UI_BASE}/api/celulares/${encodeURIComponent(qual)}/tela?t=${Date.now()}`);
           if (r.ok) {
             const b = await r.blob();
             const u = URL.createObjectURL(b);
@@ -69,7 +70,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
   };
   const mandar = (rota: string, corpo: unknown) =>
-    fetch(`/api/celulares/${encodeURIComponent(qual)}/${rota}`, {
+    fetch(`${UI_BASE}/api/celulares/${encodeURIComponent(qual)}/${rota}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo),
     }).catch(() => null);
 
@@ -82,7 +83,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
           <div>
             <h3>Celular da empresa</h3>
             <p className="muted">
-              O aparelho de verdade, por ADB. E nele que moram o WhatsApp e as contas da empresa —
+              O aparelho de verdade, por ADB. E nele que moram o WhatsApp e as contas da empresa â€”
               por isso ele, e nao um emulador. Voce pode tocar na tela aqui mesmo.
             </p>
           </div>
@@ -91,7 +92,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
               <option value="">escolha o aparelho</option>
               {lista.map((a) => (
                 <option key={a.serial} value={a.serial} disabled={a.estado !== "device"}>
-                  {a.modelo}{a.viaWifi ? " (wifi)" : " (cabo)"}{a.estado !== "device" ? ` — ${a.estado}` : ""}
+                  {a.modelo}{a.viaWifi ? " (wifi)" : " (cabo)"}{a.estado !== "device" ? ` â€” ${a.estado}` : ""}
                 </option>
               ))}
             </select>
@@ -119,10 +120,10 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
 
           <div className="cel-lado">
             <div className="cel-teclas">
-              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "voltar" })}>◀ Voltar</button>
-              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "inicio" })}>⌂ Início</button>
-              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "recentes" })}>▢ Recentes</button>
-              <button className="btn" disabled={!qual} onClick={() => void mandar("acordar", {})}>☀ Acordar</button>
+              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "voltar" })}>â—€ Voltar</button>
+              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "inicio" })}>âŒ‚ InÃ­cio</button>
+              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "recentes" })}>â–¢ Recentes</button>
+              <button className="btn" disabled={!qual} onClick={() => void mandar("acordar", {})}>â˜€ Acordar</button>
             </div>
 
             <label className="cel-campo">Escrever no aparelho
@@ -131,7 +132,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
                   placeholder="o que digitar"
                   onKeyDown={(e) => { if (e.key === "Enter" && texto.trim()) { void mandar("digitar", { texto }).then(() => setTexto("")); } }} />
                 <button className="btn" disabled={!qual || !texto.trim()} onClick={() => void mandar("digitar", { texto }).then(() => setTexto(""))}>Digitar</button>
-                <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "enter" })}>⏎</button>
+                <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "enter" })}>âŽ</button>
               </div>
             </label>
 
@@ -139,7 +140,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
               <div className="cel-linha">
                 <input value={ip} onChange={(e) => setIp(e.target.value)} placeholder="192.168.0.10:5555" />
                 <button className="btn" disabled={!ip.trim()} onClick={async () => {
-                  const r = await fetch("/api/celulares/conectar", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ip }) });
+                  const r = await fetch(`${UI_BASE}/api/celulares/conectar`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ip }) });
                   const d = r.ok ? await r.json() : { ok: false, msg: "falhou" };
                   setAviso(d.ok ? "" : d.msg || "nao consegui conectar");
                   void lerLista();
@@ -149,9 +150,9 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
 
             <p className="cel-nota muted">
               {aparelho
-                ? `${aparelho.modelo} · ${aparelho.largura ?? "?"}×${aparelho.altura ?? "?"} · ${vivo ? "ao vivo" : "parado"}`
+                ? `${aparelho.modelo} Â· ${aparelho.largura ?? "?"}Ã—${aparelho.altura ?? "?"} Â· ${vivo ? "ao vivo" : "parado"}`
                 : "nenhum aparelho escolhido"}
-              <br />Arraste sobre a tela para rolar. O toque vai em proporção, então funciona em qualquer resolução.
+              <br />Arraste sobre a tela para rolar. O toque vai em proporÃ§Ã£o, entÃ£o funciona em qualquer resoluÃ§Ã£o.
             </p>
           </div>
         </div>

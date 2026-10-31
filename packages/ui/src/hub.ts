@@ -1,3 +1,4 @@
+import { UI_BASE } from "./api";
 // Cliente da interface: WebSocket com o Hub + estado reativo.
 import { useEffect, useReducer, useRef } from "react";
 import { faseDoStatus, type BotSummary, type ControlState, type Group, type HubToUi, type PendingApproval, type PendingQuestion, type Routine, type StoredMessage, type UiToHub, type VoiceConfig } from "@mybots/shared";
@@ -20,9 +21,9 @@ export type State = {
   importFile?: { name: string; mime: string; dataBase64: string };
 };
 
-/** No máximo 3 avisos na tela ao mesmo tempo. Vinte e cinco avisos empilhados
- *  tapam a coluna da direita — foi o que aconteceu. O mais novo fica; o mais
- *  velho sai. Aviso repetido não vira pilha: vira contador no mesmo cartão. */
+/** No mÃ¡ximo 3 avisos na tela ao mesmo tempo. Vinte e cinco avisos empilhados
+ *  tapam a coluna da direita â€” foi o que aconteceu. O mais novo fica; o mais
+ *  velho sai. Aviso repetido nÃ£o vira pilha: vira contador no mesmo cartÃ£o. */
 const MAX_AVISOS = 3;
 
 function empilha(
@@ -31,7 +32,7 @@ function empilha(
   botId?: string,
 ): State["toasts"] {
   const igual = toasts.find((t) => t.text === text && t.botId === botId);
-  // o "em" novo reinicia o relógio dos 3 segundos daquele cartão
+  // o "em" novo reinicia o relÃ³gio dos 3 segundos daquele cartÃ£o
   if (igual) return toasts.map((t) => (t === igual ? { ...t, vezes: t.vezes + 1, em: Date.now() } : t));
   return [...toasts, { id: Math.random().toString(36).slice(2), text, botId, vezes: 1, em: Date.now() }].slice(-MAX_AVISOS);
 }
@@ -61,9 +62,9 @@ function reducer(s: State, a: Action): State {
         case "groups": return { ...s, groups: m.groups };
         case "routines": return { ...s, routines: m.routines };
         case "bot.update": return { ...s, bots: upsert(s.bots, m.bot) };
-        // Excluir é acabar com tudo: some o bot, somem as conversas dele, o que estava
-        // escrito nelas, as aprovações e perguntas paradas e os avisos na tela. Antes
-        // ficava tudo isso no estado e a conversa seguia aberta com um bot que não existe.
+        // Excluir Ã© acabar com tudo: some o bot, somem as conversas dele, o que estava
+        // escrito nelas, as aprovaÃ§Ãµes e perguntas paradas e os avisos na tela. Antes
+        // ficava tudo isso no estado e a conversa seguia aberta com um bot que nÃ£o existe.
         case "bot.removed": {
           const doBot = (conv: string) => conv === `dm:${m.botId}` || (conv.startsWith("pair:") && conv.slice(5).split(":").includes(m.botId));
           const messages = { ...s.messages };
@@ -124,14 +125,14 @@ function reducer(s: State, a: Action): State {
 
 function previaDe(m: StoredMessage): string {
   const files = (m.meta?.files as Array<{ name: string }> | undefined) ?? [];
-  const quem = m.sender.kind === "user" ? "Você: " : "";
+  const quem = m.sender.kind === "user" ? "VocÃª: " : "";
   const arquivo = files[0]?.name;
   const texto = m.text.replace(/\s+/g, " ").trim();
-  const miolo = texto || (arquivo ? `📎 ${arquivo}` : "");
+  const miolo = texto || (arquivo ? `ðŸ“Ž ${arquivo}` : "");
   return (quem + miolo).slice(0, 80);
 }
 
-/** A lista acompanha o chat mesmo quando o chefe já saiu dele. */
+/** A lista acompanha o chat mesmo quando o chefe jÃ¡ saiu dele. */
 function comPrevia(bots: BotSummary[], m: StoredMessage): BotSummary[] {
   if (!m.conversationId.startsWith("dm:") || m.meta?.hidden || m.meta?.marcador) return bots;
   const id = m.conversationId.slice(3);
@@ -155,7 +156,7 @@ export function useHub() {
     let retry = 1000;
     const connect = () => {
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${proto}://${location.host}/ws/ui${location.search}`);
+      const ws = new WebSocket(`${proto}://${location.host}${UI_BASE}/ws/ui${location.search}`);
       wsRef.current = ws;
       ws.onopen = () => { retry = 1000; dispatch({ type: "connected", value: true }); ws.send(JSON.stringify({ type: "subscribe" } satisfies UiToHub)); };
       ws.onmessage = (ev) => { const m = JSON.parse(ev.data) as HubToUi; dispatch({ type: "ws", msg: m }); for (const l of listeners.current) l(m); };
@@ -167,16 +168,18 @@ export function useHub() {
 
   const send = (m: UiToHub) => wsRef.current?.readyState === WebSocket.OPEN && wsRef.current.send(JSON.stringify(m));
   const loadHistory = async (conversationId: string) => {
-    const r = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages${location.search}`);
+    const r = await fetch(`${UI_BASE}/api/conversations/${encodeURIComponent(conversationId)}/messages${location.search}`, { credentials: "include" });
     if (r.ok) dispatch({ type: "history", conversationId, messages: await r.json() });
-    void fetch(`/api/conversations/${encodeURIComponent(conversationId)}/read${location.search}`, { method: "POST" });
+    void fetch(`${UI_BASE}/api/conversations/${encodeURIComponent(conversationId)}/read${location.search}`, { method: "POST", credentials: "include" });
   };
   const onEvent = (l: (m: HubToUi) => void) => { listeners.current.add(l); return () => { listeners.current.delete(l); }; };
   const removeToast = (id: string) => dispatch({ type: "toast.remove", id });
   const clearImport = () => {
     dispatch({ type: "import.clear" });
-    void fetch(`/api/import/clear${location.search}`, { method: "POST" }).catch(() => {});
+    void fetch(`${UI_BASE}/api/import/clear${location.search}`, { method: "POST", credentials: "include" }).catch(() => {});
   };
   const setImport = (file: { name: string; mime: string; dataBase64: string }) => dispatch({ type: "import.set", file });
   return { state, send, loadHistory, onEvent, removeToast, clearImport, setImport };
 }
+
+

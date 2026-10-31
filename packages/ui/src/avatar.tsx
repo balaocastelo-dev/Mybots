@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { BotSummary } from "@mybots/shared";
 import { ArteDoBot, lerAparencia } from "./aparencia";
 import { caminhoDaBolha } from "./mensagem";
@@ -211,19 +211,16 @@ export function emojiDoEstado(bot: BotSummary, falando: boolean): string | undef
 export const PARADO = ["👀", "🧠", "📋", "☕"];
 
 export function Avatar({ bot, size = 88, falando = false, cutucadas = 0 }: { bot: BotSummary; size?: number; falando?: boolean; cutucadas?: number }) {
-  const emoji = bot.avatar && /\p{Extended_Pictographic}/u.test(bot.avatar) ? bot.avatar : null;
   const url = bot.avatar && /^(https?:|data:|\/)/.test(bot.avatar) ? bot.avatar : null;
   const style = { width: size, height: size, fontSize: size * 0.45, background: "transparent" };
   // Parado respira. Trabalhando pula e balança. Falando mexe a boca.
-  const [, tique] = useState(0);
-  useEffect(() => { const i = setInterval(() => tique((n) => n + 1), 6000); return () => clearInterval(i); }, []);
   // 1 a 4 cliques: ele se sacode. Do 5o em diante fica bravo — e segue bravo
   // enquanto voce insistir, nao so por um instante.
   const bravo = cutucadas >= 5;
   const estado = (!bot.online ? " dormindo" : falando ? " falando" : bot.busy ? " ocupado" : "")
     + (bravo ? " bravo" : cutucadas > 0 ? " cutucado" : "");
   return (
-    <div className={"avatar" + estado} style={style} data-ameba={bot.id} data-emoji={bravo ? "\uD83D\uDE20" : cutucadas > 0 ? "\u2757" : emojiDoEstado(bot, falando)}>
+    <div className={"avatar" + estado} style={style} data-ameba={bot.id}>
       {url ? <img src={url} alt="" /> : lerAparencia(bot.avatar) ? <ArteDoBot id={bot.id} avatar={bot.avatar} size={size} /> : <Ameba id={bot.id} size={size} />}
       {((bot as any).gerente || (bot as any).manages?.length) ? <span className="coroa-cabeca" aria-hidden>👑</span> : null}
       <span className={"presence " + (bot.online ? (bot.busy ? "busy" : "on") : "off")} />

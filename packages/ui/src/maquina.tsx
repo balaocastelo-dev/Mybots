@@ -1,3 +1,4 @@
+import { UI_BASE } from "./api";
 import { useEffect, useState } from "react";
 import type { BotSummary } from "@mybots/shared";
 
@@ -18,7 +19,7 @@ export function Maquina({ bots, pendencias, voz }: { bots: BotSummary[]; pendenc
     let vivo = true;
     const ler = async () => {
       try {
-        const r = await fetch("/api/maquina");
+        const r = await fetch(`${UI_BASE}/api/maquina`);
         if (r.ok && vivo) setM(await r.json());
       } catch { /* hub caiu: a coluna simplesmente para de atualizar */ }
     };
@@ -31,25 +32,25 @@ export function Maquina({ bots, pendencias, voz }: { bots: BotSummary[]; pendenc
   return (
     <aside className="maquina">
       <div>
-        <h3>Máquina</h3>
+        <h3>MÃ¡quina</h3>
         {m ? (
           <>
-            <Medidor rotulo="Memória" usada={m.ram.usadaGb} total={m.ram.totalGb} reserva={m.reserva.ramGb} />
+            <Medidor rotulo="MemÃ³ria" usada={m.ram.usadaGb} total={m.ram.totalGb} reserva={m.reserva.ramGb} />
             {m.vram
-              ? <Medidor rotulo={"Vídeo · " + m.vram.nome.replace(/^NVIDIA GeForce /, "")} usada={m.vram.usadaGb} total={m.vram.totalGb} reserva={m.reserva.vramGb} />
-              : <p className="maq-nota">Sem placa NVIDIA visível aqui.</p>}
+              ? <Medidor rotulo={"VÃ­deo Â· " + m.vram.nome.replace(/^NVIDIA GeForce /, "")} usada={m.vram.usadaGb} total={m.vram.totalGb} reserva={m.reserva.vramGb} />
+              : <p className="maq-nota">Sem placa NVIDIA visÃ­vel aqui.</p>}
             <p className="maq-nota">
-              A marca é a reserva da casa: {m.reserva.ramGb} GB de memória e {m.reserva.vramGb} GB de vídeo
+              A marca Ã© a reserva da casa: {m.reserva.ramGb} GB de memÃ³ria e {m.reserva.vramGb} GB de vÃ­deo
               sempre livres para o sistema.
             </p>
           </>
-        ) : <p className="maq-nota">Lendo a máquina…</p>}
+        ) : <p className="maq-nota">Lendo a mÃ¡quinaâ€¦</p>}
       </div>
 
       <div>
         <h3>Equipe</h3>
         <div className="lig"><span className="nome">Bots ligados</span><span className="n">{online} / {bots.length}</span></div>
-        <div className="lig"><span className="nome">Esperando você</span><span className="n">{pendencias}</span></div>
+        <div className="lig"><span className="nome">Esperando vocÃª</span><span className="n">{pendencias}</span></div>
         <div className="lig"><span className="nome">Voz</span><span className="n">{voz.tts ? voz.ttsEngine : "navegador"}</span></div>
       </div>
 
@@ -83,3 +84,4 @@ export function Medidor({ rotulo, usada, total, reserva }: { rotulo: string; usa
     </div>
   );
 }
+

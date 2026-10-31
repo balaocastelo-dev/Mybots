@@ -1,0 +1,140 @@
+[
+  {
+    "bot_id": "chaves",
+    "nome": "CHAVES",
+    "ameba": "042",
+    "motivo": "coroa dourada / autoridade do sistema"
+  },
+  {
+    "bot_id": "gerente-meu-bling",
+    "nome": "Gerente MEU BLING",
+    "ameba": "091",
+    "motivo": "extravagante amostra — chefe elegância"
+  },
+  {
+    "bot_id": "meubling-vendas",
+    "nome": "Vendas / Orçamentos",
+    "ameba": "043",
+    "motivo": "boné vermelho — energia comercial"
+  },
+  {
+    "bot_id": "meubling-assistencia",
+    "nome": "Assistência / OS",
+    "ameba": "065",
+    "motivo": "headset com mic — suporte"
+  },
+  {
+    "bot_id": "meubling-financeiro",
+    "nome": "Financeiro / Cobrança",
+    "ameba": "092",
+    "motivo": "cartola + monóculo — formal"
+  },
+  {
+    "bot_id": "meubling-fiscal",
+    "nome": "Fiscal / NF",
+    "ameba": "098",
+    "motivo": "steampunk + relógio — precisão"
+  },
+  {
+    "bot_id": "meubling-estoque",
+    "nome": "Estoque / Compras",
+    "ameba": "036",
+    "motivo": "estrela wink dourada — inventário alegre"
+  },
+  {
+    "bot_id": "meubling-jarvis",
+    "nome": "JARVIS / Caixa livre",
+    "ameba": "046",
+    "motivo": "chapéu de mago — IA livre"
+  },
+  {
+    "bot_id": "gerente-herrera-house-ia",
+    "nome": "Gerente Herrera HOUSE IA",
+    "ameba": "041",
+    "motivo": "chapéu amostra — gerente imob."
+  },
+  {
+    "bot_id": "herrera-imoveis",
+    "nome": "Imóveis",
+    "ameba": "045",
+    "motivo": "chapéu de sol — campo/visitas"
+  },
+  {
+    "bot_id": "herrera-crm",
+    "nome": "CRM",
+    "ameba": "061",
+    "motivo": "fone amostra — relacionamento"
+  },
+  {
+    "bot_id": "herrera-captacao",
+    "nome": "Captação",
+    "ameba": "084",
+    "motivo": "polvo 8 braços — captura leads"
+  },
+  {
+    "bot_id": "herrera-condominios",
+    "nome": "Condomínios",
+    "ameba": "001",
+    "motivo": "clássica amostra — sólida/confiável"
+  },
+  {
+    "bot_id": "herrera-conteudo",
+    "nome": "Conteúdo",
+    "ameba": "094",
+    "motivo": "boa de pena + glitter — criativo"
+  },
+  {
+    "bot_id": "herrera-escritorio",
+    "nome": "Escritório",
+    "ameba": "095",
+    "motivo": "smoking — administrativo"
+  },
+  {
+    "bot_id": "herrera-painel",
+    "nome": "Painel",
+    "ameba": "077",
+    "motivo": "constelação sparkles — dashboard"
+  },
+  {
+    "bot_id": "herrera-config",
+    "nome": "Config",
+    "ameba": "038",
+    "motivo": "engrenagem soft — settings"
+  },
+  {
+    "bot_id": "gerente-escola-de-bots",
+    "nome": "Gerente Escola de Bots",
+    "ameba": "031",
+    "motivo": "estrela amostra — escola"
+  },
+  {
+    "bot_id": "escola-cine",
+    "nome": "Cine",
+    "ameba": "068",
+    "motivo": "fone LED rainbow — mídia"
+  },
+  {
+    "bot_id": "escola-conector",
+    "nome": "Conector",
+    "ameba": "082",
+    "motivo": "pseudópodes longos — ligações"
+  },
+  {
+    "bot_id": "escola-navegador",
+    "nome": "Navegador",
+    "ameba": "021",
+    "motivo": "gota amostra — fluxo/navegação"
+  },
+  {
+    "bot_id": "escola-pixel",
+    "nome": "Pixel",
+    "ameba": "071",
+    "motivo": "manchas amostra — visual"
+  },
+  {
+    "bot_id": "escola-rotineiro",
+    "nome": "Rotineiro",
+    "ameba": "067",
+    "motivo": "fone + cachecol — rotina confortável"
+  }
+]

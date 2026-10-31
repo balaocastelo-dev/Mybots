@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { BotSummary, ControlMode, ControlState, Group, PendingApproval, PendingQuestion, Routine, StoredMessage } from "@mybots/shared";
 import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, CONTROL_MODES, dmConversation, effectiveControl, faseDoStatus, groupConversation } from "@mybots/shared";
 import { useHub, type ToolInfo } from "./hub";
@@ -15,13 +15,14 @@ import { Fragment } from "react";
 import { usePainelPrefs, nomeNaTela, ChipTrocas, FolhaAbrirTroca, TrocaEntreBots, DialogoTexto, type Troca, type PrefDoBot } from "./painel";
 import { ehGerente, montarLista } from "./lista";
 import { lerLinkGuia } from "./guiaPainel";
-import { api } from "./api";
+import { api, UI_BASE } from "./api";
 import { Tema, Tamanho, Configuracao, pularAbertura } from "./tema";
 import { TelaConfiguracoes, type AbaConfig } from "./configuracoes/Tela";
 import { Maquina } from "./maquina";
 import { Aviso, GlobalControl, notify } from "./controles";
 import { BotMenu, ImportDialog } from "./menuBot";
 import { Ameba, Avatar, colorFor, definirTonsDaEquipe } from "./avatar";
+import { TimeAmebas, TituloMyBots } from "./timeAmebas";
 import { Conversation } from "./conversa";
 import { EmpresasDialog, ExcluirBotDialog, NewBotDialog, NewGerenteDialog, NewGroupDialog } from "./dialogos";
 import { Icone } from "./icones";
@@ -35,6 +36,27 @@ type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group }
 
 const pref = (k: string, d: boolean) => { const v = localStorage.getItem("mybots." + k); return v == null ? d : v === "1"; };
 const setPref = (k: string, v: boolean) => localStorage.setItem("mybots." + k, v ? "1" : "0");
+
+const SIDEBAR_PADRAO = 280;
+function limparLayoutVelho() {
+  try {
+    if (localStorage.getItem("mybots-layout-v") === "3") return;
+    localStorage.removeItem("mybots-layout-cols");
+    localStorage.removeItem("mybots-layout-pct");
+    localStorage.removeItem("mybots-pc-w");
+    localStorage.removeItem("mybots-pc-pct");
+    localStorage.removeItem("mybots-sidebar-w");
+    localStorage.removeItem("mybots-sidebar-largura");
+    localStorage.setItem("mybots-layout-v", "3");
+  } catch { /* sem storage: usa o padrao */ }
+}
+function lerSidebarLargura() {
+  limparLayoutVelho();
+  try {
+    const n = Number(localStorage.getItem("mybots-sidebar-largura"));
+    return n >= 200 && n <= 900 ? n : SIDEBAR_PADRAO;
+  } catch { return SIDEBAR_PADRAO; }
+}
 
 export function App() {
   const exemplo = new URLSearchParams(location.search).get("colab") === "exemplo";
@@ -57,6 +79,31 @@ export function App() {
   const [avisos, setAvisos] = useState(() => pref("avisos", true));
   const [verConfig, setVerConfig] = useState<AbaConfig | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarW, setSidebarW] = useState(lerSidebarLargura);
+  const sidebarWRef = useRef(sidebarW);
+  sidebarWRef.current = sidebarW;
+  const aoPuxarSidebar = (e: ReactPointerEvent) => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) return;
+    e.preventDefault();
+    const inicioX = e.clientX;
+    const inicioW = sidebarWRef.current;
+    const mover = (ev: PointerEvent) => {
+      const max = Math.min(window.innerWidth * 0.5, Math.max(200, window.innerWidth - 420));
+      const w = Math.min(Math.max(200, inicioW + (ev.clientX - inicioX)), max);
+      setSidebarW(w);
+    };
+    const soltar = () => {
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      try { localStorage.setItem("mybots-sidebar-largura", String(Math.round(sidebarWRef.current))); } catch { /* segue */ }
+    };
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+  };
+  const resetSidebarW = () => {
+    setSidebarW(SIDEBAR_PADRAO);
+    try { localStorage.setItem("mybots-sidebar-largura", String(SIDEBAR_PADRAO)); } catch { /* segue */ }
+  };
   const [newGroup, setNewGroup] = useState(false);
   const [newBot, setNewBot] = useState(false);
   // Empresas: cada uma com seus bots, gerentes e regras. O conhecimento continua universal.
@@ -129,7 +176,7 @@ export function App() {
     const conv = dmConversation(botId);
     setSelected(conv);
     setPanel({ conv, panel: which, n: Date.now() });
-    if (window.innerWidth < 620) setSidebarOpen(false);
+    if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
   const bots = useMemo(() => {
@@ -158,7 +205,7 @@ export function App() {
   const busca = filter.trim().toLowerCase();
   const gruposVisiveis = state.groups.filter((g) => !busca || g.name.toLowerCase().includes(busca));
   const linhaGrupo = (g: Group) => (
-    <li key={g.id} className={(groupConversation(g.id) === selected ? "active" : "")} onClick={() => { fecharColab(); setSelected(groupConversation(g.id)); if (window.innerWidth < 720) setSidebarOpen(false); }}>
+    <li key={g.id} className={(groupConversation(g.id) === selected ? "active" : "")} onClick={() => { fecharColab(); setSelected(groupConversation(g.id)); if (window.innerWidth < 768) setSidebarOpen(false); }}>
       <div className="avatar group-avatar" style={{ width: 36, height: 36 }}>👥</div>
       <div className="bot-text">
         <div className="bot-name">{g.name}</div>
@@ -182,6 +229,7 @@ export function App() {
   useEffect(() => { setPref("avisos", avisos); }, [avisos]);
   useEffect(() => {
     if (selected) return;
+    if (typeof window !== "undefined" && window.innerWidth < 768) return; // no celular a lista vem primeiro
     if (exemplo && (tela === "tarefas" || tela === "detalhe") && equipe.some((b) => b.id === "pixel")) {
       setSelected(dmConversation("pixel"));
       return;
@@ -240,7 +288,7 @@ export function App() {
   const deusActive = state.control.global === "deus" || state.bots.some((b) => b.online && effectiveControl(state.control.global, b.controlMode) === "deus");
 
   return (
-    <div className={"app" + (sidebarOpen ? "" : " sidebar-closed") + (deusActive ? " deus" : "")}>
+    <div className={"app" + (sidebarOpen ? "" : " sidebar-closed") + (deusActive ? " deus" : "") + (selected && !sidebarOpen ? " chat-aberto" : "") + ((verQuadro || verGrafo || verTroca) ? " painel-colab" : "")} style={{ ["--sidebar-w" as any]: sidebarW + "px" }}>
       {deusActive && (
         <div className="deus-banner" role="alert">
           <span>⚠️ <b>MODO DEUS EXTREMO</b> ativo{state.control.global === "deus" ? " para todos os bots" : " em " + state.bots.filter((b) => b.online && effectiveControl(state.control.global, b.controlMode) === "deus").map((b) => b.name).join(", ")}: agem sem pedir aprovação. Tudo vai para a auditoria.</span>
@@ -249,14 +297,23 @@ export function App() {
       )}
       <aside className="sidebar">
         <header className="sidebar-head">
-          <div className="brand"><span className="logo-img"><Ameba id="mybots" size={32} /></span><div><b>MyBots</b></div></div>
+          <button type="button" className="icon-btn only-mobile voltar sidebar-voltar" title="Início" aria-label="Início"
+            onClick={() => { setSelected(null); setVerQuadro(false); setVerGrafo(false); setVerTroca(null); }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <div className="brand">
+            <span className="logo-img logo-chefe"><img src={`${UI_BASE}/amebas/v2/ameba-v2-091.png`} alt="MyBots" draggable={false} /></span>
+            <div><b className="brand-desktop only-desktop">MyBots</b><b className="brand-mobile only-mobile">Bots</b></div>
+          </div>
           <div className="sidebar-canto">
-            <Tema />
-            <Configuracao aberto={verConfig !== null} onOpen={() => setVerConfig((v) => (v ? null : "geral"))} />
+            <span className="only-desktop"><Tema /></span>
+            <span className="only-desktop"><Configuracao aberto={verConfig !== null} onOpen={() => setVerConfig((v) => (v ? null : "geral"))} /></span>
             <button className={"icon-btn canto" + (buscaAberta ? " on" : "")} type="button" title="Buscar" aria-label="Buscar" onClick={() => setBuscaAberta((v) => !v)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
             </button>
             <button className="icon-btn canto" type="button" title="Novo" aria-label="Novo" onClick={() => setMais((v) => !v)}>+</button>
+            <button className="icon-btn canto only-mobile" type="button" title="Configurações" aria-label="Configurações"
+              onClick={() => setVerConfig((v) => (v ? null : "geral"))}>⚙</button>
             {mais && (
               <div className="mais-menu" role="menu">
                 <button type="button" onClick={() => { setMais(false); setNewBot(true); }}>Novo bot</button>
@@ -266,8 +323,10 @@ export function App() {
             )}
           </div>
         </header>
-        <Tamanho />
-        <GlobalControl control={state.control} />
+        <div className="only-desktop barra-desktop-extra">
+          <Tamanho />
+          <GlobalControl control={state.control} />
+        </div>
         {(buscaAberta || filter) && <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />}
         <ul className="bots">
           <li className="section empresa-linha">
@@ -290,7 +349,7 @@ export function App() {
             const conv = dmConversation(b.id);
             return (
               <li key={"ativo-" + b.id} data-colab={ajuda ? "ajudando" : "ativo"} className={"linha-bot" + (conv === selected && !verQuadro && !verGrafo ? " active" : "")}
-                onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}>
+                onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 768) setSidebarOpen(false); }}>
                 <Avatar bot={b} size={42} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
                 <div className="bot-text">
                   <div className="bot-name">{nomeNaTela(b, painel.prefs)}</div>
@@ -302,10 +361,10 @@ export function App() {
             );
           })}
           <li className="section">Colaboração</li>
-          <li className={"colab-atalho" + (verQuadro ? " active" : "")} data-colab="atalho-quadro" onClick={() => { setVerQuadro(true); setVerGrafo(false); setVerTroca(null); }}>
+          <li className={"colab-atalho" + (verQuadro ? " active" : "")} data-colab="atalho-quadro" onClick={() => { setVerQuadro(true); setVerGrafo(false); setVerTroca(null); if (window.innerWidth < 768) setSidebarOpen(false); }}>
             <span className="bot-name">Quadro do Gerente</span>
           </li>
-          <li className={"colab-atalho" + (verGrafo ? " active" : "")} data-colab="atalho-grafo" onClick={() => { setVerGrafo(true); setVerQuadro(false); setVerTroca(null); }}>
+          <li className={"colab-atalho" + (verGrafo ? " active" : "")} data-colab="atalho-grafo" onClick={() => { setVerGrafo(true); setVerQuadro(false); setVerTroca(null); if (window.innerWidth < 768) setSidebarOpen(false); }}>
             <span className="bot-name">Quem fala com quem</span>
           </li>
           {Object.values(painel.prefs).some((p) => p.escondido) && (
@@ -320,7 +379,7 @@ export function App() {
                   const conv = dmConversation(b.id);
                   return (
                     <li key={b.id} className={conv === selected ? "ativo" : ""}
-                      onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
+                      onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 768) setSidebarOpen(false); }}
                       onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
                       <span className="grade-rosto">
                         <Avatar bot={b} size={80} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
@@ -349,12 +408,12 @@ export function App() {
                 const gerente = ehGerente({ gerente: !!b.gerente, manages: b.manages, role: b.role, nome: b.name });
                 const espera = pendingFor(b.id) > 0 && !deusActive;
                 return (
-                  <li key={b.id} className={"linha-bot" + (gerente ? " linha-gerente" : "") + (conv === selected ? " active" : "") + (b.online ? "" : " offline") + (espera ? " espera-ok" : "")}
-                    onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
+                  <li key={b.id} className={"linha-bot" + (gerente ? " linha-gerente" : "") + (conv === selected ? " active" : "") + (b.online ? "" : " offline") + (espera ? " espera-ok" : "") + (pendingFor(b.id) > 0 ? " tem-aprovacao" : "") + (b.gerente ? " gerente-linha" : "")}
+                    onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 768) setSidebarOpen(false); }}
                     onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
                     <Avatar bot={b} size={gerente ? 64 : 42} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
                     <div className="bot-text">
-                      <div className="bot-name">{nomeNaTela(b, painel.prefs)}{espera && <span className="badge perigo">OK</span>}{(b.unread ?? 0) > 0 && conv !== selected && <span className="badge">{b.unread}</span>}</div>
+                      <div className="bot-name">{nomeNaTela(b, painel.prefs)}{espera && <span className="badge perigo">OK</span>}{pendingFor(b.id) > 0 && <span className="badge aprovacao" title="Espera o seu OK">{pendingFor(b.id)}</span>}{(b.unread ?? 0) > 0 && conv !== selected && pendingFor(b.id) === 0 && !espera && <span className="badge">{b.unread}</span>}</div>
                       {b.online && b.busy && pendingFor(b.id) === 0 && <div className="bot-vivo">{faseDoStatus(b.status, b.busy, b.fase) === "trabalhando" ? "está trabalhando" : "digitando…"}</div>}
                       <div className={"bot-status" + (pacote?.ajudando[b.id] ? " ajudando" : "") + (b.busy ? " busy" : "") + (espera ? " pedindo" : "")}>
                         {pacote?.ajudando[b.id]
@@ -362,6 +421,7 @@ export function App() {
                           : pendingFor(b.id) > 0 ? (deusActive ? "auditoria" : "Espera o seu OK") : b.online ? (b.preview ?? (b.busy ? b.status : "Disponível")) : "Offline"}
                       </div>
                     </div>
+                    {b.lastSeen ? <time className="bot-hora">{new Date(b.lastSeen).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time> : null}
                     {b.busy && (
                       <button className="row-parar" title={`Parar o ${b.name} (só ele)`} aria-label={"Parar " + b.name}
                         onClick={(e) => { e.stopPropagation(); void api(`/bots/${b.id}/parar`, { method: "POST" }); }}>⏹</button>
@@ -373,13 +433,23 @@ export function App() {
               })}
             </Fragment>
           ))}
-          {!bots.length && <li className="empty">Nenhum bot conectado ainda. Rode o nó em cada PC.</li>}
+          {!bots.length && (
+            <li className="empty welcome-time">
+              <div className="only-mobile welcome-time-bloco">
+                <TimeAmebas />
+                <TituloMyBots />
+              </div>
+              <span>Nenhum bot conectado ainda. Rode o nó em cada PC.</span>
+            </li>
+          )}
           {(gruposVisiveis.length > 0 || state.groups.length > 0 || (bots.length > 1 && bots.some((b) => b.gerente || (b.manages?.length)))) && (
             <li className="section">Grupos <button className="link" onClick={() => setNewGroup(true)}>+ novo</button></li>
           )}
           {gruposVisiveis.map(linhaGrupo)}
         </ul>
-        <footer className="sidebar-foot">{equipe.filter((b) => b.online).length} de {equipe.length} online · voz: {state.voice.tts ? state.voice.ttsEngine : "navegador"} / {state.voice.stt ? "whisper" : "navegador"}</footer>
+        <footer className="sidebar-foot only-desktop">{equipe.filter((b) => b.online).length} de {equipe.length} online · voz: {state.voice.tts ? state.voice.ttsEngine : "navegador"} / {state.voice.stt ? "whisper" : "navegador"}</footer>
+        <div className="sidebar-pega only-desktop" role="separator" aria-orientation="vertical" title="Arraste para mudar a largura; clique duplo para voltar"
+          onPointerDown={aoPuxarSidebar} onDoubleClick={resetSidebarW} />
       </aside>
 
       <main className="chat" style={target?.kind === "bot" ? ({ "--bot": colorFor(target.bot.id) } as any) : undefined}>
@@ -441,7 +511,11 @@ export function App() {
             empresaNome={target.kind === "bot" && target.bot.empresaId ? (empresas.find((e) => e.id === target.bot.empresaId)?.nome ?? "") : ""}
           />
         ) : (
-          <div className="placeholder"><span className="logo-img big"><Ameba id="mybots" size={96} /></span><h2>MyBots</h2><p>Escolha um bot ou grupo na lista para conversar.</p></div>
+          <div className="placeholder">
+            <TimeAmebas />
+            <TituloMyBots grande />
+            <p>Escolha um bot ou grupo na lista para conversar.</p>
+          </div>
         )}
       </main>
 
@@ -480,7 +554,7 @@ export function App() {
         onNovaSecao={() => setDialogo({ tipo: "secao", bot: menu.bot })}
         onAparencia={() => setDialogo({ tipo: "aparencia", bot: menu.bot })}
         onExcluir={() => setAExcluir(menu.bot)}
-        onOpen={(id) => { setSelected(dmConversation(id)); if (window.innerWidth < 620) setSidebarOpen(false); }}
+        onOpen={(id) => { setSelected(dmConversation(id)); if (window.innerWidth < 768) setSidebarOpen(false); }}
         onPanel={openPanel} />}
       {newGerente && <NewGerenteDialog bots={state.bots} onClose={() => setNewGerente(false)} onCreated={(id) => { setNewGerente(false); setSelected(dmConversation(id)); }} />}
       {aExcluir && <ExcluirBotDialog bot={aExcluir} onClose={() => setAExcluir(null)} />}

@@ -27,4 +27,6 @@ console.log(cofre.ativo ? "[hub] cofre ativo" : `[hub] ${cofre.motivo}`);
 const authMode = config.nodeTokens.size ? `tokens por bot (${config.nodeTokens.size})` : config.hubToken ? "token único do hub" : "SEM TOKEN (só para testes na LAN)";
 console.log(`[hub] MyBots Hub ${config.version} em http://${config.host}:${config.port}  —  auth dos nós: ${authMode}`);
 console.log(`[hub] banco: ${config.dbFile}`);
-if (!config.uiPassword) console.log(`[hub] interface sem senha (defina MYBOTS_UI_PASSWORD para proteger)`);
+if (config.usuarioOnline && config.senhaHash) console.log(`[hub] login online ativo para ${config.usuarioOnline}`);
+else if (!config.uiPassword) console.log(`[hub] interface sem senha (defina MYBOTS_USUARIO+MYBOTS_SENHA_HASH ou MYBOTS_UI_PASSWORD)`);
+else console.log(`[hub] interface com senha legada (MYBOTS_UI_PASSWORD)`);

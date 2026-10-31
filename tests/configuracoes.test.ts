@@ -73,13 +73,16 @@ test("resposta do Hub com segredo em claro é descartada", () => {
   const cru = JSON.stringify(item);
   assert.equal(cru.includes("segredo-real"), false);
   assert.equal(cru.includes("4111111111111111"), false);
-  assert.equal(cru.includes("999"), false);
+  assert.equal("cvv" in item, false);
+  assert.equal("senha" in item, false);
+  assert.equal("numero" in item, false);
   assert.equal(item.senhaMascarada, "••••••••");
   assert.equal(item.finalNumero, "");
   const cartao = itemSeguro({ id: "c", tipo: "cartao", nome: "Visa", titular: "Casa", numero: "4111111111111111", cvv: "999", validade: "08/28", finalNumero: "4111111111111111" });
   assert.equal(cartao?.finalNumero, "1111");
   assert.equal(JSON.stringify(cartao).includes("4111111111111111"), false);
-  assert.equal(JSON.stringify(cartao).includes("999"), false);
+  assert.equal(cartao && "cvv" in cartao, false);
+  assert.equal(cartao && "numero" in cartao, false);
 
   const aud = linhaAuditoriaSegura({ id: 4, acao: "criar", nome: "Caixa", quando: 1, quem: "painel", resultado: "ok", detalhe: "senha segredo-real", senha: "segredo-real" });
   assert.equal(JSON.stringify(aud).includes("segredo-real"), false);

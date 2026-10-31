@@ -2,6 +2,7 @@
 
 import type { ControlMode, ControlState } from "./control.ts";
 import type { Attachment, MediaKind } from "./media.ts";
+import type { ColabWs } from "./colab.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -50,7 +51,7 @@ export type NodeToHub =
   | { type: "audit"; action: string; detail?: unknown }
   | { type: "status"; text: string; busy: boolean; fase?: FaseAtividade }
   | { type: "event"; conversationId: string; event: BotEvent }
-  | { type: "ask_bot"; callId: string; conversationId: string; to: string; text: string; wait: boolean }
+  | { type: "ask_bot"; callId: string; conversationId: string; to: string; text: string; wait: boolean; prioridade?: boolean; profundidade?: number; contexto?: string }
   | { type: "list_bots"; callId: string }
   /** cuidar da equipe pelo caminho certo: o Hub é quem manda em bot, não o PowerShell */
   | { type: "manage_bot"; callId: string; acao: "excluir" | "parar" | "ligar" | "reiniciar"; bot: string; apagarArquivos?: boolean }
@@ -72,14 +73,18 @@ export type NodeToHub =
   | { type: "generate_media"; callId: string; conversationId: string; kind: MediaKind; prompt: string; refFileId?: string; seconds?: number; aspect?: string }
   /** gravar a tela do PC da empresa (o Hub é quem enxerga o container) */
   | { type: "gravar_tela"; callId: string; acao: "iniciar" | "parar" | "estado"; conversationId?: string; legenda?: string; onde?: "pc" | "celular" }
+  /** preenche login ou cartão no navegador. A resposta é só "ok" ou "erro: …" — o valor não volta. */
+  | { type: "fill_credential"; callId: string; site: string; campo: string }
   /** o celular da empresa do bot, via ADB no Hub. aprovado = o chefe já liberou uma ação sensível */
   | { type: "celular"; callId: string; acao: string; conversationId?: string; x?: number; y?: number; x2?: number; y2?: number; texto?: string; tecla?: string; pacote?: string; aprovado?: boolean };
 
 /** Hub → Nó */
 export type HubToNode =
   | { type: "hello.ok"; botId: string; hubVersion: string; /** índice da base comum: o bot nasce sabendo o que a casa sabe */ knowledge?: string; /** processo do Hub: o nó usa para nunca matar quem o mantém de pé */ hubPid?: number }
-  /** silent = só adiciona ao contexto, sem responder (falas de outros bots num grupo) */
-  | { type: "message"; conversationId: string; messageId: string; from: Sender; text: string; silent?: boolean; attachments?: Attachment[] }
+  /** silent = só adiciona ao contexto, sem responder (falas de outros bots num grupo). adiada = recado de outro bot para o próximo turno, sem acordar. */
+  | { type: "message"; conversationId: string; messageId: string; from: Sender; text: string; silent?: boolean; adiada?: boolean; attachments?: Attachment[] }
+  /** o humano mandou parar: o nó aborta o turno e quem tem tarefa cancela as dele */
+  | { type: "colab.parar"; alvo: "todos" | string[]; por: string }
   | { type: "approval.response"; requestId: string; allow: boolean; remember?: boolean }
   | { type: "question.answer"; questionId: string; answer: string }
   /** conversationId "*" = tudo (botão de pânico) */
@@ -230,7 +235,8 @@ export type HubToUi =
   | { type: "conversation.changed"; conversationId: string }
   /** o Hub mandou parar tudo: toda janela cala a fala, fecha o microfone e esquece o que estava gerando */
   | { type: "stop"; reason?: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | ColabWs;
 
 /** Uma ação de navegador ou de tela no PC da empresa. O texto digitado não entra aqui. */
 export type AcaoNaTela = {
@@ -317,6 +323,8 @@ export function faseDoStatus(text: string, busy: boolean, fase?: FaseAtividade):
 }
 
 export * from "./control.ts";
+export * from "./colab.ts";
+export * from "./redacao.ts";
 export * from "./media.ts";
 export * from "./resources.ts";
 

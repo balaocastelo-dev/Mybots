@@ -10,8 +10,7 @@ import { LendoSite } from "./lendo";
 import { ArteDoBot, EscolhaAparencia, lerAparencia } from "./aparencia";
 import { Abertura, PrimeiraEmpresa, EscolhaIdioma } from "./abertura";
 import { TelaLegal } from "./legal";
-import { TelaCreditos } from "./creditos";
-import { Fragment } from "react";
+import { TelaCreditos } from "./creditos";
 import { usePainelPrefs, nomeNaTela, ChipTrocas, FolhaAbrirTroca, TrocaEntreBots, DialogoTexto, type Troca, type PrefDoBot } from "./painel";
 import { ehGerente, montarLista } from "./lista";
 import { lerLinkGuia } from "./guiaPainel";
@@ -108,18 +107,8 @@ export function App() {
   const [newBot, setNewBot] = useState(false);
   // Empresas: cada uma com seus bots, gerentes e regras. O conhecimento continua universal.
   const [empresas, setEmpresas] = useState<Array<{ id: string; nome: string; regras: string; idioma?: string; bots: number }>>([]);
-  const [empresaAtiva, setEmpresaAtiva] = useState<string>(() => { try { return localStorage.getItem("mybots-empresa") || "todas"; } catch { return "todas"; } });
+  const [empresaAtiva, setEmpresaAtiva] = useState<string>("todas"); // perfil unico: sem troca de empresa na UI
   const [verEmpresas, setVerEmpresas] = useState(false);
-  const [recolhidas, setRecolhidas] = useState<Record<string, boolean>>(() => {
-    try { return JSON.parse(localStorage.getItem("mybots-empresas-recolhidas") || "{}") ?? {}; } catch { return {}; }
-  });
-  const alternarEmpresa = (titulo: string) => {
-    setRecolhidas((atual) => {
-      const prox = { ...atual, [titulo]: !atual[titulo] };
-      try { localStorage.setItem("mybots-empresas-recolhidas", JSON.stringify(prox)); } catch { /* segue neste carregamento */ }
-      return prox;
-    });
-  };
   // A abertura aparece toda vez que o painel abre; depois dela, se a casa ainda nao
   // tem empresa nenhuma, a tela de cadastro e o que ele ve — nao um painel vazio.
   const [pularIntro] = useState(pularAbertura);
@@ -184,10 +173,9 @@ export function App() {
     return [...equipe]
       .filter((b) => !f || b.name.toLowerCase().includes(f) || b.role.toLowerCase().includes(f))
       .filter((b) => mostrarEscondidos || !painel.prefs[b.id]?.escondido)
-      // bot do sistema (sem empresa) aparece sempre; o resto só na empresa escolhida
-      .filter((b) => empresaAtiva === "todas" || !b.empresaId || b.empresaId === empresaAtiva)
+      // Perfil unico: todos os bots na mesma lista
       .sort((a, b) => nomeNaTela(a, painel.prefs).localeCompare(nomeNaTela(b, painel.prefs), "pt"));
-  }, [equipe, filter, painel.prefs, mostrarEscondidos, empresaAtiva]);
+  }, [equipe, filter, painel.prefs, mostrarEscondidos]);
 
   /** Fixados viram a grade. Na lista, cada empresa põe o gerente na frente. */
   const empresasVisiveis = empresas.length ? empresas : (exemplo ? [EMPRESA_EXEMPLO] : empresas);
@@ -201,6 +189,11 @@ export function App() {
     role: b.role,
   })), empresasVisiveis), [bots, painel.prefs, empresasVisiveis]);
   const porId = useMemo(() => new Map(bots.map((b) => [b.id, b])), [bots]);
+  // Celular: sem bot aberto a lista e a tela padrao. Nunca deixar so o placeholder.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.innerWidth >= 768) return;
+    if (!selected && !verQuadro && !verGrafo && !verTroca) setSidebarOpen(true);
+  }, [selected, verQuadro, verGrafo, verTroca]);
 
   const busca = filter.trim().toLowerCase();
   const gruposVisiveis = state.groups.filter((g) => !busca || g.name.toLowerCase().includes(busca));
@@ -329,19 +322,6 @@ export function App() {
         </div>
         {(buscaAberta || filter) && <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />}
         <ul className="bots">
-          <li className="section empresa-linha">
-            <select className="empresa-sel" value={empresaAtiva} onChange={(e) => { if (e.target.value === "+nova") { setVerEmpresas(true); return; } setEmpresaAtiva(e.target.value); }}>
-              <option value="todas">Todas as empresas</option>
-              {empresasVisiveis.map((e) => <option key={e.id} value={e.id}>{e.nome} ({e.bots})</option>)}
-              <option value="+nova">＋ gerenciar empresas…</option>
-            </select>
-          </li>
-          {empresaAtiva !== "todas" && equipe.length > bots.length && (
-            <li className="section aviso-filtro">
-              {equipe.length - bots.length} bot(s) de outras empresas escondidos ·{" "}
-              <button className="link" onClick={() => setEmpresaAtiva("todas")}>ver todos</button>
-            </li>
-          )}
           <li className="section secao-ativos" data-colab="ativos">Ativos</li>
           {!ativos.length && <li className="empty ativos-vazio">Ninguém trabalhando agora.</li>}
           {ativos.map((b) => {
@@ -393,46 +373,36 @@ export function App() {
               </ul>
             </li>
           )}
-          {listaPronta.grupos.map((g) => (
-            <Fragment key={g.titulo}>
-              <li className="section secao-nome">
-                <button type="button" className="secao-toggle" aria-expanded={!recolhidas[g.titulo]} onClick={() => alternarEmpresa(g.titulo)}>
-                  {recolhidas[g.titulo] ? "▸" : "▾"} {g.titulo}
-                  <span className="badge">{g.ids.length}</span>
-                </button>
+          {listaPronta.ids.map((id) => {
+            const b = porId.get(id);
+            if (!b) return null;
+            const conv = dmConversation(b.id);
+            const gerente = ehGerente({ gerente: !!b.gerente, manages: b.manages, role: b.role, nome: b.name });
+            const espera = pendingFor(b.id) > 0 && !deusActive;
+            return (
+              <li key={b.id} className={"linha-bot" + (gerente ? " linha-gerente" : "") + (conv === selected ? " active" : "") + (b.online ? "" : " offline") + (espera ? " espera-ok" : "") + (pendingFor(b.id) > 0 ? " tem-aprovacao" : "") + (b.gerente ? " gerente-linha" : "")}
+                onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 768) setSidebarOpen(false); }}
+                onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
+                <Avatar bot={b} size={gerente ? 64 : 42} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
+                <div className="bot-text">
+                  <div className="bot-name">{nomeNaTela(b, painel.prefs)}{espera && <span className="badge perigo">OK</span>}{pendingFor(b.id) > 0 && <span className="badge aprovacao" title="Espera o seu OK">{pendingFor(b.id)}</span>}{(b.unread ?? 0) > 0 && conv !== selected && pendingFor(b.id) === 0 && !espera && <span className="badge">{b.unread}</span>}</div>
+                  {b.online && b.busy && pendingFor(b.id) === 0 && <div className="bot-vivo">{faseDoStatus(b.status, b.busy, b.fase) === "trabalhando" ? "está trabalhando" : "digitando…"}</div>}
+                  <div className={"bot-status" + (pacote?.ajudando[b.id] ? " ajudando" : "") + (b.busy ? " busy" : "") + (espera ? " pedindo" : "")}>
+                    {pacote?.ajudando[b.id]
+                      ? `Ajudando ${nomeDe(pacote.ajudando[b.id].ajudando)}`
+                      : pendingFor(b.id) > 0 ? (deusActive ? "auditoria" : "Espera o seu OK") : b.online ? (b.preview ?? (b.busy ? b.status : "Disponível")) : "Offline"}
+                  </div>
+                </div>
+                {b.lastSeen ? <time className="bot-hora">{new Date(b.lastSeen).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time> : null}
+                {b.busy && (
+                  <button className="row-parar" title={`Parar o ${b.name} (só ele)`} aria-label={"Parar " + b.name}
+                    onClick={(e) => { e.stopPropagation(); void api(`/bots/${b.id}/parar`, { method: "POST" }); }}>⏹</button>
+                )}
+                <button className="row-menu" title="Opções do bot" aria-label={"Opções de " + b.name}
+                  onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setSelected(conv); setMenu({ bot: b, x: r.right, y: r.bottom }); }}>⋮</button>
               </li>
-              {!recolhidas[g.titulo] && g.ids.map((id) => {
-                const b = porId.get(id);
-                if (!b) return null;
-                const conv = dmConversation(b.id);
-                const gerente = ehGerente({ gerente: !!b.gerente, manages: b.manages, role: b.role, nome: b.name });
-                const espera = pendingFor(b.id) > 0 && !deusActive;
-                return (
-                  <li key={b.id} className={"linha-bot" + (gerente ? " linha-gerente" : "") + (conv === selected ? " active" : "") + (b.online ? "" : " offline") + (espera ? " espera-ok" : "") + (pendingFor(b.id) > 0 ? " tem-aprovacao" : "") + (b.gerente ? " gerente-linha" : "")}
-                    onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 768) setSidebarOpen(false); }}
-                    onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
-                    <Avatar bot={b} size={gerente ? 64 : 42} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
-                    <div className="bot-text">
-                      <div className="bot-name">{nomeNaTela(b, painel.prefs)}{espera && <span className="badge perigo">OK</span>}{pendingFor(b.id) > 0 && <span className="badge aprovacao" title="Espera o seu OK">{pendingFor(b.id)}</span>}{(b.unread ?? 0) > 0 && conv !== selected && pendingFor(b.id) === 0 && !espera && <span className="badge">{b.unread}</span>}</div>
-                      {b.online && b.busy && pendingFor(b.id) === 0 && <div className="bot-vivo">{faseDoStatus(b.status, b.busy, b.fase) === "trabalhando" ? "está trabalhando" : "digitando…"}</div>}
-                      <div className={"bot-status" + (pacote?.ajudando[b.id] ? " ajudando" : "") + (b.busy ? " busy" : "") + (espera ? " pedindo" : "")}>
-                        {pacote?.ajudando[b.id]
-                          ? `Ajudando ${nomeDe(pacote.ajudando[b.id].ajudando)}`
-                          : pendingFor(b.id) > 0 ? (deusActive ? "auditoria" : "Espera o seu OK") : b.online ? (b.preview ?? (b.busy ? b.status : "Disponível")) : "Offline"}
-                      </div>
-                    </div>
-                    {b.lastSeen ? <time className="bot-hora">{new Date(b.lastSeen).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time> : null}
-                    {b.busy && (
-                      <button className="row-parar" title={`Parar o ${b.name} (só ele)`} aria-label={"Parar " + b.name}
-                        onClick={(e) => { e.stopPropagation(); void api(`/bots/${b.id}/parar`, { method: "POST" }); }}>⏹</button>
-                    )}
-                    <button className="row-menu" title="Opções do bot" aria-label={"Opções de " + b.name}
-                      onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setSelected(conv); setMenu({ bot: b, x: r.right, y: r.bottom }); }}>⋮</button>
-                  </li>
-                );
-              })}
-            </Fragment>
-          ))}
+            );
+          })}
           {!bots.length && (
             <li className="empty welcome-time">
               <div className="only-mobile welcome-time-bloco">
@@ -502,7 +472,7 @@ export function App() {
             handsFree={handsFree} setHandsFree={setHandsFree}
             send={send}
             onEvent={onEvent}
-            onOpenSidebar={() => setSidebarOpen(true)}
+            onOpenSidebar={() => { setSidebarOpen(true); setSelected(null); setVerQuadro(false); setVerGrafo(false); setVerTroca(null); }}
             onAbrirTroca={(conv) => { setVerTroca(conv); }}
             onAbrirEquipe={() => { setVerGrafo(true); setVerQuadro(false); setVerTroca(null); }}
             onAbrirBot={(id) => { setVerQuadro(false); setVerGrafo(false); setVerTroca(null); setSelected(dmConversation(id)); }}

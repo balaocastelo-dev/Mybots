@@ -9,8 +9,9 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import WebSocket from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import { alvoDaPonte, caminhoDaTela, caminhoNoContainer, idDaTela, portaDeEmpresaPermitida } from "../packages/hub/src/ponteVnc.ts";
+import { abrirWsDaTela, quadroWs } from "../packages/hub/src/ponteTela.ts";
 
 const MAC = { host: "192.168.15.9", porta: 5900 };
 
@@ -175,6 +176,17 @@ test("ponte e página da tela exigem a senha da interface", { timeout: 40_000 },
 
     const pcCom = await fetch(`${base}/pc/balao/?k=${encodeURIComponent(SENHA)}`);
     assert.equal(pcCom.status, 503);
+    const androidSem = await fetch(`${base}/android/bia/`);
+    assert.equal(androidSem.status, 401);
+    const androidCom = await fetch(`${base}/android/bia/?k=${encodeURIComponent(SENHA)}`);
+    assert.equal(androidCom.status, 503);
+    const corpoAndroid = await androidCom.json() as { error?: string; provedores?: unknown[]; botId?: string };
+    assert.equal(corpoAndroid.botId, "bia");
+    assert.deepEqual(corpoAndroid.provedores, [
+      { id: "aparelho", prioridade: 10 },
+      { id: "redroid", prioridade: 1 },
+    ]);
+    assert.match(corpoAndroid.error ?? "", /provedor/);
     const segue = await fetch(`${base}/api/health?k=${encodeURIComponent(SENHA)}`);
     assert.equal(segue.status, 200, "o proxy da tela derrubou o Hub");
 
@@ -188,5 +200,58 @@ test("ponte e página da tela exigem a senha da interface", { timeout: 40_000 },
     assert.equal(fantasma, true, "empresa sem PC ligado devia fechar a ponte, não ficar aberta");
   } finally {
     matar();
+  }
+});
+
+test("a ponte da tela preserva texto e binário", async () => {
+  const porta = 8099;
+  const servidor = new WebSocketServer({ host: "127.0.0.1", port: porta });
+  await new Promise<void>((resolve, reject) => {
+    if (servidor.address()) resolve();
+    else servidor.once("listening", () => resolve());
+    servidor.once("error", reject);
+  });
+  const chegados: { bin: boolean; texto: string }[] = [];
+  const pronto = new Promise<void>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("o container de teste não recebeu os quadros")), 4000);
+    servidor.on("connection", (ws) => {
+      ws.on("message", (data, isBinary) => {
+        chegados.push({ bin: isBinary, texto: isBinary ? "" : data.toString() });
+        if (chegados.length === 1) {
+          ws.send("MODE websockets");
+          ws.send(Buffer.from([0, 1, 2, 9]));
+        }
+        if (chegados.length >= 3) { clearTimeout(t); resolve(); }
+      });
+    });
+  });
+  const voltaram: { bin: boolean; texto: string }[] = [];
+  const ouvintes: Record<string, () => void> = {};
+  const socket = {
+    send(d: Buffer, opts?: { binary?: boolean }) {
+      const bin = !!opts?.binary;
+      voltaram.push({ bin, texto: bin ? "" : d.toString() });
+    },
+    close() {},
+    on(ev: string, fn: () => void) { ouvintes[ev] = fn; },
+  };
+  try {
+    const enviar = abrirWsDaTela(socket, porta, "/api/websockets", [
+      quadroWs(Buffer.from("SETTINGS,{\"displayId\":\"primary\"}"), false),
+    ]);
+    enviar(quadroWs(Buffer.from([9, 8, 7]), true));
+    enviar(quadroWs("START_VIDEO", false));
+    await pronto;
+    assert.deepEqual(chegados.map((q) => q.bin), [false, true, false]);
+    assert.equal(chegados[0].texto.startsWith("SETTINGS,"), true);
+    assert.equal(chegados[2].texto, "START_VIDEO");
+    const fim = Date.now() + 2000;
+    while (voltaram.length < 2 && Date.now() < fim) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(voltaram[0]?.bin, false);
+    assert.equal(voltaram[0]?.texto, "MODE websockets");
+    assert.equal(voltaram[1]?.bin, true);
+  } finally {
+    try { ouvintes.close?.(); } catch { /* ok */ }
+    await new Promise<void>((resolve) => servidor.close(() => resolve()));
   }
 });

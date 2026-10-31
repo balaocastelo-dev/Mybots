@@ -14,8 +14,8 @@ import { binarioDoAdb, executarAdb } from "./celular.js";
 import { PareamentoAndroid, idDeBotValido, type AdbFn, type CadastroAndroid, type PedidoParear } from "./androidBot.js";
 import { TelasAndroid } from "./androidStream.js";
 import { argumentosDocker, avaliarEsteHost, modoFallbackDoAmbiente, nomeDoContainerAndroid } from "./androidFallback.js";
-import { registrarGanchoAndroid } from "./androidHook.js";
-import { avisarProvedores, instalarProvedores, publicarNoRegistroOficial, type FonteDoProvedor } from "./androidProvedor.js";
+import { instalarProvedores, type FonteDoProvedor } from "./androidProvedor.js";
+import { listarProvedoresAndroid, resolverAlvoAndroid } from "./android.js";
 import { abrirWsAndroid, caminhoNoAndroid, encaminharHttpAndroid, idDoAndroid } from "./ponteAndroid.js";
 import { execFile } from "node:child_process";
 
@@ -72,18 +72,9 @@ export class ServicoAndroid implements FonteDoProvedor {
 
   pararTela(botId: string) { this.telas.parar(botId); }
 
-  /**
-   * Entra no registro local (e no oficial, se android.ts do outro PR existir).
-   * O gancho antigo só encaminha para avisarProvedores.
-   */
+  /** Entra no registro oficial: aparelho (10) e redroid (1). */
   registrar() {
     instalarProvedores(this);
-    registrarGanchoAndroid({
-      caminho: (botId) => `/android/${botId}/`,
-      aoLigarPc: (botId) => avisarProvedores("ligar", botId),
-      aoDesligarPc: (botId) => avisarProvedores("desligar", botId),
-    });
-    void publicarNoRegistroOficial();
   }
 
   async parear(botId: string, body: PedidoParear) {
@@ -95,10 +86,6 @@ export class ServicoAndroid implements FonteDoProvedor {
   async status(botId: string) {
     return this.pareamento.status(botId);
   }
-
-  async aoLigarPc(botId: string) { await avisarProvedores("ligar", botId); }
-
-  async aoDesligarPc(botId: string) { await avisarProvedores("desligar", botId); }
 
   /** O provedor redroid chama isto. Aparelho já cadastrado não é substituído. */
   async subirFallback(botId: string) {
@@ -135,7 +122,8 @@ export class ServicoAndroid implements FonteDoProvedor {
     const id = idDoAndroid(url);
     const caminho = caminhoNoAndroid(url);
     if (!id || !caminho) return reply.code(404).send({ ok: false, erro: "tela indisponível" });
-    if (!idDeBotValido(id) || !this.deps.botExiste(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    const alvo = await resolverAlvoAndroid(id);
+    if (!alvo) return reply.code(503).send({ error: "nenhum provedor de celular resolveu este bot", botId: id, provedores: listarProvedoresAndroid() });
     this.marcarUso(id);
     let porta: number;
     try { porta = await this.telas.portaDe(id); }
@@ -159,7 +147,8 @@ export class ServicoAndroid implements FonteDoProvedor {
       const id = idDoAndroid(url);
       const caminho = caminhoNoAndroid(url);
       if (morto) return;
-      if (!id || !caminho || !this.deps.botExiste(id)) { try { socket.close(); } catch { /* ok */ } return; }
+      if (!id || !caminho) { try { socket.close(); } catch { /* ok */ } return; }
+      if (!(await resolverAlvoAndroid(id))) { try { socket.close(); } catch { /* ok */ } return; }
       this.marcarUso(id);
       let porta: number;
       try { porta = await this.telas.portaDe(id); }

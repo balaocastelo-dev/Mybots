@@ -17,12 +17,8 @@ import {
   i16DoScroll, mensagemToque, URL_WHATSAPP,
 } from "../packages/hub/src/androidScrcpy.ts";
 import { argumentosDocker, avaliarFallback, nomeDoContainerAndroid } from "../packages/hub/src/androidFallback.ts";
-import { ganchoAndroid, registrarGanchoAndroid } from "../packages/hub/src/androidHook.ts";
-import {
-  PRIORIDADE_APARELHO, PRIORIDADE_REDROID, avisarProvedores, limparProvedoresAndroid, listarProvedoresAndroid,
-  provedorAparelho, provedorRedroid, publicarNoRegistroOficial, registrarProvedorAndroid, relatoDoAndroid, resolverAlvoAndroid,
-  type FonteDoProvedor,
-} from "../packages/hub/src/androidProvedor.ts";
+import { avisarAndroid, limparProvedoresAndroid, listarProvedoresAndroid, registrarProvedorAndroid, relatoDoAndroid, resolverAlvoAndroid } from "../packages/hub/src/android.ts";
+import { PRIORIDADE_APARELHO, PRIORIDADE_REDROID, provedorAparelho, provedorRedroid, type FonteDoProvedor } from "../packages/hub/src/androidProvedor.ts";
 import { htmlDaTela } from "../packages/hub/src/androidPlayer.ts";
 import { caminhoNoAndroid, idDoAndroid, portaAndroidPermitida } from "../packages/hub/src/ponteAndroid.ts";
 import { TelasAndroid } from "../packages/hub/src/androidStream.ts";
@@ -203,13 +199,6 @@ test("o caminho /android/<bot>/ tira a senha e não escolhe host", () => {
   assert.match(html, /https:\/\/web\.whatsapp\.com/);
   assert.match(html, /data-stream="android"/);
   assert.equal(html.includes("654321"), false);
-  assert.equal(ganchoAndroid(), null);
-  registrarGanchoAndroid({
-    caminho: (id) => `/android/${id}/`,
-    aoLigarPc: async () => {},
-    aoDesligarPc: async () => {},
-  });
-  assert.equal(ganchoAndroid()?.caminho("bia"), "/android/bia/");
 });
 
 test("o aparelho registra prioridade acima do redroid e o registro chama aoLigarPc", async () => {
@@ -238,9 +227,9 @@ test("o aparelho registra prioridade acima do redroid e o registro chama aoLigar
   assert.equal(relato.estado, "desligado");
   assert.equal(relato.porta, 42111);
   assert.equal(chamadas.includes("fallback"), false);
-  await avisarProvedores("ligar", "bia");
+  await avisarAndroid("ligar", "bia");
   assert.deepEqual(chamadas, ["reconectar"]);
-  await avisarProvedores("desligar", "bia");
+  await avisarAndroid("desligar", "bia");
   assert.equal(chamadas.at(-1), "parar");
 
   limparProvedoresAndroid();
@@ -259,8 +248,8 @@ test("o aparelho registra prioridade acima do redroid e o registro chama aoLigar
   assert.equal(pulou?.tipo, "container");
   const relatoPorta = await relatoDoAndroid("bia");
   assert.equal(relatoPorta.porta, null);
-  assert.equal(await publicarNoRegistroOficial(), "local");
   limparProvedoresAndroid();
+  assert.deepEqual(listarProvedoresAndroid(), []);
 });
 
 test("a página da tela sobe só em 127.0.0.1 e avisa quando não há aparelho", async () => {
@@ -369,6 +358,19 @@ test("o Hub publica o contrato e a tela em /android/<botId>/", { timeout: 40_000
     assert.match(corpoPar.erro ?? "", /8787/);
     assert.equal(JSON.stringify(corpoPar).includes("654321"), false);
 
+    const semProvedor = await fetch(`${base}/android/bia/${chave}`);
+    assert.equal(semProvedor.status, 503);
+    const corpoSem = await semProvedor.json() as { error?: string };
+    assert.match(corpoSem.error ?? "", /provedor/);
+
+    const dbTela = new Database(path.join(tmp, "hub.sqlite"));
+    dbTela.prepare(`INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(
+      "android.bot.bia",
+      JSON.stringify({ modo: "aparelho", ip: "192.168.15.20", portaConexao: 42111, serial: "192.168.15.20:42111", pareadoEm: 1 }),
+      Date.now(),
+    );
+    dbTela.close();
+
     const pagina = await fetch(`${base}/android/bia/${chave}`);
     const html = await pagina.text();
     if (pagina.status !== 200) {
@@ -387,7 +389,7 @@ test("o Hub publica o contrato e a tela em /android/<botId>/", { timeout: 40_000
     });
     const j = JSON.parse(aviso);
     assert.equal(j.tipo, "aviso");
-    assert.match(j.texto, /paread|Depuração/i);
+    assert.match(j.texto, /192\.168\.15\.20:42111|paread|Depuração/i);
   } finally {
     matar();
   }

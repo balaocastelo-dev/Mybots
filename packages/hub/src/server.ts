@@ -27,6 +27,7 @@ import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZE
 import { BotManager, PROVIDERS, PADRAO_DA_CASA } from "./botManager.js";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
 import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
+import { registrarGuia } from "./guiaRota.js";
 import * as celular from "./celular.js";
 import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
@@ -611,6 +612,7 @@ export async function startServer(hub: Hub) {
   });
   app.post("/api/empresas/:id/maquina/desligar", async (req) => await desligarMaquina((req.params as any).id as string));
   app.delete("/api/empresas/:id/maquina", async (req) => await apagarMaquina((req.params as any).id as string));
+  registrarGuia(app, hub);
 
   app.get("/api/previa", async (req, reply) => {
     const q = req.query as { url?: string; insta?: string };

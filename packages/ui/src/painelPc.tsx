@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import type { HubToUi, UsoDoPc } from "@mybots/shared";
 import { CelularDaEmpresaPainel } from "./celularEmpresa";
 import { Icone } from "./icones";
+import { BarraGuia } from "./guiaPainel";
 
 /**
  * O PC da empresa, do lado do chat.
@@ -309,6 +310,7 @@ export function PainelDoPc({
       {aba === "trabalho" && (
         <div className="lado-trabalho">
           <VisaoDaEmpresa nome={nome} empresaId={empresaId} rotinas={rotinas.length} arquivos={arquivos.length} />
+          {empresaId && <BarraGuia empresaId={empresaId} />}
           <b>Rotinas</b>
           <ul className="pc-hist lado-lista">
             {rotinas.length ? rotinas.map((r) => <li key={r.id}><b>{r.nome}</b><span>{r.cron}</span></li>) : <li className="muted">Nenhuma rotina neste bot.</li>}

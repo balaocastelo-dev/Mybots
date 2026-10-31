@@ -19,29 +19,31 @@ export interface Maquina {
 export type TipoItemCofre = "login" | "cartao";
 
 /** O que a lista mostra. Não tem senha, número completo nem cvv. */
+/** O que a lista mostra. Igual ao item público do PR #16: sem senha, número nem cvv. */
 export interface ItemCofre {
   id: string;
   tipo: TipoItemCofre;
-  titulo: string;
+  nome: string;
+  site: string;
   usuario: string;
-  url: string;
   senhaMascarada: string;
-  bandeira: string;
-  nomeNoCartao: string;
+  titular: string;
   finalNumero: string;
   validade: string;
+  criadoEm: number;
   atualizadoEm: number;
 }
 
 /** O que o formulário manda uma vez. A camada cliente não devolve estes campos. */
+/** O formulário manda uma vez. `notas`, `senha`, `numero` e `cvv` não voltam na resposta. */
 export interface GravacaoCofre {
   tipo: TipoItemCofre;
-  titulo: string;
+  nome: string;
+  site?: string;
   usuario?: string;
-  url?: string;
   senha?: string;
-  bandeira?: string;
-  nomeNoCartao?: string;
+  notas?: string;
+  titular?: string;
   numero?: string;
   validade?: string;
   cvv?: string;
@@ -55,13 +57,14 @@ export interface PermissaoCofre {
 export interface LinhaAuditoria {
   id: string;
   itemId: string;
-  titulo: string;
+  nome: string;
   acao: string;
+  resultado: string;
   quem: string;
   em: number;
 }
 
-const ACOES = new Set(["criou", "editou", "apagou", "permissao", "leu"]);
+const ACOES = new Set(["criar", "editar", "apagar", "permissao", "preencher", "criou", "editou", "apagou", "leu"]);
 const MASCARA = "••••••••";
 
 export function ehEstado(v: unknown): v is EstadoMaquina {
@@ -99,10 +102,11 @@ export function itemSeguro(bruto: unknown, idFallback?: string): ItemCofre | nul
   if (!bruto || typeof bruto !== "object") return null;
   const o = bruto as Record<string, unknown>;
   const tipo: TipoItemCofre | null = o.tipo === "login" || o.tipo === "cartao" ? o.tipo : null;
-  const titulo = texto(o.titulo, 120);
-  if (!tipo || !titulo) return null;
+  const nome = texto(o.nome, 120) || texto(o.titulo, 120);
+  if (!tipo || !nome) return null;
   const id = texto(o.id, 80) || idFallback || "";
   if (!id) return null;
+  const agora = Date.now();
   const finalInformado = typeof o.finalNumero === "string" && /^\d{4}$/.test(o.finalNumero) ? o.finalNumero : "";
   const finalNumero = finalInformado || finalDoNumero(o.numero);
   const senhaMascarada = tipo === "login"
@@ -111,52 +115,65 @@ export function itemSeguro(bruto: unknown, idFallback?: string): ItemCofre | nul
   return {
     id,
     tipo,
-    titulo,
-    usuario: texto(o.usuario, 160),
-    url: urlSegura(o.url),
+    nome,
+    site: tipo === "login" ? siteSeguro(o.site ?? o.url) : "",
+    usuario: tipo === "login" ? texto(o.usuario, 200) : "",
     senhaMascarada,
-    bandeira: texto(o.bandeira, 40),
-    nomeNoCartao: texto(o.nomeNoCartao, 80),
-    finalNumero,
-    validade: validadeSegura(o.validade),
-    atualizadoEm: typeof o.atualizadoEm === "number" && Number.isFinite(o.atualizadoEm) ? o.atualizadoEm : Date.now(),
+    titular: tipo === "cartao" ? texto(o.titular, 120) || texto(o.nomeNoCartao, 120) : "",
+    finalNumero: tipo === "cartao" ? finalNumero : "",
+    validade: tipo === "cartao" ? validadeSegura(o.validade) : "",
+    criadoEm: typeof o.criadoEm === "number" && Number.isFinite(o.criadoEm) ? o.criadoEm : agora,
+    atualizadoEm: typeof o.atualizadoEm === "number" && Number.isFinite(o.atualizadoEm) ? o.atualizadoEm : agora,
   };
 }
 
 /** Monta o item que a lista guarda a partir do que a pessoa digitou. O retorno não carrega segredo. */
 export function mascararGravacao(g: GravacaoCofre, id: string, anterior?: ItemCofre | null): ItemCofre {
-  const titulo = g.titulo.trim().slice(0, 120);
+  const nome = g.nome.trim().slice(0, 120);
   const tipo = g.tipo === "cartao" ? "cartao" : "login";
   const finalNovo = finalDoNumero(g.numero);
+  const agora = Date.now();
   return {
     id,
     tipo,
-    titulo,
-    usuario: tipo === "login" ? (g.usuario ?? anterior?.usuario ?? "").trim().slice(0, 160) : "",
-    url: tipo === "login" ? urlSegura(g.url ?? anterior?.url ?? "") : "",
+    nome,
+    site: tipo === "login" ? (siteSeguro(g.site ?? "") || anterior?.site || "") : "",
+    usuario: tipo === "login" ? (g.usuario ?? anterior?.usuario ?? "").trim().slice(0, 200) : "",
     senhaMascarada: tipo === "login" ? (g.senha && g.senha.trim() ? MASCARA : (anterior?.senhaMascarada ?? "")) : "",
-    bandeira: tipo === "cartao" ? (g.bandeira ?? anterior?.bandeira ?? "").trim().slice(0, 40) : "",
-    nomeNoCartao: tipo === "cartao" ? (g.nomeNoCartao ?? anterior?.nomeNoCartao ?? "").trim().slice(0, 80) : "",
+    titular: tipo === "cartao" ? (g.titular ?? anterior?.titular ?? "").trim().slice(0, 120) : "",
     finalNumero: tipo === "cartao" ? (finalNovo || anterior?.finalNumero || "") : "",
     validade: tipo === "cartao" ? (validadeSegura(g.validade) || anterior?.validade || "") : "",
-    atualizadoEm: Date.now(),
+    criadoEm: anterior?.criadoEm ?? agora,
+    atualizadoEm: agora,
   };
 }
 
 export function linhaAuditoriaSegura(bruto: unknown): LinhaAuditoria | null {
   if (!bruto || typeof bruto !== "object") return null;
   const o = bruto as Record<string, unknown>;
-  const id = texto(o.id, 80);
-  const acao = typeof o.acao === "string" && ACOES.has(o.acao) ? o.acao : "";
+  const id = typeof o.id === "number" && Number.isFinite(o.id) ? String(o.id) : texto(o.id, 80);
+  const acaoBruta = typeof o.acao === "string" ? o.acao : "";
+  const acao = ACOES.has(acaoBruta) ? acaoBruta : "";
   if (!id || !acao) return null;
+  const em = typeof o.quando === "number" ? o.quando : typeof o.em === "number" ? o.em : Date.now();
   return {
     id,
-    itemId: texto(o.itemId, 80),
-    titulo: texto(o.titulo, 120),
+    itemId: o.itemId == null ? "" : texto(o.itemId, 80),
+    nome: texto(o.nome, 120) || texto(o.titulo, 120),
     acao,
+    resultado: textoSeguro(o.resultado, 40),
     quem: texto(o.quem, 80) || "painel",
-    em: typeof o.em === "number" && Number.isFinite(o.em) ? o.em : Date.now(),
+    em,
   };
+}
+
+export function botIdsSeguros(bruto: unknown): string[] {
+  const lista = Array.isArray(bruto)
+    ? bruto
+    : (bruto && typeof bruto === "object" && Array.isArray((bruto as { botIds?: unknown }).botIds) ? (bruto as { botIds: unknown[] }).botIds : null);
+  if (!lista) return [];
+  const ids = lista.map((x) => typeof x === "string" ? texto(x, 80) : "").filter((id) => /^[A-Za-z0-9_.-]{1,80}$/.test(id));
+  return [...new Set(ids)];
 }
 
 export function permissaoSegura(bruto: unknown): PermissaoCofre | null {
@@ -172,11 +189,17 @@ function texto(v: unknown, max: number): string {
   return v.replace(/[\u0000-\u001f]/g, "").trim().slice(0, max);
 }
 
-function urlSegura(v: unknown): string {
+function siteSeguro(v: unknown): string {
   const s = texto(v, 300);
-  if (!s) return "";
-  if (/^(https?:\/\/|\/)/i.test(s)) return s;
-  return "";
+  if (!s || /^(javascript|data):/i.test(s)) return "";
+  return s;
+}
+
+function textoSeguro(v: unknown, max: number): string {
+  const s = texto(v, max);
+  if (!s || pareceSegredo(s) && /\d{8,}/.test(s)) return "";
+  if (/senha|cvv|numero|token|secret/i.test(s) && /[A-Za-z0-9]{8,}/.test(s)) return "";
+  return s;
 }
 
 function validadeSegura(v: unknown): string {

@@ -35,12 +35,11 @@ const silencio = async (fn: () => Promise<void>) => {
 test("máscara de cofre não devolve senha, número nem cvv", () => {
   const item = mascararGravacao({
     tipo: "cartao",
-    titulo: "Visa",
+    nome: "Visa",
     numero: "4111111111111111",
     cvv: "123",
     validade: "08/28",
-    bandeira: "Visa",
-    nomeNoCartao: "Casa",
+    titular: "Casa",
   }, "c1");
   const cru = JSON.stringify(item);
   assert.equal(item.finalNumero, "1111");
@@ -49,11 +48,12 @@ test("máscara de cofre não devolve senha, número nem cvv", () => {
   assert.equal("numero" in item, false);
   assert.equal("cvv" in item, false);
 
-  const login = mascararGravacao({ tipo: "login", titulo: "Painel", senha: "segredo-real", usuario: "ana" }, "l1");
+  const login = mascararGravacao({ tipo: "login", nome: "Painel", senha: "segredo-real", usuario: "ana", notas: "segredo-real-nota" }, "l1");
   assert.equal(JSON.stringify(login).includes("segredo-real"), false);
+  assert.equal("notas" in login, false);
   assert.equal(login.senhaMascarada, "••••••••");
 
-  const curto = mascararGravacao({ tipo: "cartao", titulo: "Curto", numero: "4242" }, "c2");
+  const curto = mascararGravacao({ tipo: "cartao", nome: "Curto", numero: "4242", titular: "Casa", validade: "08/28", cvv: "123" }, "c2");
   assert.equal(curto.finalNumero, "");
   assert.equal(finalDoNumero("4242"), "");
 });
@@ -75,9 +75,13 @@ test("resposta do Hub com segredo em claro é descartada", () => {
   assert.equal(cru.includes("4111111111111111"), false);
   assert.equal(cru.includes("999"), false);
   assert.equal(item.senhaMascarada, "••••••••");
-  assert.equal(item.finalNumero, "1111");
+  assert.equal(item.finalNumero, "");
+  const cartao = itemSeguro({ id: "c", tipo: "cartao", nome: "Visa", titular: "Casa", numero: "4111111111111111", cvv: "999", validade: "08/28", finalNumero: "4111111111111111" });
+  assert.equal(cartao?.finalNumero, "1111");
+  assert.equal(JSON.stringify(cartao).includes("4111111111111111"), false);
+  assert.equal(JSON.stringify(cartao).includes("999"), false);
 
-  const aud = linhaAuditoriaSegura({ id: "a", acao: "criou", titulo: "Caixa", senha: "segredo-real", em: 1 });
+  const aud = linhaAuditoriaSegura({ id: 4, acao: "criar", nome: "Caixa", quando: 1, quem: "painel", resultado: "ok", detalhe: "senha segredo-real", senha: "segredo-real" });
   assert.equal(JSON.stringify(aud).includes("segredo-real"), false);
 });
 
@@ -145,7 +149,7 @@ test("cofre de exemplo não reenvia a senha quando o Hub não responde", async (
     };
     const lista = await listarItens(transporte);
     assert.equal(lista.origem, "exemplo");
-    const item = await criarItem({ tipo: "login", titulo: "Caixa", senha: "segredo-real", usuario: "ana" }, transporte);
+    const item = await criarItem({ tipo: "login", nome: "Caixa", site: "https://caixa.exemplo", senha: "segredo-real", usuario: "ana" }, transporte);
     assert.ok(item);
     assert.equal(JSON.stringify(item).includes("segredo-real"), false);
     assert.equal(item.senhaMascarada, "••••••••");
@@ -188,12 +192,17 @@ test("cofre do Hub recebe a senha uma vez e a tela fica só com a máscara", asy
       if (path === "/cofre/status") return json(200, { pronto: true, total: 1 });
       if (init?.method === "POST") {
         corpo = String(init.body);
-        const enviado = JSON.parse(corpo) as { senha?: string; titulo?: string };
-        return json(200, { id: "novo", tipo: "login", titulo: enviado.titulo, senha: enviado.senha, senhaMascarada: enviado.senha });
+        const enviado = JSON.parse(corpo) as { senha?: string; nome?: string; site?: string };
+        return json(200, { id: "novo", tipo: "login", nome: enviado.nome, site: enviado.site, usuario: "ana", senha: enviado.senha, senhaMascarada: enviado.senha, criadoEm: 1, atualizadoEm: 1 });
       }
       return json(200, []);
     };
-    const item = await criarItem({ tipo: "login", titulo: "Caixa", senha: "segredo-real" }, transporte);
+    const item = await criarItem({ tipo: "login", nome: "Caixa", site: "https://caixa.exemplo", usuario: "ana", senha: "segredo-real" }, transporte);
+    const enviado = JSON.parse(corpo) as Record<string, string>;
+    assert.equal(enviado.nome, "Caixa");
+    assert.equal(enviado.site, "https://caixa.exemplo");
+    assert.equal(enviado.usuario, "ana");
+    assert.equal("titulo" in enviado, false);
     assert.ok(corpo.includes("segredo-real"));
     assert.ok(item);
     assert.equal(JSON.stringify(item).includes("segredo-real"), false);

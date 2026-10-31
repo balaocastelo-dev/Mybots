@@ -19,12 +19,12 @@ type Filtro = "tudo" | "login" | "cartao";
 interface Rascunho {
   id: string | null;
   tipo: TipoItemCofre;
-  titulo: string;
+  nome: string;
+  site: string;
   usuario: string;
-  url: string;
   senha: string;
-  bandeira: string;
-  nomeNoCartao: string;
+  notas: string;
+  titular: string;
   numero: string;
   validade: string;
   cvv: string;
@@ -32,12 +32,12 @@ interface Rascunho {
 }
 
 const VAZIO = (tipo: TipoItemCofre): Rascunho => ({
-  id: null, tipo, titulo: "", usuario: "", url: "", senha: "",
-  bandeira: "", nomeNoCartao: "", numero: "", validade: "", cvv: "", permissoes: [],
+  id: null, tipo, nome: "", site: "", usuario: "", senha: "", notas: "",
+  titular: "", numero: "", validade: "", cvv: "", permissoes: [],
 });
 
 function limparSegredo(r: Rascunho): Rascunho {
-  return { ...r, senha: "", numero: "", cvv: "" };
+  return { ...r, senha: "", notas: "", numero: "", cvv: "" };
 }
 
 export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
@@ -55,8 +55,8 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
     setPacote(lista);
     setAuditoria(aud);
     setPronto(st.origem === "exemplo"
-      ? "Cofre de exemplo neste navegador. Senha e número completo não ficam guardados."
-      : st.pronto ? `Cofre do Hub · ${st.total} ${st.total === 1 ? "item" : "itens"}` : "O Hub não confirmou o cofre.");
+      ? "Cofre de exemplo neste navegador. Senha, notas e número completo não ficam guardados."
+      : st.ativo ? "Cofre do Hub. A resposta já vem mascarada." : (st.motivo || "O cofre está desligado."));
     if (lista.erro) setErro(lista.erro);
   };
 
@@ -75,7 +75,7 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
     return (pacote?.itens ?? []).filter((item) => {
       if (filtro !== "tudo" && item.tipo !== filtro) return false;
       if (!q) return true;
-      const texto = `${item.titulo} ${item.usuario} ${item.url} ${item.bandeira} ${item.nomeNoCartao} ${item.finalNumero}`.toLowerCase();
+      const texto = `${item.nome} ${item.usuario} ${item.site} ${item.titular} ${item.finalNumero}`.toLowerCase();
       return texto.includes(q);
     });
   }, [pacote, busca, filtro]);
@@ -92,12 +92,12 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
     setRascunho({
       id: item.id,
       tipo: item.tipo,
-      titulo: item.titulo,
+      nome: item.nome,
+      site: item.site,
       usuario: item.usuario,
-      url: item.url,
       senha: "",
-      bandeira: item.bandeira,
-      nomeNoCartao: item.nomeNoCartao,
+      notas: "",
+      titular: item.titular,
       numero: "",
       validade: item.validade,
       cvv: "",
@@ -107,16 +107,16 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
 
   const salvar = async () => {
     if (!rascunho) return;
-    const titulo = rascunho.titulo.trim();
-    if (!titulo) { setErro("Dê um nome ao item."); return; }
+    const nome = rascunho.nome.trim();
+    if (!nome) { setErro("Dê um nome ao item."); return; }
     const gravacao: GravacaoCofre = {
       tipo: rascunho.tipo,
-      titulo,
+      nome,
+      site: rascunho.site,
       usuario: rascunho.usuario,
-      url: rascunho.url,
       senha: rascunho.senha,
-      bandeira: rascunho.bandeira,
-      nomeNoCartao: rascunho.nomeNoCartao,
+      notas: rascunho.notas,
+      titular: rascunho.titular,
       numero: rascunho.numero,
       validade: rascunho.validade,
       cvv: rascunho.cvv,
@@ -129,9 +129,10 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
     try {
       item = id ? await editarItem(id, gravacao) : await criarItem(gravacao);
     } finally {
-      gravacao.senha = "";
-      gravacao.numero = "";
-      gravacao.cvv = "";
+    gravacao.senha = "";
+    gravacao.notas = "";
+    gravacao.numero = "";
+    gravacao.cvv = "";
     }
     if (!item) { setErro("Não deu para guardar. Nada secreto ficou na lista."); return; }
     if (perms.length) await gravarPermissoes(item.id, perms);
@@ -186,17 +187,17 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
         {rascunho && (
           <form className="ajustes-form" autoComplete="off" onSubmit={(e) => { e.preventDefault(); void salvar(); }}>
             <h4>{rascunho.id ? "Editar" : "Adicionar"} {rascunho.tipo === "login" ? "login" : "cartão"}</h4>
-            <label>Nome <input value={rascunho.titulo} maxLength={120} onChange={(e) => setRascunho({ ...rascunho, titulo: e.target.value })} required /></label>
+            <label>Nome <input value={rascunho.nome} maxLength={120} onChange={(e) => setRascunho({ ...rascunho, nome: e.target.value })} required /></label>
             {rascunho.tipo === "login" ? (
               <>
-                <label>Usuário <input value={rascunho.usuario} autoComplete="off" maxLength={160} onChange={(e) => setRascunho({ ...rascunho, usuario: e.target.value })} /></label>
-                <label>Endereço <input value={rascunho.url} autoComplete="off" inputMode="url" placeholder="https://" maxLength={300} onChange={(e) => setRascunho({ ...rascunho, url: e.target.value })} /></label>
+                <label>Site <input value={rascunho.site} autoComplete="off" placeholder="https://" maxLength={300} onChange={(e) => setRascunho({ ...rascunho, site: e.target.value })} /></label>
+                <label>Usuário <input value={rascunho.usuario} autoComplete="off" maxLength={200} onChange={(e) => setRascunho({ ...rascunho, usuario: e.target.value })} /></label>
                 <label>Senha <input type="password" value={rascunho.senha} autoComplete="new-password" spellCheck={false} placeholder={rascunho.id ? "Em branco mantém a atual" : "Não será mostrada de novo"} onChange={(e) => setRascunho({ ...rascunho, senha: e.target.value })} /></label>
+                <label>Notas <input type="password" value={rascunho.notas} autoComplete="off" spellCheck={false} placeholder="Não aparecem de novo" onChange={(e) => setRascunho({ ...rascunho, notas: e.target.value })} /></label>
               </>
             ) : (
               <>
-                <label>Nome no cartão <input value={rascunho.nomeNoCartao} autoComplete="off" maxLength={80} onChange={(e) => setRascunho({ ...rascunho, nomeNoCartao: e.target.value })} /></label>
-                <label>Bandeira <input value={rascunho.bandeira} autoComplete="off" maxLength={40} placeholder="Visa, Mastercard…" onChange={(e) => setRascunho({ ...rascunho, bandeira: e.target.value })} /></label>
+                <label>Titular <input value={rascunho.titular} autoComplete="off" maxLength={120} onChange={(e) => setRascunho({ ...rascunho, titular: e.target.value })} /></label>
                 <label>Número <input type="password" value={rascunho.numero} autoComplete="off" inputMode="numeric" spellCheck={false} placeholder={rascunho.id ? "Em branco mantém os 4 finais" : "Só os 4 finais ficam na lista"} onChange={(e) => setRascunho({ ...rascunho, numero: e.target.value })} /></label>
                 <label>Validade <input value={rascunho.validade} autoComplete="off" placeholder="MM/AA" maxLength={5} onChange={(e) => setRascunho({ ...rascunho, validade: e.target.value })} /></label>
                 <label>CVV <input type="password" value={rascunho.cvv} autoComplete="off" inputMode="numeric" spellCheck={false} placeholder="Não fica guardado na lista" onChange={(e) => setRascunho({ ...rascunho, cvv: e.target.value })} /></label>
@@ -224,12 +225,12 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
           {visiveis.map((item) => (
             <li key={item.id}>
               <div>
-                <b>{item.titulo}</b>
+                <b>{item.nome}</b>
                 <small>{item.tipo === "login" ? "Login" : "Cartão"}</small>
                 {item.tipo === "login" ? (
-                  <span>{item.usuario || "sem usuário"}{item.url ? ` · ${item.url}` : ""}{item.senhaMascarada ? ` · senha ${item.senhaMascarada}` : ""}</span>
+                  <span>{item.usuario || "sem usuário"}{item.site ? ` · ${item.site}` : ""}{item.senhaMascarada ? ` · senha ${item.senhaMascarada}` : ""}</span>
                 ) : (
-                  <span>{item.bandeira}{item.finalNumero ? ` · final ${item.finalNumero}` : " · sem final"}{item.validade ? ` · ${item.validade}` : ""}{item.nomeNoCartao ? ` · ${item.nomeNoCartao}` : ""}</span>
+                  <span>{item.titular}{item.finalNumero ? ` · final ${item.finalNumero}` : " · sem final"}{item.validade ? ` · ${item.validade}` : ""}</span>
                 )}
               </div>
               <div className="ajustes-maq-acoes">
@@ -254,7 +255,7 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
         <ul className="ajustes-audit">
           {auditoria.map((l) => (
             <li key={l.id}>
-              <b>{rotuloAcao(l.acao)}</b> {l.titulo || "item"} <small>{l.quem} · {new Date(l.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</small>
+              <b>{rotuloAcao(l.acao)}</b> {l.nome || "item"}{l.resultado ? ` · ${l.resultado}` : ""} <small>{l.quem} · {new Date(l.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</small>
             </li>
           ))}
           {!auditoria.length && <li className="ajustes-lead">Nenhum registro ainda.</li>}
@@ -265,10 +266,10 @@ export function AbaCofre({ bots }: { bots: { id: string; name: string }[] }) {
 }
 
 function rotuloAcao(acao: string): string {
-  if (acao === "criou") return "Criou";
-  if (acao === "editou") return "Editou";
-  if (acao === "apagou") return "Apagou";
+  if (acao === "criar" || acao === "criou") return "Criou";
+  if (acao === "editar" || acao === "editou") return "Editou";
+  if (acao === "apagar" || acao === "apagou") return "Apagou";
   if (acao === "permissao") return "Mudou permissão de";
-  if (acao === "leu") return "Consultou";
+  if (acao === "preencher" || acao === "leu") return "Preencheu";
   return "Registrou";
 }

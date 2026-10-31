@@ -8,10 +8,10 @@ import {
   type ItemCofre,
   type LinhaAuditoria,
   type PermissaoCofre,
+  botIdsSeguros,
   itemSeguro,
   linhaAuditoriaSegura,
   mascararGravacao,
-  permissaoSegura,
 } from "./segredos";
 import type { Transporte, Origem } from "./maquinas";
 
@@ -22,18 +22,26 @@ export interface PacoteCofre {
 }
 
 export interface StatusCofre {
-  pronto: boolean;
-  total: number;
+  ativo: boolean;
+  motivo: string;
   origem: Origem;
 }
 
+function motivoVisivel(v: unknown): string {
+  const s = typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 180) : "";
+  if (!s || /\b[A-Za-z0-9+/=_-]{24,}\b/.test(s)) return "O cofre está desligado.";
+  return s;
+}
+
 let origem: Origem | null = null;
+let motivoHub = "";
 let itens: ItemCofre[] | null = null;
 let auditoria: LinhaAuditoria[] | null = null;
-const permissoes = new Map<string, PermissaoCofre[]>();
+const permissoes = new Map<string, string[]>();
 
 export function resetarCofreParaTeste() {
   origem = null;
+  motivoHub = "";
   itens = null;
   auditoria = null;
   permissoes.clear();
@@ -42,24 +50,24 @@ export function resetarCofreParaTeste() {
 function base(agora = Date.now()): ItemCofre[] {
   return [
     {
-      id: "login-painel", tipo: "login", titulo: "Painel do fornecedor",
-      usuario: "ana@casa.exemplo", url: "https://fornecedor.exemplo", senhaMascarada: "••••••••",
-      bandeira: "", nomeNoCartao: "", finalNumero: "", validade: "", atualizadoEm: agora - 86_400_000,
+      id: "login-painel", tipo: "login", nome: "Painel do fornecedor",
+      site: "https://fornecedor.exemplo", usuario: "ana@casa.exemplo", senhaMascarada: "••••••••",
+      titular: "", finalNumero: "", validade: "", criadoEm: agora - 86_400_000, atualizadoEm: agora - 86_400_000,
     },
     {
-      id: "login-email", tipo: "login", titulo: "E-mail da loja",
-      usuario: "loja@casa.exemplo", url: "https://mail.exemplo", senhaMascarada: "••••••••",
-      bandeira: "", nomeNoCartao: "", finalNumero: "", validade: "", atualizadoEm: agora - 3_600_000,
+      id: "login-email", tipo: "login", nome: "E-mail da loja",
+      site: "https://mail.exemplo", usuario: "loja@casa.exemplo", senhaMascarada: "••••••••",
+      titular: "", finalNumero: "", validade: "", criadoEm: agora - 3_600_000, atualizadoEm: agora - 3_600_000,
     },
     {
-      id: "cartao-visa", tipo: "cartao", titulo: "Visa da empresa",
-      usuario: "", url: "", senhaMascarada: "",
-      bandeira: "Visa", nomeNoCartao: "Casa Exemplo", finalNumero: "4242", validade: "08/28", atualizadoEm: agora - 7_200_000,
+      id: "cartao-visa", tipo: "cartao", nome: "Visa da empresa",
+      site: "", usuario: "", senhaMascarada: "",
+      titular: "Casa Exemplo", finalNumero: "4242", validade: "08/28", criadoEm: agora - 7_200_000, atualizadoEm: agora - 7_200_000,
     },
     {
-      id: "cartao-master", tipo: "cartao", titulo: "Mastercard reservas",
-      usuario: "", url: "", senhaMascarada: "",
-      bandeira: "Mastercard", nomeNoCartao: "Casa Exemplo", finalNumero: "1881", validade: "03/27", atualizadoEm: agora - 600_000,
+      id: "cartao-master", tipo: "cartao", nome: "Mastercard reservas",
+      site: "", usuario: "", senhaMascarada: "",
+      titular: "Casa Exemplo", finalNumero: "1881", validade: "03/27", criadoEm: agora - 600_000, atualizadoEm: agora - 600_000,
     },
   ];
 }
@@ -67,18 +75,18 @@ function base(agora = Date.now()): ItemCofre[] {
 function garantirItens(): ItemCofre[] {
   if (!itens) {
     itens = base();
-    permissoes.set("login-painel", [{ botId: "gerente-exemplo", liberado: true }]);
+    permissoes.set("login-painel", ["gerente-exemplo"]);
     auditoria = [
-      { id: "aud-1", itemId: "login-painel", titulo: "Painel do fornecedor", acao: "criou", quem: "painel", em: Date.now() - 86_400_000 },
-      { id: "aud-2", itemId: "cartao-visa", titulo: "Visa da empresa", acao: "leu", quem: "painel", em: Date.now() - 7_200_000 },
+      { id: "aud-1", itemId: "login-painel", nome: "Painel do fornecedor", acao: "criar", resultado: "ok", quem: "painel", em: Date.now() - 86_400_000 },
+      { id: "aud-2", itemId: "cartao-visa", nome: "Visa da empresa", acao: "preencher", resultado: "ok", quem: "painel", em: Date.now() - 7_200_000 },
     ];
   }
   return itens;
 }
 
-function registrar(acao: LinhaAuditoria["acao"], item: { id: string; titulo: string }) {
+function registrar(acao: LinhaAuditoria["acao"], item: { id: string; nome: string }) {
   const lista = auditoria ?? [];
-  auditoria = [{ id: `aud-${Date.now().toString(36)}`, itemId: item.id, titulo: item.titulo, acao, quem: "painel", em: Date.now() }, ...lista].slice(0, 40);
+  auditoria = [{ id: `aud-${Date.now().toString(36)}`, itemId: item.id, nome: item.nome, acao, resultado: "ok", quem: "painel", em: Date.now() }, ...lista].slice(0, 40);
 }
 
 async function detectar(transporte: Transporte): Promise<Origem> {
@@ -86,8 +94,13 @@ async function detectar(transporte: Transporte): Promise<Origem> {
   try {
     const r = await transporte("/cofre/status");
     if (r.ok) {
-      origem = "hub";
-      return origem;
+      const bruto: unknown = await r.json().catch(() => null);
+      const o = bruto && typeof bruto === "object" ? bruto as Record<string, unknown> : {};
+      if (typeof o.ativo === "boolean") {
+        origem = "hub";
+        motivoHub = o.ativo ? "" : motivoVisivel(o.motivo);
+        return origem;
+      }
     }
   } catch { /* segue para a lista */ }
   try {
@@ -124,38 +137,32 @@ export async function listarItens(transporte: Transporte = api): Promise<PacoteC
 
 export async function statusCofre(transporte: Transporte = api): Promise<StatusCofre> {
   const modo = await detectar(transporte);
-  if (modo === "exemplo") return { pronto: true, total: garantirItens().length, origem: modo };
-  try {
-    const r = await transporte("/cofre/status");
-    if (!r.ok) return { pronto: false, total: 0, origem: modo };
-    const bruto: unknown = await r.json();
-    const o = bruto && typeof bruto === "object" ? bruto as Record<string, unknown> : {};
-    const total = typeof o.total === "number" ? o.total : typeof o.itens === "number" ? o.itens : 0;
-    return { pronto: o.pronto !== false && o.ok !== false, total, origem: modo };
-  } catch {
-    return { pronto: false, total: 0, origem: modo };
-  }
+  if (modo === "exemplo") return { ativo: true, motivo: "", origem: modo };
+  return { ativo: motivoHub === "", motivo: motivoHub, origem: modo };
 }
 
 function corpo(g: GravacaoCofre): Record<string, string> {
-  const o: Record<string, string> = { tipo: g.tipo === "cartao" ? "cartao" : "login", titulo: g.titulo.trim() };
+  const o: Record<string, string> = { tipo: g.tipo === "cartao" ? "cartao" : "login", nome: g.nome.trim() };
   const por = (chave: string, valor: string | undefined) => {
     if (valor && valor.trim()) o[chave] = valor.trim();
   };
-  por("usuario", g.usuario);
-  por("url", g.url);
-  por("senha", g.senha);
-  por("bandeira", g.bandeira);
-  por("nomeNoCartao", g.nomeNoCartao);
-  por("numero", g.numero);
-  por("validade", g.validade);
-  por("cvv", g.cvv);
+  if (o.tipo === "login") {
+    por("site", g.site);
+    por("usuario", g.usuario);
+    por("senha", g.senha);
+    por("notas", g.notas);
+  } else {
+    por("titular", g.titular);
+    por("numero", g.numero);
+    por("validade", g.validade);
+    por("cvv", g.cvv);
+  }
   return o;
 }
 
 export async function criarItem(g: GravacaoCofre, transporte: Transporte = api): Promise<ItemCofre | null> {
-  const titulo = g.titulo.trim();
-  if (!titulo) return null;
+  const nome = g.nome.trim();
+  if (!nome) return null;
   const modo = await detectar(transporte);
   if (modo === "hub") {
     try {
@@ -168,9 +175,9 @@ export async function criarItem(g: GravacaoCofre, transporte: Transporte = api):
   }
   const id = `item-${Date.now().toString(36)}`;
   const item = mascararGravacao(g, id, null);
-  if (!item.titulo) return null;
+  if (!item.nome) return null;
   garantirItens().unshift(item);
-  registrar("criou", item);
+  registrar("criar", item);
   return { ...item };
 }
 
@@ -190,7 +197,7 @@ export async function editarItem(id: string, g: GravacaoCofre, transporte: Trans
   if (i < 0) return null;
   const item = mascararGravacao(g, id, lista[i]);
   lista[i] = item;
-  registrar("editou", item);
+  registrar("editar", item);
   return { ...item };
 }
 
@@ -209,7 +216,7 @@ export async function apagarItem(id: string, transporte: Transporte = api): Prom
   if (!atual) return false;
   itens = lista.filter((x) => x.id !== id);
   permissoes.delete(id);
-  registrar("apagou", atual);
+  registrar("apagar", atual);
   return true;
 }
 
@@ -219,24 +226,22 @@ export async function lerPermissoes(id: string, transporte: Transporte = api): P
     try {
       const r = await transporte(`/cofre/itens/${encodeURIComponent(id)}/permissoes`);
       if (!r.ok) return [];
-      const bruto: unknown = await r.json();
-      const lista = Array.isArray(bruto) ? bruto : (bruto && typeof bruto === "object" && Array.isArray((bruto as { permissoes?: unknown }).permissoes) ? (bruto as { permissoes: unknown[] }).permissoes : []);
-      return lista.map(permissaoSegura).filter((p): p is PermissaoCofre => p !== null);
+      return botIdsSeguros(await r.json()).map((botId) => ({ botId, liberado: true }));
     } catch {
       return [];
     }
   }
-  return (permissoes.get(id) ?? []).map((p) => ({ ...p }));
+  return (permissoes.get(id) ?? []).map((botId) => ({ botId, liberado: true }));
 }
 
 export async function gravarPermissoes(id: string, lista: PermissaoCofre[], transporte: Transporte = api): Promise<boolean> {
-  const limpa = lista.map(permissaoSegura).filter((p): p is PermissaoCofre => p !== null);
+  const ids = [...new Set(lista.filter((p) => p.liberado).map((p) => p.botId))].filter((botId) => /^[A-Za-z0-9_.-]{1,80}$/.test(botId));
   const modo = await detectar(transporte);
   if (modo === "hub") {
     try {
       const r = await transporte(`/cofre/itens/${encodeURIComponent(id)}/permissoes`, {
         method: "PUT",
-        body: JSON.stringify({ permissoes: limpa }),
+        body: JSON.stringify({ botIds: ids }),
       });
       return r.ok;
     } catch {
@@ -244,7 +249,7 @@ export async function gravarPermissoes(id: string, lista: PermissaoCofre[], tran
     }
   }
   if (!garantirItens().some((x) => x.id === id)) return false;
-  permissoes.set(id, limpa);
+  permissoes.set(id, ids);
   const item = garantirItens().find((x) => x.id === id);
   if (item) registrar("permissao", item);
   return true;

@@ -1,0 +1,221 @@
+import type { BotSummary } from "@mybots/shared";
+import { pairConversation } from "@mybots/shared";
+import type { PacoteColab } from "./tipos";
+
+/** Meio-dia de 31/10/2026 em Campinas, para o prazo de exemplo não dançar com o fuso. */
+const BASE = Date.parse("2026-10-31T12:00:00-03:00");
+const H = 3600_000;
+
+export const EMPRESA_EXEMPLO = { id: "balao", nome: "Balão da Informática", regras: "", bots: 4 };
+
+export const BOTS_EXEMPLO: BotSummary[] = [
+  { id: "gerente", name: "Gerente Geral", role: "Gerente Geral", gerente: true, manages: ["pixel", "heitor", "ana"], empresaId: "balao", online: true, busy: false, status: "Disponível", fase: "livre" },
+  { id: "pixel", name: "Pixel", role: "Videomaker", empresaId: "balao", online: true, busy: true, status: "cortando o vídeo da loja", fase: "trabalhando" },
+  { id: "heitor", name: "Heitor", role: "Designer", empresaId: "balao", online: true, busy: true, status: "esperando a foto do produto", fase: "trabalhando" },
+  { id: "ana", name: "Ana", role: "Planilhas", empresaId: "balao", online: true, busy: false, status: "Disponível", fase: "livre" },
+];
+
+const AVISO = "Dados de exemplo: o Hub ainda não respondeu /api/colab. Quando o backend entrar, esta tela usa a API de verdade.";
+
+export function amostra(): PacoteColab {
+  const gp = pairConversation("gerente", "pixel");
+  const ph = pairConversation("heitor", "pixel");
+  const ga = pairConversation("ana", "gerente");
+  return {
+    fonte: "exemplo",
+    aviso: AVISO,
+    ajudando: { pixel: { ajudando: "heitor", tarefaId: "t-foto" } },
+    tarefas: [
+      {
+        id: "t-vitrine",
+        de: "gerente",
+        para: "pixel",
+        objetivo: "Montar a vitrine de outubro",
+        contexto: "Vitrine da loja de Campinas, com os notebooks que chegaram na sexta.",
+        criterioSucesso: "Três takes aprovados pelo Gerente.",
+        prazo: BASE + 50 * H,
+        formatoEntrega: "mp4",
+        profundidade: 1,
+        status: "queued",
+        progresso: 0,
+        historico: [{ em: BASE - 2 * H, status: "queued", texto: "Gerente Geral colocou na fila" }],
+        criadaEm: BASE - 2 * H,
+        atualizadaEm: BASE - 2 * H,
+        empresaId: "balao",
+      },
+      {
+        id: "t-video",
+        de: "gerente",
+        para: "pixel",
+        objetivo: "Cortar o vídeo da loja",
+        contexto: "Filmagem de quinta, balcão e vitrine.",
+        criterioSucesso: "Corte de até 40 segundos, com legenda.",
+        prazo: BASE + 6 * H,
+        formatoEntrega: "mp4",
+        profundidade: 1,
+        status: "running",
+        progresso: 62,
+        historico: [
+          { em: BASE - 5 * H, status: "queued", texto: "Gerente Geral delegou o corte" },
+          { em: BASE - 3 * H, status: "running", texto: "Pixel começou a cortar" },
+          { em: BASE - 20 * 60_000, status: "running", texto: "62% — falta a trilha e a legenda" },
+        ],
+        criadaEm: BASE - 5 * H,
+        atualizadaEm: BASE - 20 * 60_000,
+        empresaId: "balao",
+      },
+      {
+        id: "t-roteiro",
+        de: "gerente",
+        para: "pixel",
+        objetivo: "Revisão do roteiro da vitrine",
+        contexto: "O texto menciona um preço que o Gerente ainda não confirmou.",
+        criterioSucesso: "Roteiro devolvido com o preço certo.",
+        prazo: BASE + 8 * H,
+        formatoEntrega: "texto",
+        profundidade: 1,
+        status: "waiting",
+        progresso: 48,
+        historico: [
+          { em: BASE - 4 * H, status: "running", texto: "Pixel escreveu a primeira versão" },
+          { em: BASE - H, status: "waiting", texto: "Esperando o Gerente confirmar o preço" },
+        ],
+        criadaEm: BASE - 4 * H,
+        atualizadaEm: BASE - H,
+        empresaId: "balao",
+      },
+      {
+        id: "t-thumb",
+        de: "gerente",
+        para: "pixel",
+        objetivo: "Capa do vídeo da loja",
+        contexto: "Um quadro do balcão, com o nome da loja.",
+        criterioSucesso: "Imagem 1280×720 entregue na conversa.",
+        prazo: BASE - 3 * H,
+        formatoEntrega: "png",
+        profundidade: 1,
+        status: "done",
+        progresso: 100,
+        resultado: { resumo: "Capa entregue na conversa.", arquivos: ["capa-loja.png"] },
+        historico: [
+          { em: BASE - 26 * H, status: "queued", texto: "Entrou na fila" },
+          { em: BASE - 24 * H, status: "running", texto: "Pixel montou a capa" },
+          { em: BASE - 22 * H, status: "done", texto: "Capa entregue na conversa." },
+        ],
+        criadaEm: BASE - 26 * H,
+        atualizadaEm: BASE - 22 * H,
+        empresaId: "balao",
+      },
+      {
+        id: "t-foto",
+        de: "gerente",
+        para: "heitor",
+        objetivo: "Foto do notebook da vitrine",
+        contexto: "Fundo limpo, o aparelho aberto. Pixel está ajudando no enquadramento.",
+        criterioSucesso: "Uma foto aprovada para a vitrine.",
+        prazo: BASE + 5 * H,
+        formatoEntrega: "jpg",
+        profundidade: 1,
+        status: "waiting",
+        progresso: 35,
+        historico: [
+          { em: BASE - 6 * H, status: "queued", texto: "Gerente Geral pediu a foto" },
+          { em: BASE - 2 * H, status: "waiting", texto: "Esperando a luz da vitrine" },
+        ],
+        criadaEm: BASE - 6 * H,
+        atualizadaEm: BASE - 2 * H,
+        empresaId: "balao",
+      },
+      {
+        id: "t-insta",
+        de: "gerente",
+        para: "heitor",
+        objetivo: "Arte do Instagram da semana",
+        contexto: "Post da promoção de SSD. A publicação em si fica para o chefe.",
+        criterioSucesso: "Arte quadrada, sem preço inventado.",
+        prazo: BASE - H,
+        formatoEntrega: "png",
+        profundidade: 1,
+        status: "failed",
+        progresso: 80,
+        resultado: { motivo: "O arquivo passou do tamanho e o corte ficou cortado." },
+        historico: [
+          { em: BASE - 10 * H, status: "running", texto: "Heitor exportou a arte" },
+          { em: BASE - 9 * H, status: "failed", texto: "O arquivo passou do tamanho e o corte ficou cortado." },
+        ],
+        criadaEm: BASE - 10 * H,
+        atualizadaEm: BASE - 9 * H,
+        empresaId: "balao",
+      },
+      {
+        id: "t-estoque",
+        de: "gerente",
+        para: "ana",
+        objetivo: "Planilha de estoque da semana",
+        contexto: "Notebooks, SSDs e a entrada de sexta.",
+        criterioSucesso: "Planilha com saldo e o que falta pedir.",
+        prazo: BASE - 4 * H,
+        formatoEntrega: "xlsx",
+        profundidade: 1,
+        status: "done",
+        progresso: 100,
+        resultado: { resumo: "Planilha fechada com 42 itens.", arquivos: ["estoque-semana.xlsx"] },
+        historico: [
+          { em: BASE - 30 * H, status: "queued", texto: "Gerente Geral pediu o fechamento" },
+          { em: BASE - 28 * H, status: "done", texto: "Planilha fechada com 42 itens." },
+        ],
+        criadaEm: BASE - 30 * H,
+        atualizadaEm: BASE - 28 * H,
+        empresaId: "balao",
+      },
+      {
+        id: "t-fornecedor",
+        de: "gerente",
+        para: "ana",
+        objetivo: "Ligar para o fornecedor de SSD",
+        contexto: "O chefe preferiu falar ele mesmo. A tarefa foi cancelada.",
+        criterioSucesso: "Horário combinado.",
+        prazo: BASE + 2 * H,
+        formatoEntrega: "texto",
+        profundidade: 1,
+        status: "cancelled",
+        progresso: 10,
+        resultado: { motivo: "Cancelada no painel" },
+        historico: [
+          { em: BASE - 3 * H, status: "queued", texto: "Entrou na fila" },
+          { em: BASE - 2 * H, status: "cancelled", texto: "Cancelada no painel" },
+        ],
+        criadaEm: BASE - 3 * H,
+        atualizadaEm: BASE - 2 * H,
+        empresaId: "balao",
+      },
+    ],
+    conversas: [
+      { id: gp, bots: ["gerente", "pixel"], ultimaEm: BASE - 15 * 60_000, ultima: "Pode seguir no corte. A trilha eu vejo depois.", quantas: 3 },
+      { id: ph, bots: ["heitor", "pixel"], ultimaEm: BASE - 40 * 60_000, ultima: "Deixa o notebook mais à esquerda, a luz está estourando.", quantas: 2 },
+      { id: ga, bots: ["ana", "gerente"], ultimaEm: BASE - 26 * H, ultima: "Fechei a planilha. Faltam pedir 6 SSDs.", quantas: 2 },
+    ],
+    mensagens: [
+      { id: "m1", conversaId: gp, de: "gerente", texto: "Pixel, corta o vídeo da loja em até 40 segundos. Sem publicar em lugar nenhum.", em: BASE - 5 * H, prioridade: true },
+      { id: "m2", conversaId: gp, de: "pixel", texto: "Comecei o corte. A capa já está na conversa.", em: BASE - 3 * H },
+      { id: "m3", conversaId: gp, de: "gerente", texto: "Pode seguir no corte. A trilha eu vejo depois.", em: BASE - 15 * 60_000 },
+      { id: "m4", conversaId: ph, de: "pixel", para: "heitor", texto: "Heitor, estou te ajudando no enquadramento da foto do notebook.", em: BASE - 50 * 60_000, prioridade: true },
+      { id: "m5", conversaId: ph, de: "heitor", para: "pixel", texto: "Deixa o notebook mais à esquerda, a luz está estourando.", em: BASE - 40 * 60_000 },
+      { id: "m6", conversaId: ga, de: "gerente", texto: "Ana, fecha o estoque da semana antes do fim do dia.", em: BASE - 30 * H },
+      { id: "m7", conversaId: ga, de: "ana", texto: "Fechei a planilha. Faltam pedir 6 SSDs.", em: BASE - 26 * H },
+    ],
+    salas: [
+      {
+        id: "sala-vitrine",
+        nome: "Vitrine de outubro",
+        instrucoes: "Combinam a vitrine. Ninguém publica, paga ou apaga daqui.",
+        membros: ["gerente", "pixel", "heitor", "humano"],
+        aberta: true,
+      },
+    ],
+    auditoria: [
+      { id: "a1", em: BASE - 5 * H, botId: "gerente", acao: "tarefa", detalhe: "Delegou o corte do vídeo ao Pixel", motivo: undefined },
+      { id: "a2", em: BASE - 8 * H, botId: "pixel", acao: "bloqueio", detalhe: "pixel → ana", motivo: "empresa" },
+    ],
+  };
+}

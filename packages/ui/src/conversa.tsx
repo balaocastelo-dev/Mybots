@@ -12,6 +12,9 @@ import { Avatar } from "./avatar";
 import { ApprovalCard, Bolha, Message, QuestionCard, Visualizador, type ArquivoDoChat } from "./mensagem";
 import { DesktopAoVivo } from "./desktop";
 import { BotSettingsPanel, RoutinesPanel } from "./dialogos";
+import { QuadroKanban } from "./colab/kanban";
+import { tarefasDoBot } from "./colab/normalizar";
+import type { PacoteColab, Tarefa } from "./colab/tipos";
 
 export type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
 
@@ -24,14 +27,31 @@ export type ConvProps = {
   control: ControlState;
   initialPanel?: { panel: "settings" | "routines"; n: number } | null;
   empresaNome?: string;
+  abaInicial?: "tarefas" | null;
+  tarefaInicial?: string | null;
+  colab?: {
+    tarefas: Tarefa[];
+    fonte?: PacoteColab["fonte"];
+    aviso?: string;
+    nome: (id: string) => string;
+    cancelar: (id: string) => void;
+    simular?: () => void;
+  };
 };
 
-export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, control, initialPanel, empresaNome = "" }: ConvProps) {
+export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, colab }: ConvProps) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
   const [level, setLevel] = useState(0);
   const [speaking, setSpeaking] = useState(isSpeaking());
   const [showRoutines, setShowRoutines] = useState(false);
+  const [showTarefas, setShowTarefas] = useState(abaInicial === "tarefas");
+  const convVista = useRef(conversationId);
+  useEffect(() => {
+    if (convVista.current === conversationId) return;
+    convVista.current = conversationId;
+    setShowTarefas(false);
+  }, [conversationId]);
   // --- documento aberto em tela cheia ---
   const [arquivoAberto, setArquivoAberto] = useState<ArquivoDoChat | null>(null);
   const [desktopAberto, setDesktopAberto] = useState(false);
@@ -75,6 +95,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     if (!initialPanel) return;
     setShowSettings(initialPanel.panel === "settings");
     setShowRoutines(initialPanel.panel === "routines");
+    setShowTarefas(false);
   }, [initialPanel?.n]);
   const [showSettings, setShowSettings] = useState(false);
   const [pcAberto, setPcAberto] = useState(() => { try { return localStorage.getItem("mybots-pc-aberto") !== "0"; } catch { return true; } });
@@ -337,6 +358,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     setAttachments((a) => [...a, ...list]);
   };
 
+  const tarefasDeste = bot && colab ? tarefasDoBot(colab.tarefas, bot.id) : [];
   const title = target.kind === "bot" ? target.bot.name : target.group.name;
   const fase = target.kind === "bot"
     ? faseDoStatus(target.bot.status, target.bot.busy, target.bot.fase)
@@ -365,8 +387,15 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
                 </button>
           )}
           {bot && <button className={"icon-btn" + (pcAberto ? " on" : "")} title={pcAberto ? "Recolher a tela do PC" : "Tela do PC da empresa"} aria-pressed={pcAberto} onClick={alternarPc}>🖥️</button>}
-          {bot && <button className={"icon-btn" + (showSettings ? " on" : "")} title="Configurar este bot" onClick={() => { setShowSettings(!showSettings); setShowRoutines(false); }}>⚙️</button>}
-          {bot && <button className={"icon-btn" + (showRoutines ? " on" : "")} title="Rotinas agendadas" onClick={() => { setShowRoutines(!showRoutines); setShowSettings(false); }}>⏰{routines.length ? <sup>{routines.length}</sup> : null}</button>}
+          {bot && colab && (
+            <button type="button" className={"aba-tarefas" + (showTarefas ? " on" : "")} title="Tarefas deste bot" aria-pressed={showTarefas}
+              data-colab="aba-tarefas"
+              onClick={() => { setShowTarefas((v) => !v); setShowRoutines(false); setShowSettings(false); }}>
+              Tarefas{tarefasDeste.length ? <sup>{tarefasDeste.length}</sup> : null}
+            </button>
+          )}
+          {bot && <button className={"icon-btn" + (showSettings ? " on" : "")} title="Configurar este bot" onClick={() => { setShowSettings(!showSettings); setShowRoutines(false); setShowTarefas(false); }}>⚙️</button>}
+          {bot && <button className={"icon-btn" + (showRoutines ? " on" : "")} title="Rotinas agendadas" onClick={() => { setShowRoutines(!showRoutines); setShowSettings(false); setShowTarefas(false); }}>⏰{routines.length ? <sup>{routines.length}</sup> : null}</button>}
           {(busy || speaking || listening) && <button className="icon-btn parar-tudo" title="Parar tudo: a fala, o microfone e o que os bots estão fazendo (Esc)" onClick={() => stopEverything("⏹ no painel")}>⏹ Parar</button>}
           <button className={"icon-btn" + (handsFree ? " on" : "")} title={handsFree ? "Modo conversa: volta a ouvir depois que o bot fala" : "Modo conversa desligado"} onClick={() => setHandsFree(!handsFree)}>🗣️</button>
         </div>
@@ -376,6 +405,21 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       <div className="conversa-miolo">
       {showRoutines && bot && <RoutinesPanel bot={bot} routines={routines} onClose={() => setShowRoutines(false)} />}
       {showSettings && bot && <BotSettingsPanel bot={bot} onClose={() => setShowSettings(false)} />}
+      {showTarefas && bot && colab ? (
+        <QuadroKanban
+          titulo={"Tarefas de " + bot.name}
+          subtitulo="O que foi delegado a este bot"
+          tarefas={tarefasDeste}
+          nome={colab.nome}
+          fonte={colab.fonte}
+          aviso={colab.aviso}
+          onCancelar={colab.cancelar}
+          onSimular={colab.simular}
+          abertaInicial={tarefaInicial}
+          bots={bots}
+        />
+      ) : (
+      <>
 
       {emChamada && bot && (
         <div className={"barra-chamada" + (speaking ? " falando" : "") + (listening ? " ouvindo" : "")}>
@@ -508,6 +552,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       {folha && <FolhaAbrirTroca trocas={folha} bots={bots} Avatar={Avatar} onEscolher={(t) => onAbrirTroca(t.conversationId)} onFechar={() => setFolha(null)} />}
       {arquivoAberto && <Visualizador f={arquivoAberto} onFechar={() => setArquivoAberto(null)} />}
       {desktopAberto && bot && <DesktopAoVivo bot={bot} empresaId={bot.empresaId ?? null} nome={empresaNome} onFechar={() => setDesktopAberto(false)} />}
+      </>
+      )}
       </div>
       {bot && pcAberto && (
         <PainelDoPc

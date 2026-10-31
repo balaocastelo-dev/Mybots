@@ -2,6 +2,7 @@
 
 import type { ControlMode, ControlState } from "./control.ts";
 import type { Attachment, MediaKind } from "./media.ts";
+import type { MotivoBloqueioColab, ResultadoTarefa, StatusTarefa } from "./colab.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -191,7 +192,9 @@ export type UiToHub =
   /** botId = para ESTE bot inteiro (todas as conversas dele), não só esta conversa */
   | { type: "abort"; conversationId: string; botId?: string }
   /** PARAR TUDO: toda janela, todo bot, toda fala. O ⏹ grande, o Esc e o fechar da janela. */
-  | { type: "stop"; reason?: string };
+  | { type: "stop"; reason?: string }
+  /** Para as tarefas ainda abertas. `alvo` é a lista de destinatários, ou todos. */
+  | { type: "colab.parar"; alvo: "todos" | string[]; por: "humano" };
 
 /** Hub → Interface */
 export type HubToUi =
@@ -226,7 +229,13 @@ export type HubToUi =
   | { type: "conversation.changed"; conversationId: string }
   /** o Hub mandou parar tudo: toda janela cala a fala, fecha o microfone e esquece o que estava gerando */
   | { type: "stop"; reason?: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** Mudou o estado de uma tarefa delegada. `resultado` só quando já existe. */
+  | { type: "colab.tarefa"; id: string; de: string; para: string; status: StatusTarefa; resultado?: ResultadoTarefa }
+  /** O bot passou a executar uma tarefa, ou deixou de ter tarefa em curso. */
+  | { type: "colab.ajudando"; bot: string; ajudando: boolean; tarefaId: string | null }
+  /** checarColab recusou. A tarefa não foi criada. */
+  | { type: "colab.bloqueio"; motivo: MotivoBloqueioColab; de: string; para: string };
 
 /** Uma ação de navegador ou de tela no PC da empresa. O texto digitado não entra aqui. */
 export type AcaoNaTela = {
@@ -323,3 +332,4 @@ export const IDIOMAS: Array<{ id: Idioma; nome: string }> = [
 ];
 export type Empresa = { id: string; nome: string; regras: string; cor?: string; idioma: Idioma; criadaEm: number; bots: number };
 export * from "./cotas.js";
+export * from "./colab.ts";

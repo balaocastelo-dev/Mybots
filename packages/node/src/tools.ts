@@ -192,6 +192,9 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   { name: "ask_bot", description: "Pergunta algo a outro Bot da equipe e espera a resposta dele.", parameters: { type: "object", properties: { bot: { type: "string", description: "id ou nome do Bot" }, question: { type: "string" } }, required: ["bot", "question"] } },
   { name: "send_to_bot", description: "Manda uma mensagem a outro Bot sem esperar resposta.", parameters: { type: "object", properties: { bot: { type: "string" }, text: { type: "string" } }, required: ["bot", "text"] } },
+  { name: "delegate_task", description: "Entrega uma tarefa a outro Bot (objetivo, contexto, critério de pronto, prazo opcional) e segue o seu trabalho. O resultado volta depois e acorda você. Não aprova nada: pagar, enviar, apagar ou publicar continua no pedido de aprovação do chefe.", parameters: { type: "object", properties: { para: { type: "string", description: "id do Bot que vai fazer" }, paraBotId: { type: "string", description: "o mesmo que para" }, objetivo: { type: "string" }, contexto: { type: "string" }, criterioSucesso: { type: "string" }, prazo: { type: "string", description: "epoch em milissegundos ou data ISO 8601" }, formatoEntrega: { type: "string" } }, required: ["objetivo", "contexto", "criterioSucesso"] } },
+  { name: "check_task", description: "Consulta uma tarefa delegada pelo id.", parameters: { type: "object", properties: { taskId: { type: "string" }, id: { type: "string" } }, required: [] } },
+  { name: "cancel_task", description: "Cancela uma tarefa que você delegou e que ainda não terminou.", parameters: { type: "object", properties: { taskId: { type: "string" }, id: { type: "string" }, motivo: { type: "string" } }, required: [] } },
   { name: "set_status", description: "Atualiza o status curto mostrado na lista de contatos (ex.: 'Lendo o o ERP').", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
   { name: "notify_user", description: "Notifica o chefe sobre algo (terminou, precisa de atenção) sem esperar resposta.", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
   { name: "remember", description: "Guarda um fato na memória compartilhada da equipe.", parameters: { type: "object", properties: { key: { type: "string" }, value: { type: "string" } }, required: ["key", "value"] } },
@@ -224,6 +227,30 @@ export function classifyCommand(cmd: string, cfg: NodeConfig): { risk: Risk; nee
  *  a palavra "[object Object]" — foi assim que a base de conhecimento inteira
  *  chegou vazia aos bots por tempo demais. Esta funcao existe para isso nunca
  *  mais acontecer silenciosamente. */
+/** As três ferramentas de tarefa são clientes das rotas /api/colab/tarefas. */
+export function urlHttpDoHub(cfg: NodeConfig): string {
+  const explicita = cfg.opencode?.hubHttp?.trim();
+  const base = explicita || cfg.hub;
+  return base.replace(/^wss:/i, "https:").replace(/^ws:/i, "http:").replace(/\/$/, "");
+}
+
+async function chamarColab(ctx: ToolContext, method: string, caminho: string, body?: unknown): Promise<{ output: string; ok: boolean }> {
+  const token = ctx.cfg.token || "dev";
+  const res = await fetch(`${urlHttpDoHub(ctx.cfg)}${caminho}`, {
+    method,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+      "x-mybots-bot": ctx.cfg.bot.id,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: ctx.signal,
+  });
+  const data = await res.json().catch(() => ({ error: "resposta inválida do hub" })) as { error?: string };
+  if (!res.ok) return { output: data?.error || `HTTP ${res.status}`, ok: false };
+  return { output: JSON.stringify(data), ok: true };
+}
+
 function textoDoHub(r: { ok: boolean; data: unknown }): string {
   const d = r?.data;
   if (d == null) return "sem resposta do Hub";
@@ -343,6 +370,30 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
       case "send_to_bot": {
         const r = await ctx.hub.call((callId) => ({ type: "ask_bot", callId, conversationId: ctx.conversationId, to: String(args.bot ?? ""), text: String(args.text ?? ""), wait: false }), 15_000);
         return { output: String(r.data), ok: r.ok };
+      }
+      case "delegate_task": {
+        const para = String(args.para ?? args.paraBotId ?? args.bot ?? "").trim();
+        if (!para) return { output: "Diga para quem é a tarefa (id do bot).", ok: false };
+        ctx.setStatus(`Delegando para ${para}`);
+        return await chamarColab(ctx, "POST", "/api/colab/tarefas", {
+          de: ctx.cfg.bot.id,
+          para,
+          objetivo: String(args.objetivo ?? ""),
+          contexto: String(args.contexto ?? ""),
+          criterioSucesso: String(args.criterioSucesso ?? ""),
+          ...(args.prazo != null && args.prazo !== "" ? { prazo: args.prazo } : {}),
+          ...(args.formatoEntrega ? { formatoEntrega: String(args.formatoEntrega) } : {}),
+        });
+      }
+      case "check_task": {
+        const id = String(args.taskId ?? args.id ?? "").trim();
+        if (!id) return { output: "Diga o id da tarefa.", ok: false };
+        return await chamarColab(ctx, "GET", `/api/colab/tarefas/${encodeURIComponent(id)}`);
+      }
+      case "cancel_task": {
+        const id = String(args.taskId ?? args.id ?? "").trim();
+        if (!id) return { output: "Diga o id da tarefa.", ok: false };
+        return await chamarColab(ctx, "POST", `/api/colab/tarefas/${encodeURIComponent(id)}/cancelar`, args.motivo ? { motivo: String(args.motivo) } : {});
       }
       case "set_status": ctx.setStatus(String(args.text ?? "").slice(0, 80)); return { output: "ok", ok: true };
       case "notify_user": ctx.hub.send({ type: "notify", text: String(args.text ?? "") }); return { output: "ok", ok: true };

@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import type { Saber, SaberHit, BotInfo, Group, PendingApproval, PendingQuestion, Routine, Sender, StoredMessage, Risk } from "@mybots/shared";
+import type { Saber, SaberHit, BotInfo, Group, PendingApproval, PendingQuestion, Routine, Sender, StoredMessage, Risk, TarefaColab } from "@mybots/shared";
 
 /** O que a tela da primeira empresa e o Gerente guardam além do nome e das regras. */
 export type FichaEmpresa = {
@@ -175,7 +175,27 @@ export class Db {
       id TEXT PRIMARY KEY, forked_from_conversation TEXT, forked_from_message TEXT,
       title TEXT, created_at INTEGER NOT NULL
     );`);
+    // Fila de delegação. Uma linha por tarefa; o destinatário (`para`) é a fila daquele bot.
+    this.db.exec(`CREATE TABLE IF NOT EXISTS colab_tarefas (
+      id TEXT PRIMARY KEY,
+      de TEXT NOT NULL,
+      para TEXT NOT NULL,
+      objetivo TEXT NOT NULL,
+      contexto TEXT NOT NULL DEFAULT '',
+      criterio_sucesso TEXT NOT NULL DEFAULT '',
+      prazo INTEGER,
+      formato_entrega TEXT,
+      status TEXT NOT NULL,
+      profundidade INTEGER NOT NULL DEFAULT 0,
+      tarefa_mae_id TEXT,
+      resultado TEXT,
+      criada_em INTEGER NOT NULL,
+      atualizada_em INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_colab_tarefas_para ON colab_tarefas(para, status, criada_em);`);
   }
+
+  close() { this.db.close(); }
 
   /**
    * A memoria curta e POR EMPRESA (o conhecimento e que e universal): o combinado com
@@ -830,6 +850,65 @@ export class Db {
   auditTail(limit = 100) {
     return this.db.prepare(`SELECT * FROM audit ORDER BY id DESC LIMIT ?`).all(limit);
   }
+
+  insertTarefa(t: TarefaColab) {
+    this.db.prepare(`INSERT INTO colab_tarefas (
+      id, de, para, objetivo, contexto, criterio_sucesso, prazo, formato_entrega,
+      status, profundidade, tarefa_mae_id, resultado, criada_em, atualizada_em
+    ) VALUES (
+      @id, @de, @para, @objetivo, @contexto, @criterioSucesso, @prazo, @formatoEntrega,
+      @status, @profundidade, @tarefaMaeId, @resultado, @criadaEm, @atualizadaEm
+    )`).run({
+      ...t,
+      prazo: t.prazo,
+      formatoEntrega: t.formatoEntrega,
+      tarefaMaeId: t.tarefaMaeId,
+      resultado: t.resultado ? JSON.stringify(t.resultado) : null,
+    });
+  }
+
+  getTarefa(id: string): TarefaColab | null {
+    const r = this.db.prepare(`SELECT * FROM colab_tarefas WHERE id=?`).get(id);
+    return r ? rowToTarefa(r) : null;
+  }
+
+  /** Fila do destinatário (`bot` = para), da mais antiga para a mais nova. Sem filtro, devolve todas. */
+  listTarefas(filtro: { bot?: string; status?: string } = {}): TarefaColab[] {
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (filtro.bot) { where.push("para = ?"); args.push(filtro.bot); }
+    if (filtro.status) { where.push("status = ?"); args.push(filtro.status); }
+    const sql = `SELECT * FROM colab_tarefas ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY criada_em ASC, id ASC`;
+    return (this.db.prepare(sql).all(...args) as any[]).map(rowToTarefa);
+  }
+
+  updateTarefa(t: TarefaColab) {
+    this.db.prepare(`UPDATE colab_tarefas SET status=?, resultado=?, atualizada_em=? WHERE id=?`)
+      .run(t.status, t.resultado ? JSON.stringify(t.resultado) : null, t.atualizadaEm, t.id);
+  }
+}
+
+function rowToTarefa(r: any): TarefaColab {
+  let resultado: TarefaColab["resultado"];
+  if (r.resultado) {
+    try { resultado = JSON.parse(r.resultado); } catch { resultado = undefined; }
+  }
+  return {
+    id: r.id,
+    de: r.de,
+    para: r.para,
+    objetivo: r.objetivo,
+    contexto: r.contexto,
+    criterioSucesso: r.criterio_sucesso,
+    prazo: r.prazo == null ? null : Number(r.prazo),
+    formatoEntrega: r.formato_entrega ?? null,
+    status: r.status,
+    profundidade: Number(r.profundidade ?? 0),
+    tarefaMaeId: r.tarefa_mae_id ?? null,
+    ...(resultado ? { resultado } : {}),
+    criadaEm: Number(r.criada_em),
+    atualizadaEm: Number(r.atualizada_em),
+  };
 }
 
 function rowToMessage(r: any): StoredMessage {

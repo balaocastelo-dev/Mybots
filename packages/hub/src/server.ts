@@ -33,6 +33,7 @@ import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
 import { registerPainel } from "./painel.js";
 import { estadoDaChave } from "./chaves.js";
+import { registerColabRoutes } from "./colab/rotas.js";
 
 export async function startServer(hub: Hub) {
   const app = Fastify({ logger: false, bodyLimit: 60 * 1024 * 1024 });
@@ -307,6 +308,8 @@ export async function startServer(hub: Hub) {
     return { ok: true };
   });
   app.get("/api/audit", async (req) => hub.db.auditTail(Number((req.query as any).limit ?? 100)));
+
+  registerColabRoutes(app, hub, nodeAuthorized);
 
   // --- automode: nível de controle global (sobrescreve o de cada bot) ---
   app.get("/api/control", async () => ({ ...hub.control(), bots: Object.fromEntries(hub.summaries().filter((b) => b.online).map((b) => [b.id, hub.effectiveModeFor(b.id)])) }));

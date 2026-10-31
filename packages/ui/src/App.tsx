@@ -25,6 +25,11 @@ import { Ameba, Avatar, colorFor, definirTonsDaEquipe } from "./avatar";
 import { Conversation } from "./conversa";
 import { EmpresasDialog, ExcluirBotDialog, NewBotDialog, NewGerenteDialog, NewGroupDialog } from "./dialogos";
 import { Icone } from "./icones";
+import { BOTS_EXEMPLO, EMPRESA_EXEMPLO } from "./colab/amostra";
+import { useColab } from "./colab/estado";
+import { QuemFala } from "./colab/grafo";
+import { QuadroKanban } from "./colab/kanban";
+import { tarefasDaEmpresa, tarefasDoBot } from "./colab/normalizar";
 
 type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
 
@@ -32,8 +37,17 @@ const pref = (k: string, d: boolean) => { const v = localStorage.getItem("mybots
 const setPref = (k: string, v: boolean) => localStorage.setItem("mybots." + k, v ? "1" : "0");
 
 export function App() {
+  const exemplo = new URLSearchParams(location.search).get("colab") === "exemplo";
+  const tela = new URLSearchParams(location.search).get("tela");
+  const pcDemo = useRef(false);
+  if (exemplo && !pcDemo.current) {
+    pcDemo.current = true;
+    try { localStorage.setItem("mybots-pc-aberto", "0"); } catch { /* a demonstração segue com a tela do PC como estava */ }
+  }
   const { state, send, loadHistory, onEvent, removeToast, clearImport, setImport } = useHub();
-  definirTonsDaEquipe(state.bots.map((b) => b.id)); // cada bot com a sua cor, sem dois parecidos
+  const { pacote, cancelar, simular } = useColab(onEvent, exemplo);
+  const equipe = state.bots.length ? state.bots : (exemplo ? BOTS_EXEMPLO : state.bots);
+  definirTonsDaEquipe(equipe.map((b) => b.id)); // cada bot com a sua cor, sem dois parecidos
   const [selected, setSelected] = useState<string | null>(null); // conversationId
   const [filter, setFilter] = useState("");
   const [buscaAberta, setBuscaAberta] = useState(false);
@@ -51,11 +65,11 @@ export function App() {
   const [verEmpresas, setVerEmpresas] = useState(false);
   // A abertura aparece toda vez que o painel abre; depois dela, se a casa ainda nao
   // tem empresa nenhuma, a tela de cadastro e o que ele ve — nao um painel vazio.
-  const [abertura, setAbertura] = useState(true);
+  const [abertura, setAbertura] = useState(!exemplo);
   // a lingua da casa: primeira coisa depois da explosao, antes de qualquer cadastro
   // A escolha da lingua e parte da abertura: vale sempre que a casa esta VAZIA, mesmo
   // que o navegador ja tenha uma guardada. Casa com empresa nao volta a perguntar.
-  const [idiomaPronto, setIdiomaPronto] = useState(false);
+  const [idiomaPronto, setIdiomaPronto] = useState(exemplo);
   // cutucar o bot: clique seguido no mesmo bot acumula. Zera sozinho depois de um
   // tempo — senao um clique de manha e outro a tarde somariam.
   const [cutuca, setCutuca] = useState<{ id: string; n: number }>({ id: "", n: 0 });
@@ -65,8 +79,8 @@ export function App() {
     if (relogioCutuca.current) clearTimeout(relogioCutuca.current);
     relogioCutuca.current = window.setTimeout(() => setCutuca({ id: "", n: 0 }), 2600);
   };
-  const [empresasCarregadas, setEmpresasCarregadas] = useState(false);
-  const [pularPrimeira, setPularPrimeira] = useState(false);
+  const [empresasCarregadas, setEmpresasCarregadas] = useState(exemplo);
+  const [pularPrimeira, setPularPrimeira] = useState(exemplo);
   const [legalPara, setLegalPara] = useState<string | null>(null);
   const [aExcluir, setAExcluir] = useState<BotSummary | null>(null);
   const carregarEmpresas = async () => { try { const r = await api("/empresas"); if (r.ok) setEmpresas(await r.json()); } catch {} finally { setEmpresasCarregadas(true); } };
@@ -95,6 +109,9 @@ export function App() {
   const painel = usePainelPrefs();
   const [mostrarEscondidos, setMostrarEscondidos] = useState(false);
   const [verTroca, setVerTroca] = useState<string | null>(null);
+  const [verQuadro, setVerQuadro] = useState(tela === "quadro");
+  const [verGrafo, setVerGrafo] = useState(tela === "grafo");
+  const [filtroBot, setFiltroBot] = useState(() => (tela === "quadro" ? new URLSearchParams(location.search).get("bot") ?? "" : ""));
   const [dialogo, setDialogo] = useState<{ tipo: "renomear" | "secao" | "aparencia"; bot: BotSummary } | null>(null);
   const [panel, setPanel] = useState<{ conv: string; panel: "settings" | "routines"; n: number } | null>(null);
   const openPanel = (botId: string, which: "settings" | "routines") => {
@@ -106,15 +123,16 @@ export function App() {
 
   const bots = useMemo(() => {
     const f = filter.trim().toLowerCase();
-    return [...state.bots]
+    return [...equipe]
       .filter((b) => !f || b.name.toLowerCase().includes(f) || b.role.toLowerCase().includes(f))
       .filter((b) => mostrarEscondidos || !painel.prefs[b.id]?.escondido)
       // bot do sistema (sem empresa) aparece sempre; o resto só na empresa escolhida
       .filter((b) => empresaAtiva === "todas" || !b.empresaId || b.empresaId === empresaAtiva)
       .sort((a, b) => nomeNaTela(a, painel.prefs).localeCompare(nomeNaTela(b, painel.prefs), "pt"));
-  }, [state.bots, filter, painel.prefs, mostrarEscondidos, empresaAtiva]);
+  }, [equipe, filter, painel.prefs, mostrarEscondidos, empresaAtiva]);
 
   /** Fixados viram a grade. Na lista, cada empresa põe o gerente na frente. */
+  const empresasVisiveis = empresas.length ? empresas : (exemplo ? [EMPRESA_EXEMPLO] : empresas);
   const listaPronta = useMemo(() => montarLista(bots.map((b) => ({
     id: b.id,
     nome: nomeNaTela(b, painel.prefs),
@@ -123,13 +141,13 @@ export function App() {
     gerente: !!b.gerente,
     manages: b.manages,
     role: b.role,
-  })), empresas), [bots, painel.prefs, empresas]);
+  })), empresasVisiveis), [bots, painel.prefs, empresasVisiveis]);
   const porId = useMemo(() => new Map(bots.map((b) => [b.id, b])), [bots]);
 
   const busca = filter.trim().toLowerCase();
   const gruposVisiveis = state.groups.filter((g) => !busca || g.name.toLowerCase().includes(busca));
   const linhaGrupo = (g: Group) => (
-    <li key={g.id} className={(groupConversation(g.id) === selected ? "active" : "")} onClick={() => { setSelected(groupConversation(g.id)); if (window.innerWidth < 720) setSidebarOpen(false); }}>
+    <li key={g.id} className={(groupConversation(g.id) === selected ? "active" : "")} onClick={() => { fecharColab(); setSelected(groupConversation(g.id)); if (window.innerWidth < 720) setSidebarOpen(false); }}>
       <div className="avatar group-avatar" style={{ width: 36, height: 36 }}>👥</div>
       <div className="bot-text">
         <div className="bot-name">{g.name}</div>
@@ -142,16 +160,23 @@ export function App() {
 
   const target: Target | null = useMemo(() => {
     if (!selected) return null;
-    if (selected.startsWith("dm:")) { const bot = state.bots.find((b) => dmConversation(b.id) === selected); return bot ? { kind: "bot", bot } : null; }
+    if (selected.startsWith("dm:")) { const bot = equipe.find((b) => dmConversation(b.id) === selected); return bot ? { kind: "bot", bot } : null; }
     if (selected.startsWith("group:")) { const group = state.groups.find((g) => groupConversation(g.id) === selected); return group ? { kind: "group", group } : null; }
     return null;
-  }, [selected, state.bots, state.groups]);
+  }, [selected, equipe, state.groups]);
 
   useEffect(() => { if (selected) void loadHistory(selected); }, [selected]);
   useEffect(() => { setPref("tts", tts); }, [tts]);
   useEffect(() => { setPref("handsfree", handsFree); }, [handsFree]);
   useEffect(() => { setPref("avisos", avisos); }, [avisos]);
-  useEffect(() => { if (!selected && bots.length) setSelected(dmConversation(bots[0].id)); }, [bots.length]);
+  useEffect(() => {
+    if (selected) return;
+    if (exemplo && (tela === "tarefas" || tela === "detalhe") && equipe.some((b) => b.id === "pixel")) {
+      setSelected(dmConversation("pixel"));
+      return;
+    }
+    if (bots.length) setSelected(dmConversation(bots[0].id));
+  }, [bots.length]);
   // arrastar um arquivo para qualquer lugar da janela abre o mesmo diálogo de importação
   useEffect(() => {
     const over = (e: DragEvent) => { if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } };
@@ -196,6 +221,11 @@ export function App() {
   }), [state.bots]);
 
   const pendingFor = (id: string) => state.approvals.filter((a) => a.botId === id).length + state.questions.filter((q) => q.botId === id).length;
+  const nomeDe = (id: string) => (id === "humano" || id === "user" ? "você" : (equipe.find((b) => b.id === id)?.name ?? id));
+  const ativos = bots.filter((b) => b.online && (b.busy || !!pacote?.ajudando[b.id]));
+  const tarefasQuadro = tarefasDaEmpresa(pacote?.tarefas ?? [], equipe, empresaAtiva);
+  const tarefasFiltradas = filtroBot ? tarefasDoBot(tarefasQuadro, filtroBot) : tarefasQuadro;
+  const fecharColab = () => { setVerQuadro(false); setVerGrafo(false); };
   const deusActive = state.control.global === "deus" || state.bots.some((b) => b.online && effectiveControl(state.control.global, b.controlMode) === "deus");
 
   return (
@@ -232,16 +262,41 @@ export function App() {
           <li className="section empresa-linha">
             <select className="empresa-sel" value={empresaAtiva} onChange={(e) => { if (e.target.value === "+nova") { setVerEmpresas(true); return; } setEmpresaAtiva(e.target.value); }}>
               <option value="todas">Todas as empresas</option>
-              {empresas.map((e) => <option key={e.id} value={e.id}>{e.nome} ({e.bots})</option>)}
+              {empresasVisiveis.map((e) => <option key={e.id} value={e.id}>{e.nome} ({e.bots})</option>)}
               <option value="+nova">＋ gerenciar empresas…</option>
             </select>
           </li>
-          {empresaAtiva !== "todas" && state.bots.length > bots.length && (
+          {empresaAtiva !== "todas" && equipe.length > bots.length && (
             <li className="section aviso-filtro">
-              {state.bots.length - bots.length} bot(s) de outras empresas escondidos ·{" "}
+              {equipe.length - bots.length} bot(s) de outras empresas escondidos ·{" "}
               <button className="link" onClick={() => setEmpresaAtiva("todas")}>ver todos</button>
             </li>
           )}
+          <li className="section secao-ativos" data-colab="ativos">Ativos</li>
+          {!ativos.length && <li className="empty ativos-vazio">Ninguém trabalhando agora.</li>}
+          {ativos.map((b) => {
+            const ajuda = pacote?.ajudando[b.id];
+            const conv = dmConversation(b.id);
+            return (
+              <li key={"ativo-" + b.id} data-colab={ajuda ? "ajudando" : "ativo"} className={"linha-bot" + (conv === selected && !verQuadro && !verGrafo ? " active" : "")}
+                onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}>
+                <Avatar bot={b} size={36} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
+                <div className="bot-text">
+                  <div className="bot-name">{nomeNaTela(b, painel.prefs)}</div>
+                  <div className={"bot-status" + (ajuda ? " ajudando" : " busy")}>
+                    {ajuda ? `Ajudando ${nomeDe(ajuda.ajudando)}` : "trabalhando"}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+          <li className="section">Colaboração</li>
+          <li className={"colab-atalho" + (verQuadro ? " active" : "")} data-colab="atalho-quadro" onClick={() => { setVerQuadro(true); setVerGrafo(false); setVerTroca(null); }}>
+            <span className="bot-name">Quadro do Gerente</span>
+          </li>
+          <li className={"colab-atalho" + (verGrafo ? " active" : "")} data-colab="atalho-grafo" onClick={() => { setVerGrafo(true); setVerQuadro(false); setVerTroca(null); }}>
+            <span className="bot-name">Quem fala com quem</span>
+          </li>
           {Object.values(painel.prefs).some((p) => p.escondido) && (
             <li className="section"><button className="link" onClick={() => setMostrarEscondidos(!mostrarEscondidos)}>{mostrarEscondidos ? "ocultar escondidos" : "escondidos"}</button></li>
           )}
@@ -254,7 +309,7 @@ export function App() {
                   const conv = dmConversation(b.id);
                   return (
                     <li key={b.id} className={conv === selected ? "ativo" : ""}
-                      onClick={() => { cutucar(b.id); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
+                      onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
                       onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
                       <span className="grade-rosto">
                         <Avatar bot={b} size={64} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
@@ -277,14 +332,16 @@ export function App() {
                 const conv = dmConversation(b.id);
                 return (
                   <li key={b.id} className={"linha-bot" + (conv === selected ? " active" : "") + (b.online ? "" : " offline")}
-                    onClick={() => { cutucar(b.id); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
+                    onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
                     onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
                     <Avatar bot={b} size={36} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
                     <div className="bot-text">
                       <div className="bot-name">{nomeNaTela(b, painel.prefs)}{(b.unread ?? 0) > 0 && conv !== selected && <span className="badge">{b.unread}</span>}</div>
                       {b.online && b.busy && pendingFor(b.id) === 0 && <div className="bot-vivo">{faseDoStatus(b.status, b.busy, b.fase) === "trabalhando" ? "está trabalhando" : "digitando…"}</div>}
-                      <div className={"bot-status" + (b.busy ? " busy" : "") + (pendingFor(b.id) > 0 ? " pedindo" : "")}>
-                        {pendingFor(b.id) > 0 ? "Espera o seu OK" : b.online ? (b.preview ?? (b.busy ? b.status : "Disponível")) : "Offline"}
+                      <div className={"bot-status" + (pacote?.ajudando[b.id] ? " ajudando" : "") + (b.busy ? " busy" : "") + (pendingFor(b.id) > 0 ? " pedindo" : "")}>
+                        {pacote?.ajudando[b.id]
+                          ? `Ajudando ${nomeDe(pacote.ajudando[b.id].ajudando)}`
+                          : pendingFor(b.id) > 0 ? "Espera o seu OK" : b.online ? (b.preview ?? (b.busy ? b.status : "Disponível")) : "Offline"}
                       </div>
                     </div>
                     {b.busy && (
@@ -304,18 +361,48 @@ export function App() {
           )}
           {gruposVisiveis.map(linhaGrupo)}
         </ul>
-        <footer className="sidebar-foot">{state.bots.filter((b) => b.online).length} de {state.bots.length} online · voz: {state.voice.tts ? state.voice.ttsEngine : "navegador"} / {state.voice.stt ? "whisper" : "navegador"}</footer>
+        <footer className="sidebar-foot">{equipe.filter((b) => b.online).length} de {equipe.length} online · voz: {state.voice.tts ? state.voice.ttsEngine : "navegador"} / {state.voice.stt ? "whisper" : "navegador"}</footer>
       </aside>
 
       <main className="chat" style={target?.kind === "bot" ? ({ "--bot": colorFor(target.bot.id) } as any) : undefined}>
         {verTroca ? (
-          <TrocaEntreBots conversationId={verTroca} bots={state.bots} Avatar={Avatar} onFechar={() => setVerTroca(null)} />
+          <TrocaEntreBots conversationId={verTroca} bots={equipe} Avatar={Avatar} onFechar={() => setVerTroca(null)} />
+        ) : verQuadro ? (
+          <QuadroKanban
+            titulo="Quadro do Gerente"
+            subtitulo="Tarefas delegadas na empresa"
+            onFechar={() => setVerQuadro(false)}
+            tarefas={tarefasFiltradas}
+            nome={nomeDe}
+            mostrarResponsavel
+            fonte={pacote?.fonte}
+            aviso={pacote?.aviso}
+            onCancelar={(id) => void cancelar(id)}
+            onSimular={pacote?.fonte === "exemplo" ? simular : undefined}
+            filtro={filtroBot}
+            onFiltro={setFiltroBot}
+            botsFiltro={equipe.map((b) => ({ id: b.id, nome: nomeNaTela(b, painel.prefs) }))}
+            bots={equipe}
+            onAbrirBot={(id) => { setVerQuadro(false); setSelected(dmConversation(id)); }}
+          />
+        ) : verGrafo && pacote ? (
+          <QuemFala pacote={pacote} bots={equipe} nome={nomeDe} onFechar={() => setVerGrafo(false)} />
         ) : target && selected ? (
           <Conversation
             key={selected}
             target={target}
             conversationId={selected}
-            bots={state.bots}
+            bots={equipe}
+            abaInicial={tela === "tarefas" || tela === "detalhe" ? "tarefas" : null}
+            tarefaInicial={tela === "detalhe" ? "t-video" : null}
+            colab={pacote ? {
+              tarefas: pacote.tarefas,
+              fonte: pacote.fonte,
+              aviso: pacote.aviso,
+              nome: nomeDe,
+              cancelar: (id) => void cancelar(id),
+              simular: pacote.fonte === "exemplo" ? simular : undefined,
+            } : undefined}
             messages={state.messages[selected] ?? []}
             tools={state.tools}
             approvals={state.approvals.filter((a) => a.conversationId === selected || (target.kind === "bot" && a.botId === target.bot.id))}

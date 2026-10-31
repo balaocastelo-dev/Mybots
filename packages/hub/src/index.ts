@@ -1,3 +1,4 @@
+import { instalarRedacao } from "./redacao.js";
 import { config } from "./config.js";
 import { Hub } from "./hub.js";
 import { startServer } from "./server.js";
@@ -5,6 +6,7 @@ import { startSttIfNeeded } from "./stt.js";
 import { TelegramBridge } from "./telegram.js";
 import { checarChaveDaCasa } from "./chaves.js";
 
+instalarRedacao();
 const hub = new Hub(config.dbFile);
 await startServer(hub);
 
@@ -18,6 +20,9 @@ void checarChaveDaCasa().then((e) => {
 
 const telegram = new TelegramBridge(hub);
 await telegram.start();
+
+const cofre = hub.cofre.status();
+console.log(cofre.ativo ? "[hub] cofre ativo" : `[hub] ${cofre.motivo}`);
 
 const authMode = config.nodeTokens.size ? `tokens por bot (${config.nodeTokens.size})` : config.hubToken ? "token único do hub" : "SEM TOKEN (só para testes na LAN)";
 console.log(`[hub] MyBots Hub ${config.version} em http://${config.host}:${config.port}  —  auth dos nós: ${authMode}`);

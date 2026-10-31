@@ -16,6 +16,7 @@ import { pecaDaDemo } from "./demo.js";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 import { alvoDaPonte, caminhoDaTela, idDaTela, idSeguro, portaDeEmpresaPermitida } from "./ponteVnc.js";
+import { videoExigeSenha } from "./gravacao.js";
 import { abrirWsDaTela, encaminharHttp } from "./ponteTela.js";
 // O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
 const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900 };
@@ -517,6 +518,21 @@ export async function startServer(hub: Hub) {
     if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
     return hub.usoDoPc(id);
   });
+  app.get("/api/empresas/:id/maquina/gravacao", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    return hub.estadoGravacao(id);
+  });
+  app.post("/api/empresas/:id/maquina/gravacao", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    const b = (req.body ?? {}) as { acao?: string; conversationId?: string; legenda?: string };
+    if (b.acao === "iniciar") {
+      return await hub.iniciarGravacao({ empresaId: id, por: "chefe", nome: "você", conversationId: b.conversationId });
+    }
+    if (b.acao === "parar") return await hub.pararGravacao(id, b.legenda);
+    return reply.code(400).send({ error: "acao deve ser iniciar ou parar" });
+  });
   app.post("/api/empresas/:id/maquina/ligar", async (req) => {
     const id = (req.params as any).id as string;
     const emp = hub.db.listEmpresas?.().find((e: any) => e.id === id);
@@ -896,7 +912,25 @@ export async function startServer(hub: Hub) {
   app.get("/api/files/:id/:name?", async (req, reply) => {
     const f = hub.db.getFile((req.params as any).id);
     if (!f || !fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo não encontrado" });
-    reply.header("content-type", f.mime).header("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    // Foto e PDF seguem abertos (o chat já embute). Vídeo pede a senha da interface.
+    if (videoExigeSenha(f.mime) && config.uiPassword && !uiAuthorized(req) && !nodeAuthorized(req)) {
+      return reply.code(401).send({ error: "senha da interface inválida" });
+    }
+    const stat = fs.statSync(f.path);
+    reply.header("accept-ranges", "bytes").header("content-type", f.mime);
+    reply.header("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    const faixa = /^bytes=(\d+)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    if (faixa && stat.size > 0) {
+      const ini = Number(faixa[1]);
+      const fim = faixa[2] ? Math.min(Number(faixa[2]), stat.size - 1) : Math.min(ini + 1024 * 1024 - 1, stat.size - 1);
+      if (!Number.isFinite(ini) || ini >= stat.size || ini > fim) {
+        reply.code(416).header("content-range", `bytes */${stat.size}`);
+        return reply.send();
+      }
+      reply.code(206).header("content-range", `bytes ${ini}-${fim}/${stat.size}`).header("content-length", String(fim - ini + 1));
+      return reply.send(fs.createReadStream(f.path, { start: ini, end: fim }));
+    }
+    reply.header("content-length", String(stat.size));
     return reply.send(fs.createReadStream(f.path));
   });
   /** Upload por um nó/bot (token do nó) ou pela interface: corpo binário + cabeçalhos X-File-Name / X-Conversation. */

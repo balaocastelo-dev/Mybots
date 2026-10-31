@@ -21,6 +21,8 @@ import { MediaService } from "./media.js";
 import { SalaDeConversa } from "./sala.js";
 import type { Attachment, MediaKind, MediaResult, UsoDoPc } from "@mybots/shared";
 import { UsosDoPc } from "./usoDoPc.js";
+import { Gravacoes, codificarMp4, ligarCdp, portaCdpPermitida, temFfmpeg, limitesDaGravacao } from "./gravacao.js";
+import { estadoDa as estadoDaMaquina } from "./maquinas.js";
 
 const STREAM_DELTAS = process.env.MYBOTS_STREAM_DELTAS === "1";
 
@@ -174,6 +176,11 @@ export class Hub {
 
   /** Últimas ações de navegador/tela, por empresa. O PC é um só para a empresa inteira. */
   private usos = new UsosDoPc();
+  /** Uma gravação por empresa. O Chrome do container manda os quadros; o ffmpeg monta o mp4. */
+  readonly gravacoes = new Gravacoes({
+    ligarFonte: (empresaId, onFrame) => this.fonteDaTela(empresaId, onFrame),
+    aoLimite: (empresaId) => { void this.pararGravacao(empresaId, "Gravação da tela (parou no limite de tempo ou de tamanho)."); },
+  });
   private pendingAsks = new Map<string, PendingAsk>();
   private approvalOwner = new Map<string, string>();
   private questionOwner = new Map<string, string>();
@@ -800,6 +807,82 @@ export class Hub {
     return this.usos.ver(empresaId);
   }
 
+  private async fonteDaTela(empresaId: string, onFrame: (jpeg: Buffer) => boolean) {
+    const m = await estadoDaMaquina(empresaId);
+    if (m.estado === "sem-docker") return { erro: "o Docker não está no ar nesta máquina" };
+    if (m.estado !== "ligada") return { erro: "o PC desta empresa está desligado" };
+    if (!portaCdpPermitida(m.portaCdp)) return { erro: "a porta do navegador está fora da faixa deste Hub" };
+    return ligarCdp(m.portaCdp, onFrame, limitesDaGravacao().fps);
+  }
+
+  async iniciarGravacao(p: { empresaId: string; por: string; nome: string; conversationId?: string }) {
+    const r = await this.gravacoes.iniciar(p);
+    if (r.ok) this.broadcastUi({ type: "pc.gravacao", empresaId: p.empresaId, gravando: true, desde: r.desde, nome: p.nome });
+    return r;
+  }
+
+  estadoGravacao(empresaId: string) {
+    return this.gravacoes.estado(empresaId);
+  }
+
+  private async atenderGravacao(botId: string, acao: "iniciar" | "parar" | "estado", conversationId?: string, legenda?: string): Promise<{ ok: boolean; texto: string }> {
+    const emp = this.empresaDe(botId).id;
+    if (!emp) return { ok: false, texto: "Você não está numa empresa, então não tem PC para gravar." };
+    if (acao === "estado") {
+      const e = this.gravacoes.estado(emp);
+      return { ok: true, texto: e.gravando ? `Gravando há ${e.segundos ?? 0}s (${e.nome ?? "alguém"}).` : "A tela não está sendo gravada." };
+    }
+    if (acao === "iniciar") {
+      const r = await this.iniciarGravacao({ empresaId: emp, por: botId, nome: this.botSender(botId).name, conversationId });
+      return r.ok
+        ? { ok: true, texto: "Gravando a tela do PC. Quando terminar, chame gravar_tela com acao parar e uma legenda de uma linha do que fez." }
+        : { ok: false, texto: r.erro };
+    }
+    const r = await this.pararGravacao(emp, legenda);
+    return r.ok
+      ? { ok: true, texto: `Vídeo no chat (${r.segundos}s, ${r.mb} MB) com ${r.prints} print(s). A legenda já está na mensagem.` }
+      : { ok: false, texto: r.erro };
+  }
+
+  /**
+   * Fecha a gravação, monta o mp4 e manda no chat com um ou dois prints.
+   * A legenda é a frase do bot (ou do chefe) sobre o que aconteceu na tela.
+   */
+  async pararGravacao(empresaId: string, legenda?: string) {
+    const fim = this.gravacoes.parar(empresaId, legenda);
+    if (!fim.ok) return fim;
+    if (!(await temFfmpeg())) return { ok: false as const, erro: "ffmpeg não está no Hub. Sem ele não dá para montar o mp4." };
+    const mp4 = await codificarMp4(fim.frames, limitesDaGravacao().fps);
+    if (!mp4.ok) return mp4;
+    const lim = limitesDaGravacao();
+    if (mp4.data.length > lim.maxBytes) {
+      return { ok: false as const, erro: `o vídeo passou de ${Math.round(lim.maxBytes / (1024 * 1024))} MB. Grave um trecho mais curto.` };
+    }
+    const dono = fim.por === "chefe" ? "user" : fim.por;
+    const video = this.saveFile(dono, `tela-${fim.empresaId}.mp4`, "video/mp4", mp4.data);
+    const prints = fim.chaves.slice(0, 2).map((jpeg, i) => this.saveFile(dono, `tela-${fim.empresaId}-${i + 1}.jpg`, "image/jpeg", jpeg));
+    const texto = fim.legenda || "Gravação da tela do PC";
+    const conv = fim.conversationId || (fim.por !== "chefe" ? dmConversation(fim.por) : "");
+    if (conv) {
+      const sender = fim.por === "chefe"
+        ? { kind: "user" as const, id: "user", name: this.userName }
+        : this.botSender(fim.por);
+      this.storeMessage(conv, sender, texto, {
+        files: [video, ...prints].map((f) => ({ id: f.id, name: f.name, url: f.url, mime: f.mime })),
+        gravacao: { segundos: fim.segundos, empresaId: fim.empresaId },
+      });
+    }
+    this.broadcastUi({ type: "pc.gravacao", empresaId: fim.empresaId, gravando: false });
+    return {
+      ok: true as const,
+      segundos: fim.segundos,
+      url: video.url,
+      nome: video.name,
+      mb: Math.round((mp4.data.length / (1024 * 1024)) * 10) / 10,
+      prints: prints.length,
+    };
+  }
+
   botSender(botId: string): Sender {
     const b = this.nodes.get(botId)?.bot ?? this.db.listBots().find((x) => x.id === botId);
     return { kind: "bot", id: botId, name: b?.name ?? botId };
@@ -934,6 +1017,12 @@ export class Hub {
           custoMilesimos: custo, cobradoCentavos: cob.cobrado,
         });
         this.broadcastUi({ type: "creditos", empresaId: emp, saldoCentavos: cob.saldo });
+        return;
+      }
+      case "gravar_tela": {
+        void this.atenderGravacao(botId, msg.acao, msg.conversationId, msg.legenda)
+          .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
         return;
       }
       case "whatsapp_send": {

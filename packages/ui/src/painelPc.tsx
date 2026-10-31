@@ -43,31 +43,37 @@ function haQuanto(ms: number) {
 }
 
 export function TelaDaEmpresa({
-  empresaId, nome, onEvent, compacto,
+  empresaId, nome, onEvent, compacto, conversationId,
 }: {
   empresaId: string;
   nome: string;
   onEvent?: (l: (m: HubToUi) => void) => () => void;
   compacto?: boolean;
+  conversationId?: string;
 }) {
   const [m, setM] = useState<Maquina | null>(null);
   const [uso, setUso] = useState<UsoDoPc>(usoVazio);
   const [pronto, setPronto] = useState(false);
   const [indo, setIndo] = useState(false);
   const [controle, setControle] = useState(false);
+  const [grav, setGrav] = useState<{ gravando: boolean; desde?: number; nome?: string }>({ gravando: false });
+  const [gravErro, setGravErro] = useState("");
+  const [agora, setAgora] = useState(Date.now());
   const iframe = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     let vivo = true;
     const ler = async () => {
       try {
-        const [rm, ru] = await Promise.all([
+        const [rm, ru, rg] = await Promise.all([
           fetch(comChave(`/api/empresas/${encodeURIComponent(empresaId)}/maquina`)),
           fetch(comChave(`/api/empresas/${encodeURIComponent(empresaId)}/maquina/uso`)),
+          fetch(comChave(`/api/empresas/${encodeURIComponent(empresaId)}/maquina/gravacao`)),
         ]);
         if (!vivo) return;
         if (rm.ok) setM(await rm.json());
         if (ru.ok) setUso(await ru.json());
+        if (rg.ok) setGrav(await rg.json());
       } catch { /* o Hub volta no próximo ciclo */ }
       if (vivo) setPronto(true);
     };
@@ -83,6 +89,7 @@ export function TelaDaEmpresa({
     if (!ouvir) return;
     return ouvir((ev) => {
       if (ev.type === "pc.uso" && ev.empresaId === empresaId) setUso(ev.uso);
+      if (ev.type === "pc.gravacao" && ev.empresaId === empresaId) setGrav({ gravando: ev.gravando, desde: ev.desde, nome: ev.nome });
     });
   }, [empresaId]);
 
@@ -90,6 +97,30 @@ export function TelaDaEmpresa({
     const el = iframe.current;
     if (el) el.inert = !controle;
   }, [controle, m?.estado, m?.telaNoPainel]);
+
+  useEffect(() => {
+    if (!grav.gravando) return;
+    const t = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [grav.gravando]);
+
+  const gravar = async () => {
+    setGravErro("");
+    setIndo(true);
+    try {
+      const r = await fetch(comChave(`/api/empresas/${encodeURIComponent(empresaId)}/maquina/gravacao`), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acao: grav.gravando ? "parar" : "iniciar", conversationId, legenda: grav.gravando ? "Gravação da tela do PC" : undefined }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.ok === false || d.erro) setGravErro(d.erro || d.error || "não consegui gravar");
+      else if (d.gravando || d.desde) setGrav({ gravando: true, desde: d.desde, nome: "você" });
+      else setGrav({ gravando: false });
+    } catch {
+      setGravErro("o Hub não respondeu");
+    } finally { setIndo(false); }
+  };
 
   const acao = async (qual: "ligar" | "desligar" | "recriar") => {
     setIndo(true);
@@ -113,6 +144,13 @@ export function TelaDaEmpresa({
           onClick={() => setControle((v) => !v)}>
           {controle ? "Só olhar" : "Assumir o controle"}
         </button>
+        <button className={"btn" + (grav.gravando ? " gravando" : "")} type="button"
+          disabled={indo || (!grav.gravando && m?.estado !== "ligada")}
+          onClick={() => void gravar()}>
+          {grav.gravando
+            ? `Parar ${Math.floor(Math.max(0, agora - (grav.desde ?? agora)) / 1000 / 60)}:${String(Math.floor(Math.max(0, agora - (grav.desde ?? agora)) / 1000) % 60).padStart(2, "0")}`
+            : "Gravar"}
+        </button>
         {m?.estado === "ligada"
           ? <button className="btn" type="button" disabled={indo} onClick={() => void acao("desligar")}>{indo ? "Desligando…" : "Desligar"}</button>
           : <button className="btn primary" type="button" disabled={indo || m?.estado === "sem-docker" || !m} onClick={() => void acao("ligar")}>
@@ -133,6 +171,7 @@ export function TelaDaEmpresa({
         </div>
       )}
       {m?.erro && m.estado !== "sem-docker" && <div className="pc-aviso">{m.erro}</div>}
+      {gravErro && <div className="pc-aviso">{gravErro}</div>}
       {ligada && !noPainel && (
         <div className="pc-aviso">
           Este PC foi criado antes da tela passar pelo painel. Atualizar mantém os logins do navegador e passa a imagem por aqui.
@@ -177,12 +216,13 @@ export function TelaDaEmpresa({
 }
 
 export function PainelDoPc({
-  empresaId, nome, onFechar, onEvent,
+  empresaId, nome, onFechar, onEvent, conversationId,
 }: {
   empresaId: string | null;
   nome: string;
   onFechar: () => void;
   onEvent?: (l: (m: HubToUi) => void) => () => void;
+  conversationId?: string;
 }) {
   const [largura, setLargura] = useState(() => {
     try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 300 && n <= 760 ? n : 400; } catch { return 400; }
@@ -219,7 +259,7 @@ export function PainelDoPc({
         <button className="icon-btn" type="button" title="Recolher a tela" onClick={onFechar}>›</button>
       </header>
       {empresaId
-        ? <TelaDaEmpresa empresaId={empresaId} nome={nome} onEvent={onEvent} compacto />
+        ? <TelaDaEmpresa empresaId={empresaId} nome={nome} onEvent={onEvent} conversationId={conversationId} compacto />
         : <p className="pc-sem-empresa">Este bot não está numa empresa. O PC é um só por empresa, compartilhado por todos os bots dela.</p>}
     </aside>
   );

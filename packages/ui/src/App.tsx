@@ -1399,6 +1399,7 @@ function Conversation({ target, conversationId, bots, messages, tools, approvals
         <PainelDoPc
           empresaId={bot.empresaId ?? null}
           nome={empresaNome}
+          conversationId={conversationId}
           onFechar={alternarPc}
           onEvent={onEvent}
         />
@@ -1573,7 +1574,15 @@ function Arquivo({ f, onAbrir }: { f: ArquivoDoChat; onAbrir?: (f: ArquivoDoChat
       </div>
     );
   }
-  if (ehVideo(f)) return <div className="arq video"><video src={src} controls preload="metadata" /><div className="arq-pe"><span className="arq-nome">{f.name}</span></div></div>;
+  if (ehVideo(f)) return (
+    <div className="arq video">
+      <video src={src} controls preload="metadata" />
+      <div className="arq-pe">
+        <span className="arq-nome" title={f.name}>{f.name}</span>
+        <a className="btn fraco" href={src} download={f.name}>Baixar</a>
+      </div>
+    </div>
+  );
   if (ehAudio(f)) return <div className="arq audio"><audio src={src} controls preload="metadata" /><div className="arq-pe"><span className="arq-nome">{f.name}</span></div></div>;
   return <div className="arq outro"><a href={src} target="_blank" rel="noopener">📎 {f.name}</a></div>;
 }

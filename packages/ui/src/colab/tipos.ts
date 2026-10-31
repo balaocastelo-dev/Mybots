@@ -114,10 +114,10 @@ export type PacoteColab = {
 export type ColunaId = "queued" | "running" | "waiting" | "feito";
 
 export const COLUNAS: Array<{ id: ColunaId; titulo: string; statuses: StatusTarefa[] }> = [
-  { id: "queued", titulo: "Na fila", statuses: ["queued"] },
-  { id: "running", titulo: "Fazendo", statuses: ["running"] },
-  { id: "waiting", titulo: "Esperando", statuses: ["waiting"] },
-  { id: "feito", titulo: "Pronto / Falhou", statuses: ["done", "failed", "cancelled"] },
+  { id: "queued", titulo: "Pedidos", statuses: ["queued"] },
+  { id: "running", titulo: "Em andamento", statuses: ["running"] },
+  { id: "waiting", titulo: "Esperando OK", statuses: ["waiting"] },
+  { id: "feito", titulo: "Feito", statuses: ["done", "failed", "cancelled"] },
 ];
 
 export const ROTULO_STATUS: Record<StatusTarefa, string> = {

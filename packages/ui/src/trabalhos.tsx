@@ -11,6 +11,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import type { BotSummary } from "@mybots/shared";
+import { Avatar } from "./avatar";
 
 export type Trabalho = {
   id: string; nome: string; mime: string; tamanho: number; botId: string;
@@ -48,16 +49,17 @@ function quandoLegivel(ts: number) {
   return mesmoDia ? `hoje ${hora}` : `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ${hora}`;
 }
 
-export function Trabalhos({ bots, onClose, botInicial = "", embutido = false }: {
+export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, onAbrirBot }: {
   bots: BotSummary[];
   onClose?: () => void;
   botInicial?: string;
   embutido?: boolean;
+  onAbrirBot?: (botId: string) => void;
 }) {
   const [itens, setItens] = useState<Trabalho[] | null>(null);
   const [contagem, setContagem] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
-  const [tipo, setTipo] = useState("");
+  const [tipo, setTipo] = useState(() => { try { return localStorage.getItem("mybots.trab-tipo") ?? ""; } catch { return ""; } });
   const [bot, setBot] = useState(botInicial);
   const [busca, setBusca] = useState("");
   const [recado, setRecado] = useState("");
@@ -73,6 +75,7 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false }: 
     setItens(d.itens); setContagem(d.contagem ?? {}); setTotal(d.total ?? 0);
   };
   useEffect(() => { void carregar(); }, [tipo, bot, busca]);
+  useEffect(() => { try { localStorage.setItem("mybots.trab-tipo", tipo); } catch { /* privado */ } }, [tipo]);
 
   const nomeDoBot = useMemo(() => {
     const m: Record<string, string> = { user: "você" };
@@ -113,7 +116,7 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false }: 
           const n = t.id ? (contagem[t.id] ?? 0) : total;
           if (t.id && !n) return null;
           return (
-            <button key={t.id} className={"trab-tipo" + (tipo === t.id ? " on" : "")} onClick={() => setTipo(t.id)}>
+            <button key={t.id} type="button" className={"trab-tipo" + (tipo === t.id ? " on" : "")} aria-pressed={tipo === t.id} onClick={() => setTipo(t.id)}>
               <span aria-hidden="true">{t.icone}</span> {t.nome} <b>{n}</b>
             </button>
           );
@@ -122,13 +125,14 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false }: 
           <option value="">Qualquer bot</option>
           {bots.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
-        <input className="trab-busca" placeholder="Buscar pelo nome…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <input className="trab-busca" placeholder="Buscar pelo nome…" aria-label="Buscar trabalho pelo nome" value={busca} onChange={(e) => setBusca(e.target.value)} />
       </div>
 
       {itens === null && <div className="hint">Carregando…</div>}
       {itens?.length === 0 && (
-        <div className="hint">
-          Nada aqui ainda{tipo || bot || busca ? " com esse filtro" : ""}. O que os bots gerarem — imagem, vídeo, PDF, .md, zip, página — aparece nesta tela sozinho.
+        <div className="trab-vazio">
+          <span className="trab-vazio-icone" aria-hidden>📂</span>
+          <p>Nada aqui ainda{tipo || bot || busca ? " com esse filtro" : ""}. O que os bots gerarem — imagem, vídeo, PDF, .md, zip, página — aparece nesta tela sozinho.</p>
         </div>
       )}
 
@@ -144,7 +148,12 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false }: 
             </a>
             <figcaption>
               <b title={f.nome}>{f.nome}</b>
-              <small>{nomeDoBot[f.botId] ?? f.botId} · {quandoLegivel(f.quando)} · {tamanhoLegivel(f.tamanho)}</small>
+              <small>{quandoLegivel(f.quando)} · {tamanhoLegivel(f.tamanho)}</small>
+              <div className="trab-origem">
+                {bots.find((b) => b.id === f.botId) ? <Avatar bot={bots.find((b) => b.id === f.botId)!} size={18} /> : <span className="trab-vazio-icone" aria-hidden style={{ fontSize: 18 }}>📎</span>}
+                <span>{nomeDoBot[f.botId] ?? f.botId}</span>
+                {onAbrirBot && f.botId && f.botId !== "user" && <button type="button" className="link" onClick={() => onAbrirBot(f.botId)}>Ver conversa</button>}
+              </div>
               <div className="trab-botoes">
                 <a className="btn fraco" href={f.url} download={f.nome}>Baixar</a>
                 <a className="btn fraco" href={f.url} target="_blank" rel="noopener">Abrir</a>

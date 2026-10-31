@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { IDIOMAS, VOZES_PADRAO, definirIdioma, definirVozPadrao, idiomaAtual, vozPadrao, type Idioma } from "../guia";
-import { PreferenciaDaCasa, ResetDaCasa, Tamanho, gravarTema, lerTema, type TemaNome } from "../tema";
+import { PreferenciaDaCasa, ResetDaCasa, Tamanho, gravarPularAbertura, gravarTema, lerTema, pularAbertura, type TemaNome } from "../tema";
 
 const CHAVE_NOME = "mybots.conta.nome";
 
@@ -26,6 +26,7 @@ export function AbaGeral({
   const [tema, setTema] = useState<TemaNome>(lerTema);
   const [idioma, setIdioma] = useState<Idioma>(idiomaAtual);
   const [voz, setVoz] = useState(vozPadrao);
+  const [pularIntro, setPularIntro] = useState(pularAbertura);
   const [permissao, setPermissao] = useState<NotificationPermission | "indisponivel">(
     () => (typeof Notification === "undefined" ? "indisponivel" : Notification.permission),
   );
@@ -101,6 +102,12 @@ export function AbaGeral({
         <h3>Escala</h3>
         <p className="ajustes-lead">O mesmo zoom do topo da lista. A casa inteira cresce junto, de 80% a 150%.</p>
         <Tamanho />
+        <Interruptor
+          ligado={pularIntro}
+          onChange={(v) => { setPularIntro(v); gravarPularAbertura(v); }}
+          titulo="Pular abertura"
+          detalhe="Na próxima vez o painel abre direto, sem as partículas."
+        />
       </section>
 
       <section className="ajustes-grupo">

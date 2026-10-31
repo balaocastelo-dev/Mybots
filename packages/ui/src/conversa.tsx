@@ -24,6 +24,8 @@ export type ConvProps = {
   voice: VoiceCaps; tts: boolean; setTts: (v: boolean) => void; handsFree: boolean; setHandsFree: (v: boolean) => void;
   send: ReturnType<typeof useHub>["send"]; onEvent: ReturnType<typeof useHub>["onEvent"]; onOpenSidebar: () => void;
   onAbrirTroca: (conversationId: string) => void;
+  onAbrirEquipe?: () => void;
+  onAbrirBot?: (botId: string) => void;
   control: ControlState;
   initialPanel?: { panel: "settings" | "routines"; n: number } | null;
   empresaNome?: string;
@@ -39,8 +41,9 @@ export type ConvProps = {
   };
 };
 
-export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, colab }: ConvProps) {
+export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, onAbrirEquipe, onAbrirBot, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, colab }: ConvProps) {
   const [text, setText] = useState("");
+  const [vozAberta, setVozAberta] = useState(true);
   const [listening, setListening] = useState(false);
   const [level, setLevel] = useState(0);
   const [speaking, setSpeaking] = useState(isSpeaking());
@@ -376,10 +379,13 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     <>
       <header className="chat-head">
         <button className="icon-btn only-mobile" onClick={onOpenSidebar} title="Bots">☰</button>
-        {bot ? <Avatar bot={bot} size={40} /> : <div className="avatar group-avatar" style={{ width: 40, height: 40 }}>👥</div>}
+        {bot ? <Avatar bot={bot} size={144} /> : <div className="avatar group-avatar" style={{ width: 144, height: 144 }}>👥</div>}
         <div className="chat-title">
           <b>{title}</b>
           <small><span className="sub-texto">{subtitle}</span>{bot?.model && <span className="chip">{bot.engine} · {bot.provider}/{bot.model}</span>}{bot?.online && <span className={"chip mode-" + effectiveControl(control.global, bot.controlMode)} title={CONTROL_DESCRIPTIONS[effectiveControl(control.global, bot.controlMode)]}>{CONTROL_LABELS[effectiveControl(control.global, bot.controlMode)]}{control.global ? " (global)" : ""}</span>}</small>
+          {bot && (bot.gerente || bot.manages?.length) && onAbrirEquipe && (
+            <button type="button" className="chip-trocas chip-equipe" onClick={onAbrirEquipe}>Trocas da equipe</button>
+          )}
         </div>
         <div className="chat-actions">
           {bot && (
@@ -452,6 +458,12 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
         </div>
       )}
 
+      {!!approvals.length && (
+        <div className="pilha-ok" role="region" aria-label="Espera o seu OK">
+          {approvals.map((a) => <ApprovalCard key={a.id} a={a} botName={bots.find((b) => b.id === a.botId)?.name} auditoria={control.global === "deus" || (bot ? effectiveControl(control.global, bot.controlMode) === "deus" : false)} onAnswer={(allow, remember) => send({ type: "approval.response", requestId: a.id, allow, remember })} />)}
+        </div>
+      )}
+
       <div className="messages" ref={listRef}>
         {!messages.length && <div className="hint">{bot ? `Diga olá para ${bot.name}. ${bot.role}.` : "Fale com o grupo: todos os bots recebem e cada um responde o que é da sua área."}</div>}
         {messages.map((m) => <Fragment key={m.id}><Message m={m} showName={target.kind === "group" || m.conversationId.startsWith("pair:")} tools={tools[m.id] ?? (m.meta?.tools as ToolInfo[] | undefined)} answer={m.meta?.question ? resolvedQuestions[String(m.meta.question)] : undefined}
@@ -466,7 +478,6 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
             if (!r.ok) avisar("não consegui editar o pedido");
           }}
           onSpeak={m.sender.kind === "bot" ? () => { if (isSpeaking()) stopSpeaking(); else void speak(m.text, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true); } : undefined} />{trocas[m.id]?.length ? <ChipTrocas trocas={trocas[m.id]} bots={bots} Avatar={Avatar} onAbrir={(ts) => ts.length === 1 ? onAbrirTroca(ts[0].conversationId) : setFolha(ts)} /> : null}</Fragment>)}
-        {approvals.map((a) => <ApprovalCard key={a.id} a={a} botName={bots.find((b) => b.id === a.botId)?.name} onAnswer={(allow, remember) => send({ type: "approval.response", requestId: a.id, allow, remember })} />)}
         {questions.map((q) => <QuestionCard key={q.id} q={q} botName={bots.find((b) => b.id === q.botId)?.name} onAnswer={(answer) => send({ type: "question.answer", questionId: q.id, answer })} />)}
       </div>
 
@@ -511,9 +522,10 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       )}
 
       {(listening || speaking) && (
-        <div className={"voice-bar" + (listening ? " listening" : " speaking")}>
+        <div className={"voice-bar" + (listening ? " listening" : " speaking") + (vozAberta ? "" : " recolhida")}>
           <span className="voice-dot" style={{ transform: `scale(${1 + level * 1.5})` }} />
-          {listening ? (voice.stt ? "Ouvindo… pode falar; quando você parar, eu envio." : "Ouvindo… quando você parar de falar, eu envio.") : `${title} está falando…`}
+          <span className="voice-texto">{listening ? (voice.stt ? "Ouvindo… pode falar; quando você parar, eu envio." : "Ouvindo… quando você parar de falar, eu envio.") : `${title} está falando…`}</span>
+          <button className="link" type="button" onClick={() => setVozAberta((v) => !v)}>{vozAberta ? "recolher" : "voz"}</button>
           <button className="link" onClick={() => stopEverything("⏹ na barra de voz")}>parar</button>
         </div>
       )}
@@ -571,6 +583,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           onEvent={onEvent}
           rotinas={routines.map((r) => ({ id: r.id, nome: r.name, cron: r.cron }))}
           arquivos={messages.flatMap((m) => (m.meta?.files as Array<{ name: string; url: string }> | undefined) ?? []).slice(-12).reverse()}
+          onAbrirBot={onAbrirBot}
         />
       )}
       </div>

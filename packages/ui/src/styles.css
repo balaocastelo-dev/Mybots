@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 /* Balcão — o tema claro, padrão da casa.
    O tema não segue mais o sistema operacional: quem decide é o botão Claro/Escuro
@@ -1600,6 +1600,79 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
 .mac-liga { display: grid; gap: 12px; max-width: 460px; margin: 10px 0; }
 .mac-liga label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 .mac-dica { font-size: 12px !important; line-height: 1.5; }
+
+/* Repaginação: lista estreita, conversa com respiro, bolhas sem cara de WhatsApp. */
+:root {
+  --bg: #f6f6f4; --panel: #ffffff; --panel-2: #f3f3f1; --line: #e6e6e2;
+  --text: #1a1a1a; --muted: #6d6d6d; --fraco: #9a9a9a;
+  --accent: #1a1a1a; --on-accent: #fff; --accent-2: #1e9e62;
+  --mine: #f3f3f1; --mine-text: #1a1a1a; --theirs: #ffffff;
+  --papel: none;
+  --fonte-titulo: "Outfit", system-ui, sans-serif;
+  --fonte: "Outfit", system-ui, sans-serif;
+}
+:root[data-tema="escuro"] {
+  --bg: #0e0e0e; --panel: #161616; --panel-2: #1c1c1c; --line: #2a2a2a;
+  --text: #f2f2f2; --muted: #a0a0a0; --fraco: #737373;
+  --accent: #f2f2f2; --on-accent: #111; --accent-2: #3fd18b;
+  --mine: #242424; --mine-text: #f2f2f2; --theirs: #161616;
+  --papel: none;
+}
+.app, .app.sidebar-closed { grid-template-columns: 248px minmax(0, 1fr) 0px; }
+.app.sidebar-closed { grid-template-columns: 0 minmax(0, 1fr) 0px; }
+.maquina { display: none; }
+.sidebar-head { padding: 12px 12px 8px; }
+.brand small, .atalho-trabalhos small { display: none; }
+.atalho-trabalhos { padding: 6px 8px; gap: 8px; border-radius: 8px; }
+.atalho-trabalhos .at-icone { font-size: 16px; width: 22px; }
+.search { margin: 4px 10px 8px; background: transparent; }
+.bots { padding: 0 6px 12px; }
+.bots li { padding: 7px 8px; gap: 8px; border-radius: 10px; align-items: center; }
+.bot-name { font-size: 13.5px; }
+.bot-status, .bot-text .papel { -webkit-line-clamp: 1; line-clamp: 1; margin-top: 0; font-size: 12px; }
+.section { padding: 14px 8px 4px; letter-spacing: .04em; text-transform: uppercase; font-size: 10.5px; }
+.chat-head { padding: 12px 20px; background: transparent; border-bottom-color: transparent; }
+.chat-title b { font-size: 16px; font-weight: 500; }
+.messages {
+  padding: 28px 7% 20px; gap: 20px;
+  background-image: none;
+}
+.msg { max-width: min(640px, 88%); }
+.bubble, .mine .bubble, .theirs .bubble {
+  border-radius: 18px; padding: 12px 14px 20px;
+  box-shadow: none; border: 1px solid var(--line);
+}
+.mine .bubble { background: var(--mine); color: var(--mine-text); }
+.card.approval, .card.question { border-radius: 16px; border-width: 1px; }
+.composer { padding: 12px 7% 18px; background: transparent; border-top-color: transparent; }
+.composer textarea { border-radius: 16px; background: var(--panel); }
+.btn.primary, .composer .send { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.pc-abas { flex-wrap: wrap; }
+.lado-visao, .lado-lista { padding: 8px 12px; }
+.lado-visao p { margin: 0 0 8px; line-height: 1.45; }
+@media (max-width: 1180px) {
+  .app, .app.sidebar-closed { grid-template-columns: 248px minmax(0, 1fr); }
+  .app.sidebar-closed { grid-template-columns: 0 minmax(0, 1fr); }
+}
+.row-pin {
+  flex: none; width: 26px; height: 26px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--fraco); cursor: pointer;
+  display: grid; place-items: center; opacity: 0;
+}
+.bots li:hover .row-pin, .row-pin.on, .row-pin:focus-visible { opacity: 1; color: var(--text); }
+@media (hover: none) { .row-pin { opacity: 1; } }
+.card.approval, .card.question, .card.acao {
+  border-left-width: 0; border-radius: 18px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .04);
+}
+.arq, .arq.video { border-radius: 16px; overflow: hidden; }
+@media (max-width: 720px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidebar {
+    position: absolute; inset: 0; width: 100%; z-index: 20;
+  }
+  .app.sidebar-closed .sidebar { display: none; }
+}
 
 /* Barras finas, invisíveis até o mouse passar. A rolagem continua. */
 :root { --barra: rgba(26, 28, 25, .28); }

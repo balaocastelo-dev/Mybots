@@ -176,6 +176,14 @@ test("ponte e página da tela exigem a senha da interface", { timeout: 40_000 },
 
     const pcCom = await fetch(`${base}/pc/balao/?k=${encodeURIComponent(SENHA)}`);
     assert.equal(pcCom.status, 503);
+    const androidSem = await fetch(`${base}/android/bia/`);
+    assert.equal(androidSem.status, 401);
+    const androidCom = await fetch(`${base}/android/bia/?k=${encodeURIComponent(SENHA)}`);
+    assert.equal(androidCom.status, 503);
+    const corpoAndroid = await androidCom.json() as { error?: string; provedores?: unknown[]; botId?: string };
+    assert.equal(corpoAndroid.botId, "bia");
+    assert.deepEqual(corpoAndroid.provedores, []);
+    assert.match(corpoAndroid.error ?? "", /provedor/);
     const segue = await fetch(`${base}/api/health?k=${encodeURIComponent(SENHA)}`);
     assert.equal(segue.status, 200, "o proxy da tela derrubou o Hub");
 

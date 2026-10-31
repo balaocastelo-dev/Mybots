@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { motivoDaQueda, recadoDaQueda } from "./diagnostico.js";
 import type { Hub } from "./hub.js";
 import { estadoDaChave } from "./chaves.js";
+import { pararPc, registrarPc } from "./pcs.js";
 
 export type ManagedBotDef = {
   id: string;
@@ -199,6 +200,7 @@ export class BotManager {
     // "olá" dele é recusado no Hub e o bot não reaparece no painel.
     this.hub.db.marcarExcluido(id, d?.name);
     const r = await this.stop(id);
+    void pararPc(id).catch(() => { /* sem PC registrado, ou o Docker nem está no ar */ });
     this.hub.db.deleteManaged(id);
     this.hub.db.audit(id, "bot.removed", { purge, morreu: r.morreu, pids: r.pids });
     this.hub.removeBot(id, purge); // tira da lista do painel, senão ele continua aparecendo
@@ -438,13 +440,22 @@ export class BotManager {
    * Não é protegido — a empresa pode trocar a persona. Se for excluído de propósito,
    * a lápide impede que o próximo boot recrie.
    */
+  private pcDoCofre(id: string, empresaId: string, nome: string) {
+    try { registrarPc({ botId: id, empresaId, nome }); }
+    catch (e) { this.hub.db.audit(id, "bot.empresa.cofre.pc", { erro: (e as Error).message }); }
+  }
+
   criarCofreDaEmpresa(empresaId: string, nomeEmpresa: string): { id: string } | { error: string } {
     const id = BotManager.slug(`cofre-${empresaId}`);
+    const nome = `Cofre — ${nomeEmpresa}`;
     if (this.hub.db.estaExcluido(id)) return { error: "o cofre desta empresa foi excluído" };
-    if (this.hub.db.getManaged(id)) return { id };
+    if (this.hub.db.getManaged(id)) {
+      this.pcDoCofre(id, empresaId, nome);
+      return { id };
+    }
     const r = this.create({
       id,
-      name: `Cofre — ${nomeEmpresa}`,
+      name: nome,
       role: `Guarda as credenciais da ${nomeEmpresa} e preenche login e cartão sem revelar o segredo`,
       avatar: "🔐",
       cofre: true,
@@ -456,6 +467,7 @@ export class BotManager {
     });
     if ("error" in r) return r;
     this.hub.db.audit(id, "bot.empresa.cofre", { empresa: empresaId });
+    this.pcDoCofre(r.id, empresaId, nome);
     return { id: r.id };
   }
 
@@ -464,7 +476,11 @@ export class BotManager {
     const criados: string[] = [];
     for (const e of this.hub.db.listEmpresas()) {
       const antes = BotManager.slug(`cofre-${e.id}`);
-      if (this.hub.db.getManaged(antes) || this.hub.db.estaExcluido(antes)) continue;
+      if (this.hub.db.estaExcluido(antes)) continue;
+      if (this.hub.db.getManaged(antes)) {
+        this.pcDoCofre(antes, e.id, `Cofre — ${e.nome}`);
+        continue;
+      }
       const r = this.criarCofreDaEmpresa(e.id, e.nome);
       if (!("error" in r)) {
         this.hub.db.setEmpresaDoBot(r.id, `Cofre — ${e.nome}`, e.id, false);

@@ -26,6 +26,7 @@ import type { Attachment, MediaKind, MediaResult, UsoDoPc } from "@mybots/shared
 import { UsosDoPc } from "./usoDoPc.js";
 import { Gravacoes, codificarMp4, ligarCdp, portaCdpPermitida, temFfmpeg, limitesDaGravacao } from "./gravacao.js";
 import { estadoDa as estadoDaMaquina } from "./maquinas.js";
+import { acordarPc, botPadraoDaEmpresa, temRegistro, tocarPc, type BotParaPc } from "./pcs.js";
 import * as celular from "./celular.js";
 import {
   TravaDosCelulares, acaoSensivel, enderecoParaReconectar, lerMdns, lerPareamento, pacoteValido, resumoDoCelular,
@@ -346,6 +347,10 @@ export class Hub {
     }
     const n = this.nodes.get(botId);
     if (!n || n.ws.readyState !== n.ws.OPEN) return false;
+    if (msg.type === "message" && temRegistro(botId)) {
+      tocarPc(botId);
+      void acordarPc(botId).catch((e) => console.error(`[pc] ${botId}: ${(e as Error).message}`));
+    }
     n.ws.send(JSON.stringify(msg));
     return true;
   }
@@ -847,10 +852,28 @@ export class Hub {
     return this.usos.ver(empresaId);
   }
 
+  private botsParaPc(): BotParaPc[] {
+    const managed = new Map(this.db.listManaged().map((d: { id: string; name?: string; gerente?: boolean; createdAt?: number }) => [d.id, d]));
+    return this.db.listBots().map((b) => ({
+      id: b.id,
+      nome: managed.get(b.id)?.name ?? b.name,
+      empresaId: b.empresaId ?? null,
+      gerente: !!managed.get(b.id)?.gerente,
+      createdAt: managed.get(b.id)?.createdAt ?? 0,
+    }));
+  }
+
+  /** O bot ainda está no meio de uma tarefa: o PC dele não conta como ocioso. */
+  estaOcupado(botId: string): boolean {
+    return !!this.nodes.get(botId)?.busy;
+  }
+
   private async fonteDaTela(empresaId: string, onFrame: (jpeg: Buffer) => boolean) {
-    const m = await estadoDaMaquina(empresaId);
+    const padrao = botPadraoDaEmpresa(empresaId, this.botsParaPc());
+    const m = padrao ? await acordarPc(padrao) : await estadoDaMaquina(empresaId);
+    if (!m) return { erro: "o PC desta empresa está desligado" };
     if (m.estado === "sem-docker") return { erro: "o Docker não está no ar nesta máquina" };
-    if (m.estado !== "ligada") return { erro: "o PC desta empresa está desligado" };
+    if (m.estado !== "ligada") return { erro: m.erro || "o PC desta empresa está desligado" };
     if (!portaCdpPermitida(m.portaCdp)) return { erro: "a porta do navegador está fora da faixa deste Hub" };
     return ligarCdp(m.portaCdp, onFrame, limitesDaGravacao().fps);
   }
@@ -1850,6 +1873,7 @@ export class Hub {
     const n = this.nodes.get(botId);
     const resolvida = faseDoStatus(text, busy, fase);
     if (n) { n.status = text; n.busy = busy; n.fase = resolvida; }
+    if (busy && temRegistro(botId)) tocarPc(botId);
     this.broadcastUi({ type: "status", botId, text, busy, fase: resolvida });
     if (!busy) this.finalizeStreams(botId);
   }

@@ -2,8 +2,10 @@
 // O valor vai no argumento do CDP e a resposta que volta é só { ok: true }.
 // Não clica em pagar, enviar ou comprar — isso continua com o chefe.
 import WebSocket from "ws";
+import { nomesDeContainerEmpresa } from "./dockerPc.js";
 import { enderecoDoDepurador, portaCdpPermitida } from "./gravacao.js";
 import { estadoDa } from "./maquinas.js";
+import { acordarPc, lerRegistro, nomeDoContainerBot } from "./pcs.js";
 
 const RESERVADAS = new Set([8787, 8791]);
 
@@ -35,25 +37,33 @@ export function mesmoSite(a: string, b: string): boolean {
   return ha === hb || ha.endsWith("." + hb) || hb.endsWith("." + ha);
 }
 
-/** Nome do container quando o PC passar a ser por bot. Hoje o Chrome é o da empresa. */
+/** Nome do container deste bot. O registro do PC (pcs.ts) manda, se já existir. */
 export function nomeContainerDoBot(botId: string): string {
-  const limpo = String(botId ?? "").replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 40);
-  return `mybots-bot-${limpo}`;
+  return lerRegistro(botId)?.container ?? nomeDoContainerBot(botId, nomesDeContainerEmpresa());
 }
 
 /**
- * Porta de depuração do bot.
- * Hoje: o PC da empresa (container mybots-<empresaId>, porta publicada em portaCdp).
- * Quando existir o container mybots-bot-<botId>, troque só portaDoContainerDoBot.
+ * Porta de depuração do PC deste bot (`mybots-bot-<botId>`).
+ * Sem registro, devolve null e o chamador usa o PC antigo da empresa.
  */
-export async function portaDoContainerDoBot(_botId: string): Promise<{ porta: number } | null> {
-  return null;
+export async function portaDoContainerDoBot(botId: string): Promise<{ porta: number } | { erro: string } | null> {
+  const reg = lerRegistro(botId);
+  if (!reg) return null;
+  if (RESERVADAS.has(reg.portaCdp) || !portaCdpPermitida(reg.portaCdp)) {
+    return { erro: "a porta do navegador deste bot não é desta casa" };
+  }
+  const estado = await acordarPc(botId);
+  if (!estado || estado.estado !== "ligada") return { erro: estado?.erro || "o navegador deste bot está desligado" };
+  if (RESERVADAS.has(estado.portaCdp) || !portaCdpPermitida(estado.portaCdp)) {
+    return { erro: "a porta do navegador deste bot não é desta casa" };
+  }
+  return { porta: estado.portaCdp };
 }
 
 export async function alvoDoNavegador(botId: string, empresaId: string | null): Promise<{ porta: number } | { erro: string }> {
   const doBot = await portaDoContainerDoBot(botId);
   if (doBot) {
-    if (RESERVADAS.has(doBot.porta) || !portaCdpPermitida(doBot.porta)) return { erro: "a porta do navegador deste bot não é desta casa" };
+    if ("erro" in doBot) return doBot;
     return doBot;
   }
   if (!empresaId) return { erro: "este bot não tem empresa e não tem navegador" };

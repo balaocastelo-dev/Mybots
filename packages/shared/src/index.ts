@@ -72,6 +72,8 @@ export type NodeToHub =
   | { type: "generate_media"; callId: string; conversationId: string; kind: MediaKind; prompt: string; refFileId?: string; seconds?: number; aspect?: string }
   /** gravar a tela do PC da empresa (o Hub é quem enxerga o container) */
   | { type: "gravar_tela"; callId: string; acao: "iniciar" | "parar" | "estado"; conversationId?: string; legenda?: string; onde?: "pc" | "celular" }
+  /** preenche login ou cartão no navegador. A resposta é só "ok" ou "erro: …" — o valor não volta. */
+  | { type: "fill_credential"; callId: string; site: string; campo: string }
   /** o celular da empresa do bot, via ADB no Hub. aprovado = o chefe já liberou uma ação sensível */
   | { type: "celular"; callId: string; acao: string; conversationId?: string; x?: number; y?: number; x2?: number; y2?: number; texto?: string; tecla?: string; pacote?: string; aprovado?: boolean };
 
@@ -313,6 +315,7 @@ export function faseDoStatus(text: string, busy: boolean, fase?: FaseAtividade):
 }
 
 export * from "./control.ts";
+export * from "./redacao.ts";
 export * from "./media.ts";
 export * from "./resources.ts";
 

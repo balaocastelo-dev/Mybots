@@ -2,13 +2,15 @@ import type { WebSocket } from "ws";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  type BotEvent, type BotInfo, type BotSummary, type ControlMode, type ControlState, type FaseAtividade, type Group, type HubToNode, type HubToUi, type NodeToHub,
+  type ApprovalKind, type BotEvent, type BotInfo, type BotSummary, type ControlMode, type ControlState, type FaseAtividade, type Group, type HubToNode, type HubToUi, type NodeToHub,
   type PendingApproval, type PendingQuestion, type Routine, type Sender, type StoredMessage, type UiToHub,
   type Saber,
   type SaberTipo,
   botOfConversation, cortarFala, dmConversation, effectiveControl, faseDoStatus, groupOfConversation, isControlMode, needsHumanApproval, newId, pairConversation, PROTOCOL_VERSION, SABER_LABELS,
 } from "@mybots/shared";
 import { Db } from "./db.js";
+import { Cofre } from "./cofre.js";
+import { redigir, semSegredo, textoSeguro } from "./redacao.js";
 import { WhatsAppDasEmpresas } from "./whatsapp.js";
 import { PrimeirosPassos } from "./primeirospassos.js";
 import { logoNaPasta } from "./folha.js";
@@ -209,8 +211,12 @@ export class Hub {
   /** O roteiro dos primeiros passos de uma empresa nova. */
   readonly passos: PrimeirosPassos;
 
+  /** Credenciais cifradas. O valor não volta para bot nem para a interface. */
+  readonly cofre: Cofre;
+
   constructor(dbFile: string, public readonly userName = process.env.MYBOTS_USER_NAME ?? "o chefe") {
     this.db = new Db(dbFile);
+    this.cofre = new Cofre(this.db.sqlite);
     this.whats = new WhatsAppDasEmpresas(path.dirname(dbFile), (estado) => this.broadcastUi({ type: "whatsapp", estado }));
     // Sessao ja escaneada volta sozinha quando o Hub sobe: ninguem escaneia duas vezes.
     setTimeout(() => { for (const id of this.whats.salvas()) void this.whats.conectar(id).catch(() => {}); }, 1500);
@@ -1213,7 +1219,7 @@ export class Hub {
         }
         void this.manageBot(msg.acao, msg.bot, msg.apagarArquivos === true)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.msg }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "criar_bot": {
@@ -1224,7 +1230,7 @@ export class Hub {
         }
         void this.criarBot({ nome: msg.nome, funcao: msg.funcao, persona: msg.persona, empresaId: this.empresaDe(botId).id, gerenteId: botId })
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.msg }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "remember":
@@ -1248,17 +1254,23 @@ export class Hub {
         this.broadcastUi({ type: "creditos", empresaId: emp, saldoCentavos: cob.saldo });
         return;
       }
+      case "fill_credential": {
+        void this.cofre.preencher({ botId, empresaId: this.empresaDe(botId).id, site: msg.site, campo: msg.campo })
+          .then((texto) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: texto === "ok", data: texto }))
+          .catch(() => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: "erro: não consegui preencher" }));
+        return;
+      }
       case "gravar_tela": {
         const onde = msg.onde === "celular" ? "celular" : "pc";
         void this.atenderGravacao(botId, msg.acao, msg.conversationId, msg.legenda, onde)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "celular": {
         void this.atenderCelular(botId, msg)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "whatsapp_send": {
@@ -1282,7 +1294,7 @@ export class Hub {
           : this.whats.enviar(emp, String(msg.para ?? ""), String(msg.texto ?? ""));
         void envio
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.detalhe }))
-          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
       case "learn_knowledge": {
@@ -1305,7 +1317,7 @@ export class Hub {
           this.db.audit(botId, "file.sent", { name: f.name, size: f.size });
           return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: `Arquivo enviado ao chefe: ${f.name} (${config.publicUrl}${f.url})` });
         } catch (e) {
-          return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message });
+          return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) });
         }
       }
       case "schedule": {
@@ -1331,7 +1343,7 @@ export class Hub {
     try {
       await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...(config.channelWebhookKey ? { authorization: `Bearer ${config.channelWebhookKey}` } : {}) }, body: JSON.stringify({ channel, to: from, botId, text }), signal: AbortSignal.timeout(15_000) });
     } catch (e) {
-      this.storeMessage(conversationId, SYSTEM, `Falha ao entregar no canal ${channel}: ${(e as Error).message}`, { error: true });
+      this.storeMessage(conversationId, SYSTEM, `Falha ao entregar no canal ${channel}: ${textoSeguro(e)}`, { error: true });
     }
   }
 
@@ -1401,9 +1413,10 @@ export class Hub {
       }
       case "tool.start": {
         this.ensureStream(ev.messageId, conversationId, botId, sender);
-        this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, input: ev.input, done: false });
-        this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "start", input: ev.input });
-        this.db.audit(botId, "tool.start", { tool: ev.tool, input: ev.input, conversationId });
+        const entrada = semSegredo(ev.input);
+        this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, input: entrada, done: false });
+        this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "start", input: entrada });
+        this.db.audit(botId, "tool.start", { tool: ev.tool, input: entrada, conversationId });
         this.anotarTela(botId, ev.tool, ev.input);
         this.anotarCelular(botId, ev.tool, ev.input);
         this.definirAtividade(botId, "Trabalhando", true, "trabalhando");
@@ -1411,8 +1424,9 @@ export class Hub {
       }
       case "tool.done": {
         this.ensureStream(ev.messageId, conversationId, botId, sender);
-        this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, output: ev.output.slice(0, 4000), ok: ev.ok, done: true });
-        this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "done", output: ev.output.slice(0, 4000), ok: ev.ok });
+        const saida = redigir(ev.output).slice(0, 4000);
+        this.recordTool(ev.messageId, { callId: ev.callId, tool: ev.tool, output: saida, ok: ev.ok, done: true });
+        this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "done", output: saida, ok: ev.ok });
         return;
       }
       case "approval.request": {
@@ -1434,8 +1448,9 @@ export class Hub {
         this.storeMessage(conversationId, sender, `Enviou ${ev.name}`, { file: { name: ev.name, path: ev.path, mime: ev.mime } });
         return;
       case "error":
-        this.storeMessage(conversationId, SYSTEM, `Erro em ${sender.name}: ${ev.message}`, { error: true });
-        this.db.audit(botId, "error", { message: ev.message, conversationId });
+        const msgErro = redigir(ev.message);
+        this.storeMessage(conversationId, SYSTEM, `Erro em ${sender.name}: ${msgErro}`, { error: true });
+        this.db.audit(botId, "error", { message: msgErro, conversationId });
         return;
     }
   }
@@ -1833,9 +1848,9 @@ export class Hub {
     });
   }
 
-  requestApprovalFromMcp(botId: string, tool: string, input: unknown, risk: PendingApproval["risk"], description: string): Promise<boolean> {
+  requestApprovalFromMcp(botId: string, tool: string, input: unknown, risk: PendingApproval["risk"], description: string, kind: ApprovalKind = "action"): Promise<boolean> {
     const mode = this.effectiveModeFor(botId);
-    if (!needsHumanApproval(mode, "action", risk)) {
+    if (!needsHumanApproval(mode, kind, risk)) {
       this.db.audit(botId, "approval.auto", { mode, tool, input, risk, description, via: "mcp" });
       return Promise.resolve(true);
     }

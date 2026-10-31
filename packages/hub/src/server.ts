@@ -35,9 +35,16 @@ import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
 import { registerPainel } from "./painel.js";
 import { estadoDaChave } from "./chaves.js";
+import { registrarCofre } from "./cofreRotas.js";
+import { instalarRedacao, redigir } from "./redacao.js";
 
 export async function startServer(hub: Hub) {
+  instalarRedacao();
   const app = Fastify({ logger: false, bodyLimit: 60 * 1024 * 1024 });
+  app.addHook("onSend", async (_req, reply, payload) => {
+    if (reply.statusCode < 400 || typeof payload !== "string") return payload;
+    return redigir(payload);
+  });
   await app.register(fastifyWebsocket, { options: { maxPayload: 60 * 1024 * 1024 } });
   // áudio e uploads chegam como binário cru
   // Corpo vazio com "content-type: application/json" é erro de cliente comum (DELETE e
@@ -435,6 +442,8 @@ export async function startServer(hub: Hub) {
   {
     const ensinados = manager.ensinarGerentesAMontarEquipe();
     if (ensinados.length) console.log(`[hub] gerente(s) ensinados a montar equipe: ${ensinados.join(", ")}`);
+    const cofres = manager.garantirCofres();
+    if (cofres.length) console.log(`[hub] cofre das empresas: ${cofres.join(", ")}`);
   }
   hub.restartBot = (botId) => { if (!manager.get(botId)) return false; manager.restart(botId); return true; };
   // O caminho certo para um bot cuidar da equipe. Antes não existia: o Médico tentava
@@ -777,12 +786,12 @@ export async function startServer(hub: Hub) {
         signal: AbortSignal.timeout(25_000),
       });
       const corpo = await r.text();
-      if (!r.ok) return { ok: false, erro: `HTTP ${r.status}: ${corpo.slice(0, 220)}` };
+      if (!r.ok) return { ok: false, erro: redigir(`HTTP ${r.status}: ${corpo.slice(0, 220)}`) };
       const j = JSON.parse(corpo);
       const txt = String(j?.choices?.[0]?.message?.content ?? "").trim();
       return { ok: !!txt, ms: Date.now() - t0, resposta: txt.slice(0, 60) || "(vazio)" };
     } catch (e) {
-      return { ok: false, erro: (e as Error).message };
+      return { ok: false, erro: redigir((e as Error).message) };
     }
   });
 
@@ -900,7 +909,11 @@ export async function startServer(hub: Hub) {
     // Empresa nasce com o WhatsApp dela subindo: o QR aparece no painel em segundos.
     void hub.whats.conectar(id).catch(() => {});
     // ...e com o Gerente Geral dela, que recebe o chefe e apresenta o sistema.
+    // comGerente/comMedico false é o atalho dos testes: não sobe Gerente nem Cofre.
     if (b.comGerente === false || b.comMedico === false) return { ...e, gerente: null };
+    const cofreBot = manager.criarCofreDaEmpresa(id, e.nome);
+    if ("error" in cofreBot) hub.db.audit(null, "empresa.cofre.falhou", { id, erro: cofreBot.error });
+    else hub.db.setEmpresaDoBot(cofreBot.id, `Cofre — ${e.nome}`, id, false);
     const gerente = manager.criarGerenteDaEmpresa(id, e.nome);
     if ("error" in gerente) {
       hub.db.audit(null, "empresa.gerente.falhou", { id, erro: gerente.error });
@@ -1323,6 +1336,8 @@ export async function startServer(hub: Hub) {
     }
   });
 
+
+  registrarCofre(app, hub);
 
   // --- MCP (ferramentas para os Bots, usado pelo engine opencode) ---
   await registerMcp(app, hub);

@@ -19,6 +19,7 @@ import { CelularDaEmpresa } from "./celular";
 import { TelaDoMac } from "./mac";
 import { Fragment } from "react";
 import { usePainelPrefs, nomeNaTela, ChipTrocas, FolhaAbrirTroca, TrocaEntreBots, DialogoTexto, type Troca, type PrefDoBot } from "./painel";
+import { montarLista } from "./lista";
 
 type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
 
@@ -30,6 +31,8 @@ export function App() {
   definirTonsDaEquipe(state.bots.map((b) => b.id)); // cada bot com a sua cor, sem dois parecidos
   const [selected, setSelected] = useState<string | null>(null); // conversationId
   const [filter, setFilter] = useState("");
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [mais, setMais] = useState(false);
   const [tts, setTts] = useState(() => pref("tts", true));          // resposta em áudio (ligada por padrão)
   const [handsFree, setHandsFree] = useState(() => pref("handsfree", true)); // volta a escutar depois que o bot fala
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -92,25 +95,20 @@ export function App() {
       .filter((b) => mostrarEscondidos || !painel.prefs[b.id]?.escondido)
       // bot do sistema (sem empresa) aparece sempre; o resto só na empresa escolhida
       .filter((b) => empresaAtiva === "todas" || !b.empresaId || b.empresaId === empresaAtiva)
-      .sort((a, b) =>
-        Number(!!painel.prefs[b.id]?.fixado) - Number(!!painel.prefs[a.id]?.fixado)
-        || Number(b.online) - Number(a.online)
-        || nomeNaTela(a, painel.prefs).localeCompare(nomeNaTela(b, painel.prefs)));
+      .sort((a, b) => nomeNaTela(a, painel.prefs).localeCompare(nomeNaTela(b, painel.prefs), "pt"));
   }, [state.bots, filter, painel.prefs, mostrarEscondidos, empresaAtiva]);
 
-  /** A mesma lista, com os cabeçalhos de seção no lugar certo. Fixados sempre
-   *  em cima; depois as seções na ordem em que ele criou; soltos por último. */
-  const listaDaBarra = useMemo(() => {
-    const chave = (b: BotSummary) => painel.prefs[b.id]?.fixado ? "📌 Fixados" : (painel.prefs[b.id]?.secao || "");
-    const grupos = new Map<string, BotSummary[]>();
-    for (const b of bots) { const k = chave(b); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k)!.push(b); }
-    const peso = (n: string) => n.endsWith("Fixados") ? -1 : n === "" ? 99 : painel.secoes.indexOf(n);
-    const saida: Array<{ b: BotSummary; secao?: string }> = [];
-    for (const n of [...grupos.keys()].sort((a, b) => peso(a) - peso(b))) {
-      grupos.get(n)!.forEach((b, i) => saida.push({ b, secao: i === 0 && n ? n : undefined }));
-    }
-    return saida;
-  }, [bots, painel.prefs, painel.secoes]);
+  /** Fixados viram a grade. Na lista, cada empresa põe o gerente na frente. */
+  const listaPronta = useMemo(() => montarLista(bots.map((b) => ({
+    id: b.id,
+    nome: nomeNaTela(b, painel.prefs),
+    empresaId: b.empresaId,
+    fixado: !!painel.prefs[b.id]?.fixado,
+    gerente: !!b.gerente,
+    manages: b.manages,
+    role: b.role,
+  })), empresas), [bots, painel.prefs, empresas]);
+  const porId = useMemo(() => new Map(bots.map((b) => [b.id, b])), [bots]);
 
   const target: Target | null = useMemo(() => {
     if (!selected) return null;
@@ -178,13 +176,25 @@ export function App() {
       )}
       <aside className="sidebar">
         <header className="sidebar-head">
-          <div className="brand"><span className="logo-img"><Ameba id="mybots" size={40} /></span><div><b>MyBots</b><small>{state.connected ? "conectado ao Hub" : "reconectando…"}</small></div></div>
-          <Tema />
-      <Tamanho />
-          <span className={"dot " + (state.connected ? "on" : "off")} />
+          <div className="brand"><span className="logo-img"><Ameba id="mybots" size={32} /></span><div><b>MyBots</b></div></div>
+          <div className="sidebar-canto">
+            <Tema />
+            <button className={"icon-btn canto" + (buscaAberta ? " on" : "")} type="button" title="Buscar" aria-label="Buscar" onClick={() => setBuscaAberta((v) => !v)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            </button>
+            <button className="icon-btn canto" type="button" title="Novo" aria-label="Novo" onClick={() => setMais((v) => !v)}>+</button>
+            {mais && (
+              <div className="mais-menu" role="menu">
+                <button type="button" onClick={() => { setMais(false); setNewBot(true); }}>Novo bot</button>
+                <button type="button" onClick={() => { setMais(false); setNewGerente(true); }}>Novo gerente</button>
+                <button type="button" onClick={() => { setMais(false); setNewGroup(true); }}>Novo grupo</button>
+              </div>
+            )}
+          </div>
         </header>
+        <Tamanho />
         <GlobalControl control={state.control} />
-        <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        {(buscaAberta || filter) && <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />}
         <ul className="bots">
           <li className="atalho-trabalhos" onClick={() => { setVerCelular(true); if (window.innerWidth < 620) setSidebarOpen(false); }}>
             <span className="at-icone" aria-hidden="true">{"\uD83D\uDCF1"}</span><div><b>Celular</b><small>um Android por empresa</small></div>
@@ -208,28 +218,58 @@ export function App() {
               <button className="link" onClick={() => setEmpresaAtiva("todas")}>ver todos</button>
             </li>
           )}
-          <li className="section">Bots <span className="section-acoes">{Object.values(painel.prefs).some((p) => p.escondido) && <button className="link" onClick={() => setMostrarEscondidos(!mostrarEscondidos)}>{mostrarEscondidos ? "ocultar escondidos" : "escondidos"}</button>}<button className="link" onClick={() => setNewGerente(true)}>+ gerente</button><button className="link" onClick={() => setNewBot(true)}>+ novo bot</button></span></li>
-          {listaDaBarra.map(({ b, secao }) => (
-            <Fragment key={b.id}>
-            {secao && <li className="section secao-nome">{secao}</li>}
-            <li key={b.id} className={(dmConversation(b.id) === selected ? "active" : "") + (b.online ? "" : " offline")}
-              onClick={() => { cutucar(b.id); setVerTrabalhos(false); setSelected(dmConversation(b.id)); if (window.innerWidth < 620) setSidebarOpen(false); }}
-              onContextMenu={(e) => { e.preventDefault(); setSelected(dmConversation(b.id)); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
-              <Avatar key={cutuca.id === b.id ? cutuca.n : 0} bot={b} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
-              <div className="bot-text">
-                <div className="bot-name">{(b.manages?.length || b.gerente) ? <span className="coroa" title={b.manages?.length ? `Gerencia ${b.manages.length} bot(s)` : "Gerente Geral da empresa"}>👑</span> : null}{painel.prefs[b.id]?.fixado ? <span className="pin" title="Fixado">📌</span> : null}{nomeNaTela(b, painel.prefs)}{pendingFor(b.id) > 0 && <span className="badge warn">{pendingFor(b.id)}</span>}{(b.unread ?? 0) > 0 && dmConversation(b.id) !== selected && <span className="badge">{b.unread}</span>}</div>
-                {b.role && <div className="papel">{b.role}</div>}
-                <div className={"bot-status" + (b.busy ? " busy" : "") + (pendingFor(b.id) > 0 ? " pedindo" : "")}>
-                  {pendingFor(b.id) > 0 ? "Espera o seu OK" : b.online ? (b.busy ? b.status + "…" : b.preview ?? b.status) : "Offline"}
-                </div>
-              </div>
-              {b.busy && (
-                <button className="row-parar" title={`Parar o ${b.name} (só ele)`} aria-label={"Parar " + b.name}
-                  onClick={(e) => { e.stopPropagation(); void api(`/bots/${b.id}/parar`, { method: "POST" }); }}>⏹</button>
-              )}
-              <button className="row-menu" title="Opções do bot" aria-label={"Opções de " + b.name}
-                onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setSelected(dmConversation(b.id)); setMenu({ bot: b, x: r.right, y: r.bottom }); }}>⋮</button>
+          {Object.values(painel.prefs).some((p) => p.escondido) && (
+            <li className="section"><button className="link" onClick={() => setMostrarEscondidos(!mostrarEscondidos)}>{mostrarEscondidos ? "ocultar escondidos" : "escondidos"}</button></li>
+          )}
+          {listaPronta.fixados.length > 0 && (
+            <li className="grade-wrap">
+              <ul className="grade-fixados">
+                {listaPronta.fixados.map((id) => {
+                  const b = porId.get(id);
+                  if (!b) return null;
+                  const conv = dmConversation(b.id);
+                  return (
+                    <li key={b.id} className={conv === selected ? "ativo" : ""}
+                      onClick={() => { cutucar(b.id); setVerTrabalhos(false); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
+                      onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
+                      <span className="grade-rosto">
+                        <Avatar bot={b} size={64} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
+                        {(b.unread ?? 0) > 0 && <i className="nao-lido" title="não lido" />}
+                      </span>
+                      <span className="grade-nome">{nomeNaTela(b, painel.prefs)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
             </li>
+          )}
+          {listaPronta.grupos.map((g) => (
+            <Fragment key={g.titulo}>
+              <li className="section secao-nome">{g.titulo}</li>
+              {g.ids.map((id) => {
+                const b = porId.get(id);
+                if (!b) return null;
+                const conv = dmConversation(b.id);
+                return (
+                  <li key={b.id} className={"linha-bot" + (conv === selected ? " active" : "") + (b.online ? "" : " offline")}
+                    onClick={() => { cutucar(b.id); setVerTrabalhos(false); setSelected(conv); if (window.innerWidth < 620) setSidebarOpen(false); }}
+                    onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
+                    <Avatar bot={b} size={36} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
+                    <div className="bot-text">
+                      <div className="bot-name">{nomeNaTela(b, painel.prefs)}{(b.unread ?? 0) > 0 && conv !== selected && <span className="badge">{b.unread}</span>}</div>
+                      <div className={"bot-status" + (b.busy ? " busy" : "") + (pendingFor(b.id) > 0 ? " pedindo" : "")}>
+                        {pendingFor(b.id) > 0 ? "Espera o seu OK" : b.online ? (b.busy ? b.status + "…" : b.preview ?? b.status) : "Offline"}
+                      </div>
+                    </div>
+                    {b.busy && (
+                      <button className="row-parar" title={`Parar o ${b.name} (só ele)`} aria-label={"Parar " + b.name}
+                        onClick={(e) => { e.stopPropagation(); void api(`/bots/${b.id}/parar`, { method: "POST" }); }}>⏹</button>
+                    )}
+                    <button className="row-menu" title="Opções do bot" aria-label={"Opções de " + b.name}
+                      onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setSelected(conv); setMenu({ bot: b, x: r.right, y: r.bottom }); }}>⋮</button>
+                  </li>
+                );
+              })}
             </Fragment>
           ))}
           {!bots.length && <li className="empty">Nenhum bot conectado ainda. Rode o nó em cada PC.</li>}

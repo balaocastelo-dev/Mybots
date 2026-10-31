@@ -10,6 +10,8 @@ export default defineConfig({
     proxy: {
       "/api": hub,
       "/ws": { target: hub.replace(/^http/, "ws"), ws: true },
+      "/pc": hub,
+      "/android": hub,
     },
   },
   build: { outDir: "dist", emptyOutDir: true },

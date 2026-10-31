@@ -1654,11 +1654,22 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   .app, .app.sidebar-closed { grid-template-columns: 248px minmax(0, 1fr); }
   .app.sidebar-closed { grid-template-columns: 0 minmax(0, 1fr); }
 }
+.row-pin {
+  flex: none; width: 26px; height: 26px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--fraco); cursor: pointer;
+  display: grid; place-items: center; opacity: 0;
+}
+.bots li:hover .row-pin, .row-pin.on, .row-pin:focus-visible { opacity: 1; color: var(--text); }
+@media (hover: none) { .row-pin { opacity: 1; } }
+.card.approval, .card.question, .card.acao {
+  border-left-width: 0; border-radius: 18px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .04);
+}
+.arq, .arq.video { border-radius: 16px; overflow: hidden; }
 @media (max-width: 720px) {
   .app { grid-template-columns: minmax(0, 1fr); }
   .sidebar {
-    position: absolute; inset: 0 auto 0 0; width: min(100%, 320px); z-index: 20;
-    box-shadow: 12px 0 32px rgba(0, 0, 0, .2);
+    position: absolute; inset: 0; width: 100%; z-index: 20;
   }
   .app.sidebar-closed .sidebar { display: none; }
 }

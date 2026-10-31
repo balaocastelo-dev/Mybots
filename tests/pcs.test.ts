@@ -1,13 +1,14 @@
 // Um PC por bot: registro estável, sem subir todo mundo, ociosidade e o gancho do celular.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { idDoAndroid, limparProvedoresAndroid, registrarProvedorAndroid, resolverAlvoAndroid } from "../packages/hub/src/android.ts";
 import { definirDocker, docker, nomesDeContainerEmpresa, portaIntocavel, portasDaChave, type ExecDocker } from "../packages/hub/src/dockerPc.ts";
-import { NAVEGADOR_DO_PC, acordarPc, abrirTela, botPadraoDaEmpresa, classificarRotaPc, deveParar, espectadores, fecharTela, lerRegistro, migrarRegistros, politicaDoPc, registrarPc, varrerOciosos, zerarUsoParaTeste } from "../packages/hub/src/pcs.ts";
+import { NAVEGADOR_DO_PC, acessoAberto, acordarPc, abrirTela, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, deveParar, espectadores, fecharTela, lerRegistro, listarMaquinas, migrarRegistros, politicaDoPc, registrarPc, varrerOciosos, zerarUsoParaTeste } from "../packages/hub/src/pcs.ts";
 import { botsDaPasta, botsDoBanco, executarMigracao } from "../scripts/migrar-pcs-por-bot.ts";
 
 function pasta(): string {
@@ -158,6 +159,27 @@ describe("pc por bot", { concurrency: 1 }, () => {
       assert.equal(run.includes(NAVEGADOR_DO_PC.imagem), true);
       assert.equal(run.includes("0.0.0.0:"), false);
 
+      const subidasAntes = chamadas.filter((a) => a[0] === "run" || a[0] === "start").length;
+      const lista = await listarMaquinas();
+      assert.equal(chamadas.filter((a) => a[0] === "run" || a[0] === "start").length, subidasAntes);
+      const pcLia = lista.find((x) => x.botId === "lia" && x.tipo === "pc");
+      const andLia = lista.find((x) => x.botId === "lia" && x.tipo === "android");
+      assert.equal(pcLia?.estado, "ligado");
+      assert.equal(pcLia?.porta, lia.portaTela);
+      assert.equal(pcLia?.ultimoUso, 10);
+      assert.equal(pcLia?.acessoLiberado, true);
+      assert.equal(pcLia?.empresaId, null);
+      assert.equal(andLia?.estado, "sem-provedor");
+      assert.equal(andLia?.porta, null);
+      assert.equal(acessoAberto("lia"), true);
+      assert.equal(definirAcessoPc("lia", false)?.acessoLiberado, false);
+      assert.equal(acessoAberto("lia"), false);
+      assert.equal((await listarMaquinas()).find((x) => x.botId === "lia" && x.tipo === "pc")?.acessoLiberado, false);
+      migrarRegistros([{ id: "lia", nome: "Lia", empresaId: "balao" }]);
+      assert.equal(acessoAberto("lia"), false);
+      assert.equal(lerRegistro("lia")?.empresaId, "balao");
+      definirAcessoPc("lia", true);
+
       assert.equal(await resolverAlvoAndroid("bia"), null);
       registrarProvedorAndroid({
         id: "redroid",
@@ -188,6 +210,40 @@ describe("pc por bot", { concurrency: 1 }, () => {
       const dockerAntes = chamadas.length;
       await resolverAlvoAndroid("bia");
       assert.equal(chamadas.length, dockerAntes);
+      const celBia = (await listarMaquinas()).find((x) => x.botId === "bia" && x.tipo === "android");
+      assert.equal(celBia?.estado, "ligado");
+      assert.equal(celBia?.porta, 37123);
+
+      limparProvedoresAndroid();
+      let resolveu = false;
+      registrarProvedorAndroid({
+        id: "wifi",
+        prioridade: 10,
+        relatar: async () => ({ estado: "desligado", porta: 5555, ultimoUso: 9 }),
+        resolver: async () => { resolveu = true; return { tipo: "aparelho", serial: "192.168.15.20:5555", host: "192.168.15.20", porta: 5555 }; },
+      });
+      registrarProvedorAndroid({
+        id: "redroid-baixo",
+        prioridade: 1,
+        relatar: async () => ({ estado: "ligado", porta: 8787 }),
+        resolver: async () => null,
+      });
+      const relato = (await listarMaquinas()).find((x) => x.botId === "bia" && x.tipo === "android");
+      assert.equal(relato?.estado, "desligado");
+      assert.equal(relato?.porta, 5555);
+      assert.equal(relato?.ultimoUso, 9);
+      assert.equal(resolveu, false);
+      limparProvedoresAndroid();
+      registrarProvedorAndroid({
+        id: "porta-ruim",
+        prioridade: 1,
+        relatar: async () => ({ estado: "erro", porta: 8791 }),
+        resolver: async () => null,
+      });
+      const ruim = (await listarMaquinas()).find((x) => x.botId === "bia" && x.tipo === "android");
+      assert.equal(ruim?.estado, "erro");
+      assert.equal(ruim?.porta, null);
+      limparProvedoresAndroid();
 
       const dbArq = path.join(dir, "hub.sqlite");
       const db = new Database(dbArq);
@@ -295,6 +351,130 @@ describe("pc por bot", { concurrency: 1 }, () => {
       if (anterior.cpu === undefined) delete process.env.MYBOTS_PC_CPU; else process.env.MYBOTS_PC_CPU = anterior.cpu;
       if (anterior.ponte === undefined) delete process.env.MYBOTS_PC_PONTE; else process.env.MYBOTS_PC_PONTE = anterior.ponte;
       zerarUsoParaTeste();
+    }
+  });
+
+  test("aba Computadores: lista, liga, desliga e trava a tela", { timeout: 40_000 }, async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mybots-api-pc-"));
+    const senha = "senha-da-aba";
+    const porta = 18794;
+    const hubDir = path.resolve(import.meta.dirname, "../packages/hub");
+    let log = "";
+    const hub: ChildProcess = spawn(process.execPath, ["--import", "tsx", path.join(hubDir, "src/index.ts")], {
+      cwd: hubDir,
+      env: {
+        ...process.env,
+        MYBOTS_HUB_HOST: "127.0.0.1",
+        MYBOTS_HUB_PORT: String(porta),
+        MYBOTS_HUB_TOKEN: "token-teste-maquinas",
+        MYBOTS_UI_PASSWORD: senha,
+        MYBOTS_DB: path.join(dir, "hub.sqlite"),
+        MYBOTS_BOTS_DIR: path.join(dir, "bots"),
+        MYBOTS_UI_DIST: path.join(dir, "sem-ui"),
+        MYBOTS_MAQUINAS_DIR: path.join(dir, "maquinas"),
+        MYBOTS_PC_PONTE: "0",
+        MYBOTS_PC_IMAGEM: "",
+        TELEGRAM_BOT_TOKEN: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    hub.stdout?.on("data", (d) => { log += d.toString(); });
+    hub.stderr?.on("data", (d) => { log += d.toString(); });
+    const base = `http://127.0.0.1:${porta}`;
+    const k = `k=${encodeURIComponent(senha)}`;
+    const matar = () => { try { hub.kill("SIGTERM"); } catch { /* já saiu */ } };
+    try {
+      const fim = Date.now() + 20_000;
+      let noAr = false;
+      while (Date.now() < fim) {
+        try {
+          const r = await fetch(`${base}/api/health?${k}`);
+          if (r.ok) { noAr = true; break; }
+        } catch { /* ainda subindo */ }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      assert.equal(noAr, true, "o hub de teste não subiu\n" + log.replaceAll(senha, "***").slice(-800));
+
+      const semSenha = await fetch(`${base}/api/maquinas`);
+      assert.equal(semSenha.status, 401);
+
+      const vazia = await (await fetch(`${base}/api/maquinas?${k}`)).json() as unknown[];
+      assert.deepEqual(vazia, []);
+
+      const emp = await fetch(`${base}/api/empresas?${k}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ nome: "Casa", comGerente: false }),
+      });
+      assert.equal(emp.status, 200, await emp.text());
+      const criado = await fetch(`${base}/api/managed?${k}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Bia Tela",
+          empresa: "casa",
+          engine: "direct",
+          provider: { kind: "nous", model: "mock-1", apiKey: "k" },
+        }),
+      });
+      const bot = await criado.json() as { id?: string; error?: string };
+      assert.equal(criado.status, 200, JSON.stringify(bot));
+      assert.equal(bot.id, "bia-tela");
+
+      const lista = await (await fetch(`${base}/api/maquinas?${k}`)).json() as Array<{ botId: string; empresaId: string | null; tipo: string; estado: string; porta: number | null; ultimoUso: number | null; acessoLiberado: boolean }>;
+      const pc = lista.find((x) => x.botId === "bia-tela" && x.tipo === "pc");
+      const cel = lista.find((x) => x.botId === "bia-tela" && x.tipo === "android");
+      assert.ok(pc, JSON.stringify(lista));
+      assert.equal(pc.empresaId, "casa");
+      assert.equal(pc.acessoLiberado, true);
+      assert.equal(pc.estado === "ligado" || pc.estado === "desligado" || pc.estado === "erro", true);
+      assert.equal(typeof pc.porta, "number");
+      assert.equal(pc.porta === 8787 || pc.porta === 8791, false);
+      assert.equal(cel?.estado, "sem-provedor");
+      assert.equal(cel?.acessoLiberado, true);
+
+      const trava = await fetch(`${base}/api/maquinas/bia-tela/acesso?${k}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ liberado: false }),
+      });
+      assert.equal(trava.status, 200);
+      const tela = await fetch(`${base}/pc/bia-tela/?${k}`);
+      assert.equal(tela.status, 403);
+      const pelaEmpresa = await fetch(`${base}/pc/casa/?${k}`);
+      assert.equal(pelaEmpresa.status, 403);
+      const ruim = await fetch(`${base}/api/maquinas/bia-tela/acesso?${k}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ liberado: "sim" }),
+      });
+      assert.equal(ruim.status, 400);
+
+      const abre = await fetch(`${base}/api/maquinas/bia-tela/acesso?${k}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ liberado: true }),
+      });
+      assert.equal(abre.status, 200);
+      const telaAberta = await fetch(`${base}/pc/bia-tela/?${k}`);
+      assert.notEqual(telaAberta.status, 403);
+
+      const desliga = await fetch(`${base}/api/maquinas/bia-tela/desligar?${k}`, { method: "POST" });
+      assert.equal(desliga.status, 200);
+      const linhaOff = await desliga.json() as { tipo: string; estado: string; acessoLiberado: boolean };
+      assert.equal(linhaOff.tipo, "pc");
+      assert.equal(linhaOff.acessoLiberado, true);
+      assert.equal(linhaOff.estado === "desligado" || linhaOff.estado === "erro", true);
+
+      const liga = await fetch(`${base}/api/maquinas/bia-tela/ligar?${k}`, { method: "POST" });
+      assert.equal(liga.status, 200);
+      const linhaOn = await liga.json() as { estado: string };
+      assert.equal(["ligado", "desligado", "ligando", "erro"].includes(linhaOn.estado), true);
+
+      const fantasma = await fetch(`${base}/api/maquinas/nao-existe/ligar?${k}`, { method: "POST" });
+      assert.equal(fantasma.status, 404);
+    } finally {
+      matar();
     }
   });
 });

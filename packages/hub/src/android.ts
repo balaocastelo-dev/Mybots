@@ -27,12 +27,26 @@ export type AlvoContainer = {
 /** Para onde o stream do celular deve ir. Quem resolve é o provedor, não esta rota. */
 export type AlvoAndroid = AlvoAparelho | AlvoContainer;
 
+/** O que a aba Computadores mostra. `sem-provedor` = ninguém resolveu este bot. */
+export type EstadoRelatado = "ligado" | "desligado" | "ligando" | "erro" | "sem-provedor";
+
+export type RelatoAndroid = {
+  estado: EstadoRelatado;
+  porta?: number | null;
+  ultimoUso?: number | null;
+};
+
 export type ProvedorAndroid = {
   id: string;
   /** Maior ganha. O aparelho real registra acima do redroid. */
   prioridade: number;
   /** `null` = este provedor não atende o bot; tenta o próximo. */
   resolver(botId: string): Promise<AlvoAndroid | null>;
+  /**
+   * Opcional. A lista de máquinas usa isto e não liga aparelho nem container.
+   * Sem `relatar`, a lista olha o alvo do `resolver`: se houver, estado `ligado`.
+   */
+  relatar?(botId: string): Promise<RelatoAndroid | null>;
 };
 
 export type ContextoAndroid = { botId: string; alvo: AlvoAndroid };
@@ -104,6 +118,41 @@ export async function resolverAlvoAndroid(botId: string): Promise<AlvoAndroid | 
     return alvo;
   }
   return null;
+}
+
+const ESTADOS_RELATO = new Set<EstadoRelatado>(["ligado", "desligado", "ligando", "erro", "sem-provedor"]);
+
+function portaRelato(porta: number | null | undefined): number | null {
+  if (porta == null) return null;
+  if (!Number.isInteger(porta) || porta < 1 || porta > 65535) return null;
+  if (porta === 8787 || porta === 8791) return null;
+  return porta;
+}
+
+function ordemDosProvedores(): ProvedorAndroid[] {
+  return [...provedores.values()].sort((a, b) => b.prioridade - a.prioridade || a.id.localeCompare(b.id));
+}
+
+/**
+ * O que a aba mostra do celular. Não chama o Docker e não chama o adb daqui:
+ * só lê o que o provedor relatar. Sem provedor, ou sem alvo, o estado é
+ * `sem-provedor`.
+ */
+export async function relatoDoAndroid(botId: string): Promise<{ estado: EstadoRelatado; porta: number | null; ultimoUso: number | null }> {
+  const ordem = ordemDosProvedores();
+  if (!ordem.length) return { estado: "sem-provedor", porta: null, ultimoUso: null };
+  for (const p of ordem) {
+    if (!p.relatar) continue;
+    try {
+      const r = await p.relatar(botId);
+      if (!r || !ESTADOS_RELATO.has(r.estado)) continue;
+      const ultimo = typeof r.ultimoUso === "number" && Number.isFinite(r.ultimoUso) ? r.ultimoUso : null;
+      return { estado: r.estado, porta: portaRelato(r.porta), ultimoUso: ultimo };
+    } catch { /* o próximo provedor ainda pode responder */ }
+  }
+  const alvo = await resolverAlvoAndroid(botId);
+  if (alvo) return { estado: "ligado", porta: alvo.porta, ultimoUso: null };
+  return { estado: "sem-provedor", porta: null, ultimoUso: null };
 }
 
 export function rotaAndroid(botId: string) {

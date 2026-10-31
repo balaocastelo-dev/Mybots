@@ -20,7 +20,7 @@ import { alvoDaPonte, caminhoDaTela, caminhoNoContainer, idDaTela, idSeguro, por
 import { videoExigeSenha } from "./gravacao.js";
 import { abrirWsDaTela, encaminharHttp } from "./ponteTela.js";
 import { idDoAndroid, listarProvedoresAndroid, resolverAlvoAndroid, tratadorAndroid } from "./android.js";
-import { acordarPc, atualizarEmpresaDoPc, botPadraoDaEmpresa, classificarRotaPc, abrirTela, fecharTela, iniciarVarreduraOciosa, lerRegistro, registrarPc, type BotParaPc } from "./pcs.js";
+import { acordarPc, acessoAberto, atualizarEmpresaDoPc, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, abrirTela, fecharTela, iniciarVarreduraOciosa, lerRegistro, ligarPc, listarMaquinas, pararPc, registrarPc, type BotParaPc } from "./pcs.js";
 // O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
 const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900 };
 import { PROVEDORES } from "@mybots/shared";
@@ -94,8 +94,19 @@ export async function startServer(hub: Hub) {
       createdAt: managed.get(b.id)?.createdAt ?? 0,
     }));
   };
-  const portaDaTela = async (id: string): Promise<{ porta: number; naRaiz: boolean; botId?: string } | null> => {
+  const telaBloqueada = (id: string): boolean => {
+    if (!idSeguro(id)) return false;
+    const classe = classificarRotaPc(id, !!hub.db.getEmpresa(id), !!lerRegistro(id));
+    if (classe === "bot") return !acessoAberto(id);
+    if (classe === "empresa") {
+      const padrao = botPadraoDaEmpresa(id, botsParaPc());
+      return !!padrao && !acessoAberto(padrao);
+    }
+    return false;
+  };
+  const portaDaTela = async (id: string): Promise<{ porta: number; naRaiz: boolean; botId?: string } | { bloqueada: true } | null> => {
     if (!idSeguro(id)) return null;
+    if (telaBloqueada(id)) return { bloqueada: true };
     const c = cacheTela.get(id);
     if (c && Date.now() - c.em < 2000) return c.porta == null ? null : { porta: c.porta, naRaiz: c.naRaiz, botId: c.botId };
     const classe = classificarRotaPc(id, !!hub.db.getEmpresa(id), !!lerRegistro(id));
@@ -141,6 +152,7 @@ export async function startServer(hub: Hub) {
     const id = idDaTela(url);
     if (!id) return reply.code(404).send({ error: "tela indisponível" });
     const alvo = await portaDaTela(id);
+    if (alvo && "bloqueada" in alvo) return reply.code(403).send({ error: "o acesso a esta tela está fechado" });
     const caminho = alvo ? caminhoUpstream(url, alvo.naRaiz) : null;
     if (!caminho || !alvo) return reply.code(alvo ? 404 : 503).send({ error: alvo ? "tela indisponível" : "o PC desta empresa está desligado" });
     encaminharHttp(req, reply, alvo.porta, caminho);
@@ -166,6 +178,13 @@ export async function startServer(hub: Hub) {
       }
       if (idAndroid) {
         await responderAndroid(req, reply, idAndroid);
+        return;
+      }
+    }
+    if (caminho.startsWith("/pc/")) {
+      const idPc = idDaTela(req.url);
+      if (idPc && telaBloqueada(idPc)) {
+        reply.code(403).send({ error: "o acesso a esta tela está fechado" });
         return;
       }
     }
@@ -213,7 +232,10 @@ export async function startServer(hub: Hub) {
     };
     void (async () => {
       let porta: number | null = null;
-      if (destino.startsWith("empresa:")) porta = (await portaDaTela(destino.slice("empresa:".length)))?.porta ?? null;
+      if (destino.startsWith("empresa:")) {
+        const tela = await portaDaTela(destino.slice("empresa:".length));
+        porta = tela && "porta" in tela ? tela.porta : null;
+      }
       if (morto) return;
       const alvo = alvoDaPonte(destino, { mac: MAC_VNC, portaDaEmpresa: () => porta });
       if (!alvo) return fim();
@@ -246,8 +268,9 @@ export async function startServer(hub: Hub) {
       const id = idDaTela(url);
       const caminho = caminhoDaTela(url);
       if (morto) return;
-      if (!id || !caminho) { try { socket.close(); } catch { /* ok */ } return; }
+      if (!id || !caminho || telaBloqueada(id)) { try { socket.close(); } catch { /* ok */ } return; }
       const alvo = await portaDaTela(id);
+      if (alvo && "bloqueada" in alvo) { try { socket.close(); } catch { /* ok */ } return; }
       const upstream = alvo ? caminhoUpstream(url, alvo.naRaiz) : null;
       if (morto) return;
       if (!alvo || !upstream) { try { socket.close(); } catch { /* ok */ } return; }
@@ -582,6 +605,31 @@ export async function startServer(hub: Hub) {
 
   // O PC da empresa: um Linux so dela, em container, nesta mesma maquina. A tela
   // vai por noVNC, entao o chefe assiste o bot em vez de ler o que ele fez.
+  app.get("/api/maquinas", async () => listarMaquinas());
+  app.post("/api/maquinas/:botId/ligar", async (req, reply) => {
+    const id = String((req.params as any).botId ?? "");
+    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc não registrado" });
+    await ligarPc(id);
+    const linha = (await listarMaquinas()).find((m) => m.botId === id && m.tipo === "pc");
+    return linha ?? reply.code(404).send({ error: "pc não registrado" });
+  });
+  app.post("/api/maquinas/:botId/desligar", async (req, reply) => {
+    const id = String((req.params as any).botId ?? "");
+    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc não registrado" });
+    await pararPc(id);
+    const linha = (await listarMaquinas()).find((m) => m.botId === id && m.tipo === "pc");
+    return linha ?? reply.code(404).send({ error: "pc não registrado" });
+  });
+  app.put("/api/maquinas/:botId/acesso", async (req, reply) => {
+    const id = String((req.params as any).botId ?? "");
+    const liberado = (req.body as { liberado?: unknown } | null)?.liberado;
+    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc não registrado" });
+    if (typeof liberado !== "boolean") return reply.code(400).send({ error: "liberado deve ser true ou false" });
+    definirAcessoPc(id, liberado);
+    cacheTela.clear();
+    return { botId: id, acessoLiberado: liberado };
+  });
+
   app.get("/api/empresas/:id/maquina", async (req) => {
     const id = (req.params as any).id as string;
     const emp = hub.db.getEmpresa(id);

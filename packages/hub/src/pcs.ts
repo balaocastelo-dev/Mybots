@@ -17,7 +17,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { rotaAndroid } from "./android.js";
+import { relatoDoAndroid, rotaAndroid, type EstadoRelatado } from "./android.js";
 import {
   IMAGEM_PC, MARCA_RAIZ, docker, garantirPonte, limpo, nomesDeContainerEmpresa,
   portaIntocavel, portasDaChave, raizMaquinas, temDocker,
@@ -45,7 +45,19 @@ export type RegistroPc = {
   /** Caminho relativo à pasta das máquinas. O volume antigo da empresa não é este. */
   volume: string;
   criadoEm: number;
+  /** A tela do painel. Ausente no registro antigo = liberado. */
+  acessoLiberado?: boolean;
   android: { rota: string };
+};
+
+export type LinhaMaquina = {
+  botId: string;
+  empresaId: string | null;
+  tipo: "pc" | "android";
+  estado: EstadoRelatado;
+  porta: number | null;
+  ultimoUso: number | null;
+  acessoLiberado: boolean;
 };
 
 export type EstadoPc = RegistroPc & {
@@ -67,6 +79,7 @@ export type BotParaPc = {
 const uso = new Map<string, number>();
 const olhos = new Map<string, number>();
 const ligando = new Map<string, Promise<EstadoPc | null>>();
+const ultimoErro = new Map<string, string>();
 /** Bot ainda sem container e sem imagem local: não consulta o Docker a cada mensagem. */
 const semImagemAte = new Map<string, number>();
 let cacheMapa: { raiz: string; mtime: number; mapa: Record<string, RegistroPc> } | null = null;
@@ -212,6 +225,7 @@ export function registrarPc(p: { botId: string; empresaId: string | null; nome?:
     portaCdp: portas.portaCdp,
     volume,
     criadoEm: Date.now(),
+    acessoLiberado: true,
     android: { rota: rotaAndroid(p.botId) },
   };
   mapa[p.botId] = reg;
@@ -263,6 +277,31 @@ export function classificarRotaPc(id: string, temEmpresa: boolean, temPcDeBot: b
   if (temEmpresa) return "empresa";
   if (temPcDeBot) return "bot";
   return "nenhum";
+}
+
+/** Registro antigo sem o campo continua aberto: a tela que já existia não trava sozinha. */
+export function acessoAberto(botId: string): boolean {
+  const r = lerRegistro(botId);
+  if (!r) return true;
+  return r.acessoLiberado !== false;
+}
+
+export function definirAcessoPc(botId: string, liberado: boolean): RegistroPc | null {
+  if (!idSeguro(botId)) return null;
+  const mapa = lerMapa();
+  const atual = mapa[botId];
+  if (!atual) return null;
+  atual.acessoLiberado = liberado;
+  gravarMapa(mapa);
+  return atual;
+}
+
+export function ultimoUsoDo(botId: string): number | null {
+  return uso.has(botId) ? (uso.get(botId) as number) : null;
+}
+
+export function estaLigando(botId: string): boolean {
+  return ligando.has(botId);
 }
 
 export function tocarPc(botId: string, agora = Date.now()) {
@@ -353,10 +392,17 @@ function argumentosDeSubida(reg: RegistroPc): string[] {
 export function acordarPc(botId: string, agora = Date.now()): Promise<EstadoPc | null> {
   const ja = ligando.get(botId);
   if (ja) return ja;
-  const p = acordarMesmo(botId, agora).finally(() => ligando.delete(botId));
+  const p = acordarMesmo(botId, agora).then((est) => {
+    if (est?.erro && est.estado !== "ligada") ultimoErro.set(botId, est.erro);
+    else ultimoErro.delete(botId);
+    return est;
+  }).finally(() => ligando.delete(botId));
   ligando.set(botId, p);
   return p;
 }
+
+/** O mesmo que `acordarPc`. A aba Computadores chama por este nome. */
+export const ligarPc = acordarPc;
 
 async function acordarMesmo(botId: string, agora: number): Promise<EstadoPc | null> {
   const reg = lerRegistro(botId);
@@ -445,11 +491,49 @@ export function iniciarVarreduraOciosa(op: { ocupado: (botId: string) => boolean
   return t;
 }
 
+function estadoNaLista(est: EstadoPc | null, botId: string): EstadoRelatado {
+  if (estaLigando(botId) && est?.estado !== "ligada") return "ligando";
+  if (!est) return "erro";
+  if (est.estado === "ligada") return "ligado";
+  if (est.estado === "sem-docker" || est.erro || ultimoErro.has(botId)) return "erro";
+  return "desligado";
+}
+
+/** PC e celular de cada bot registrado. Não sobe container. */
+export async function listarMaquinas(): Promise<LinhaMaquina[]> {
+  const linhas: LinhaMaquina[] = [];
+  for (const reg of listarRegistros()) {
+    const est = await estadoDoPc(reg.botId);
+    const aberto = reg.acessoLiberado !== false;
+    linhas.push({
+      botId: reg.botId,
+      empresaId: reg.empresaId,
+      tipo: "pc",
+      estado: estadoNaLista(est, reg.botId),
+      porta: reg.portaTela,
+      ultimoUso: ultimoUsoDo(reg.botId),
+      acessoLiberado: aberto,
+    });
+    const cel = await relatoDoAndroid(reg.botId);
+    linhas.push({
+      botId: reg.botId,
+      empresaId: reg.empresaId,
+      tipo: "android",
+      estado: cel.estado,
+      porta: cel.porta,
+      ultimoUso: cel.ultimoUso,
+      acessoLiberado: aberto,
+    });
+  }
+  return linhas;
+}
+
 /** Usado pelo teste para não herdar relógio de outro caso. */
 export function zerarUsoParaTeste() {
   uso.clear();
   olhos.clear();
   ligando.clear();
+  ultimoErro.clear();
   semImagemAte.clear();
   imagemCache = null;
   cacheMapa = null;

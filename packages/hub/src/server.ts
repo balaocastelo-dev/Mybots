@@ -40,7 +40,7 @@ import { estadoDaChave } from "./chaves.js";
 import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
-import { authOnlineAtivo, cookieDe, registrarAuthOnline, rotaPublicaOnline, sessaoValida, SESSION_COOKIE } from "./authOnline.js";
+import { authOnlineAtivo, cookieDe, hubTokenLoopbackOk, registrarAuthOnline, rotaPublicaOnline, sessaoValida, SESSION_COOKIE } from "./authOnline.js";
 
 export async function startServer(hub: Hub) {
   instalarRedacao();
@@ -182,7 +182,7 @@ export async function startServer(hub: Hub) {
     if (authOnlineAtivo()) {
       if (rotaPublicaOnline(req.url) || open) return;
       if (rotaComSenha(req.url) || req.url.split("?")[0].startsWith("/api/") || req.url.split("?")[0].startsWith("/ws/")) {
-        if (!(uiAuthorized(req) || nodeAuthorized(req))) {
+        if (!(uiAuthorized(req) || nodeAuthorized(req) || hubTokenLoopbackOk(req))) {
           reply.code(401).send({ error: "nao autenticado" });
           return;
         }

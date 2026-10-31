@@ -1,4 +1,4 @@
-﻿import crypto from "node:crypto";
+import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "./config.js";
 
@@ -75,6 +75,19 @@ export function sessaoValida(req: FastifyRequest): boolean {
   if (!tok) return false;
   const s = lerSessao(tok);
   return !!s && s.u === config.usuarioOnline;
+}
+
+/** Bearer MYBOTS_HUB_TOKEN so para processos locais (key watcher). Recusa se veio pelo tunel. */
+export function hubTokenLoopbackOk(req: FastifyRequest): boolean {
+  if (!config.hubToken) return false;
+  const token = String(req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (!token || token !== config.hubToken) return false;
+  // Pedido pelo tunel/proxy: nunca aceitar o token do hub remotamente
+  if (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.headers["x-real-ip"]) return false;
+  const peer = String((req.raw as any)?.socket?.remoteAddress ?? req.socket?.remoteAddress ?? req.ip ?? "")
+    .replace(/^::ffff:/i, "")
+    .toLowerCase();
+  return peer === "127.0.0.1" || peer === "::1" || peer === "localhost";
 }
 
 function setSessionCookie(reply: FastifyReply, usuario: string) {
@@ -158,7 +171,7 @@ export function registrarAuthOnline(app: FastifyInstance) {
       return reply.code(401).send({ error: "usuario ou senha invalidos" });
     }
     limparFalhas(ip);
-    setSessionCookie(reply, config.usuarioOnline, req);
+    setSessionCookie(reply, config.usuarioOnline);
     return { ok: true, usuario: config.usuarioOnline };
   });
 

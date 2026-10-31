@@ -1,16 +1,10 @@
 /**
- * Ponto de extensão do Android de cada bot.
+ * Atalho local, só enquanto o registro de provedores do PR do PC não está na main.
  *
- * O PC do bot (container mybots-bot-<botId>, liga sob demanda, desliga ocioso)
- * mora em maquinas.ts — outro agente. Este arquivo NÃO mexe naquele módulo.
- * Quem liga e desliga o PC chama o gancho na hora da ação, não no import:
- *
- *   import { ganchoAndroid } from "./androidHook.js";
- *   await ganchoAndroid()?.aoLigarPc(botId);
- *   await ganchoAndroid()?.aoDesligarPc(botId);
- *
- * O Hub registra o gancho ao subir. Antes disso, ganchoAndroid() devolve null.
- * A tela em si não depende desta chamada: ela já está em /android/<botId>/.
+ * Aquele PR não importa este arquivo. O ciclo do PC chama os métodos opcionais
+ * aoLigarPc/aoDesligarPc do provedor, pelo registro (avisarProvedores). Este
+ * gancho só repete essa chamada para quem ainda estiver na main de hoje.
+ * No rebase ele sai. Ver docs/ANDROID.md.
  */
 
 export type GanchoAndroid = {

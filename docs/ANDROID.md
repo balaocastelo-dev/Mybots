@@ -68,23 +68,53 @@ O que o pareamento faz, nesta ordem: `adb pair IP:porta codigo`, `adb connect IP
 
 Se o IP do celular mudar, pareie de novo. O código antigo não serve; o Android gera outro.
 
-## Gancho para o PC do bot
+## Provedor `aparelho` (registro plugável)
 
-`packages/hub/src/androidHook.ts`. O `maquinas.ts` (o outro agente, containers `mybots-bot-<botId>`) chama isto **dentro** de ligar e desligar, não no import — no import o gancho ainda é `null`.
+O PR do PC por bot traz `packages/hub/src/android.ts`: `/android/<botId>/` pergunta ao provedor (503 se ninguém resolver) e `/api/maquinas` usa `relatar()`. Aquele PR **não** importa `androidHook.ts`.
+
+Este PR continua na main e não depende daquele arquivo. O adaptador isolado é `packages/hub/src/androidProvedor.ts`. Na main de hoje ele tem o próprio registro, com os mesmos nomes (`registrarProvedorAndroid`, `resolverAlvoAndroid`, `relatoDoAndroid`). Ao subir, o Hub registra:
+
+| id | prioridade | papel |
+| --- | --- | --- |
+| `aparelho` | 10 | telefone real, `adb` no PC host |
+| `redroid` | 1 | container, só com `MYBOTS_ANDROID_FALLBACK` |
+
+`aoLigarPc` e `aoDesligarPc` são métodos opcionais do provedor. `avisarProvedores("ligar" \| "desligar", botId)` percorre o registro por prioridade e chama quem tiver o método. O aparelho reconecta e, se estiver online, abre o WhatsApp Web. O redroid só sobe se não houver cadastro. `relatar` lê o estado e **não** chama `adb connect`.
+
+`androidHook.ts` ficou só como atalho da main de hoje: o gancho chama `avisarProvedores`. No rebase ele sai.
+
+### Depois do rebase sobre o #13 (o #13 entra primeiro)
+
+Não rebasear antes do #13 estar na base. Quando for a hora:
+
+1. Apagar o registro local de `androidProvedor.ts` (o `Map`, `registrarProvedorAndroid`, `resolverAlvoAndroid`, `relatoDoAndroid`, `avisarProvedores`). Ficam `provedorAparelho`, `provedorRedroid` e `instalarProvedores`.
+2. Em `android.ts` do #13, no tipo `ProvedorAndroid`, acrescentar:
 
 ```ts
-import { ganchoAndroid } from "./androidHook.js";
+aoLigarPc?(botId: string): Promise<void>;
+aoDesligarPc?(botId: string): Promise<void>;
 
-// depois que o container mybots-bot-<botId> ficou de pé:
-await ganchoAndroid()?.aoLigarPc(botId);
-
-// quando o PC ocioso desliga:
-await ganchoAndroid()?.aoDesligarPc(botId);
+export async function avisarAndroid(evento: "ligar" | "desligar", botId: string): Promise<void> {
+  for (const p of ordemDosProvedores()) {
+    const fn = evento === "ligar" ? p.aoLigarPc : p.aoDesligarPc;
+    if (!fn) continue;
+    try { await fn.call(p, botId); } catch { /* o próximo ainda corre */ }
+  }
+}
 ```
 
-`aoLigarPc` reconecta o aparelho já cadastrado. `aoDesligarPc` para o stream. O pareamento continua. A URL da tela é `ganchoAndroid()?.caminho(botId)` → `/android/<botId>/`.
+3. Em `pcs.ts`, no fim de `acordarPc` (quando o container ficou ligado) chamar `void avisarAndroid("ligar", botId)`. Em `pararPc`, `void avisarAndroid("desligar", botId)`.
+4. No boot do Hub, depois de criar o `ServicoAndroid`:
 
-O stream não depende dessa chamada. Quem abre `/android/<botId>/` já vê a página, e o H.264 começa quando o aparelho está conectado.
+```ts
+import { instalarProvedores } from "./androidProvedor.js";
+import { registrarProvedorAndroid } from "./android.js";
+instalarProvedores(servico); // isto passa a chamar o registrar do android.ts
+for (const p of [provedorAparelho(servico), provedorRedroid(servico)]) registrarProvedorAndroid(p);
+```
+
+5. A rota `/android/<botId>/` fica a do #13. Sem provedor que resolva, 503. Com o `aparelho` cadastrado, o tratador (ou o miolo da rota, no conflito de `server.ts`) continua encaminhando o HTTP e o WebSocket para a tela deste PR. O `responderAndroid` do #13 não recebe `req`/`reply`; no conflito, se o alvo existe, encaminha como o #14 faz hoje, e só devolve 503 quando `resolverAlvoAndroid` vier `null`.
+6. Apagar `androidHook.ts`.
 
 ## O que a tela faz
 

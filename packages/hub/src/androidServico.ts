@@ -3,7 +3,8 @@
  *
  * Pareamento: adb pair + adb connect no PC onde o Hub roda (no da loja, o Windows).
  * Tela: /android/<botId>/ encaminha para um ws-scrcpy nosso em 127.0.0.1.
- * O gancho é o que maquinas.ts chama quando o PC do bot liga ou desliga.
+ * O ciclo do PC passa pelo registro de provedores (aparelho prioridade 10,
+ * redroid prioridade 1), não por um import do maquinas.ts.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -13,7 +14,8 @@ import { binarioDoAdb, executarAdb } from "./celular.js";
 import { PareamentoAndroid, idDeBotValido, type AdbFn, type CadastroAndroid, type PedidoParear } from "./androidBot.js";
 import { TelasAndroid } from "./androidStream.js";
 import { argumentosDocker, avaliarEsteHost, modoFallbackDoAmbiente, nomeDoContainerAndroid } from "./androidFallback.js";
-import { registrarGanchoAndroid, type GanchoAndroid } from "./androidHook.js";
+import { registrarGanchoAndroid } from "./androidHook.js";
+import { avisarProvedores, instalarProvedores, publicarNoRegistroOficial, type FonteDoProvedor } from "./androidProvedor.js";
 import { abrirWsAndroid, caminhoNoAndroid, encaminharHttpAndroid, idDoAndroid } from "./ponteAndroid.js";
 import { execFile } from "node:child_process";
 
@@ -30,10 +32,11 @@ function docker(args: string[], ms = 180000): Promise<{ ok: boolean; saida: stri
   });
 }
 
-export class ServicoAndroid {
+export class ServicoAndroid implements FonteDoProvedor {
   private pareamento: PareamentoAndroid;
   private telas: TelasAndroid;
   private portasFallback = new Map<string, number>();
+  private usos = new Map<string, number>();
 
   constructor(private deps: { loja: LojaAndroid; botExiste: (id: string) => boolean; adb?: AdbFn }) {
     const adb: AdbFn = deps.adb ?? ((args, ms) => executarAdb(args, ms));
@@ -50,16 +53,37 @@ export class ServicoAndroid {
     });
   }
 
-  gancho(): GanchoAndroid {
-    return {
-      caminho: (botId) => `/android/${botId}/`,
-      aoLigarPc: (botId) => this.aoLigarPc(botId),
-      aoDesligarPc: (botId) => this.aoDesligarPc(botId),
-    };
+  cadastro(botId: string) { return this.pareamento.ler(botId); }
+
+  conectado(botId: string) { return this.pareamento.conectado(botId); }
+
+  uso(botId: string): number | null {
+    return this.usos.get(botId) ?? this.cadastro(botId)?.pareadoEm ?? null;
   }
 
+  marcarUso(botId: string) { this.usos.set(botId, Date.now()); }
+
+  async reconectar(botId: string) { await this.pareamento.reconectar(botId); }
+
+  async abrirWhatsapp(botId: string) {
+    const c = this.cadastro(botId);
+    if (c) await this.pareamento.abrirWhatsapp(c.serial);
+  }
+
+  pararTela(botId: string) { this.telas.parar(botId); }
+
+  /**
+   * Entra no registro local (e no oficial, se android.ts do outro PR existir).
+   * O gancho antigo só encaminha para avisarProvedores.
+   */
   registrar() {
-    registrarGanchoAndroid(this.gancho());
+    instalarProvedores(this);
+    registrarGanchoAndroid({
+      caminho: (botId) => `/android/${botId}/`,
+      aoLigarPc: (botId) => avisarProvedores("ligar", botId),
+      aoDesligarPc: (botId) => avisarProvedores("desligar", botId),
+    });
+    void publicarNoRegistroOficial();
   }
 
   async parear(botId: string, body: PedidoParear) {
@@ -72,24 +96,22 @@ export class ServicoAndroid {
     return this.pareamento.status(botId);
   }
 
-  async aoLigarPc(botId: string) {
-    await this.pareamento.reconectar(botId);
-    const st = await this.pareamento.status(botId);
-    if (st.conectado) return;
-    const modo = modoFallbackDoAmbiente();
-    if (!modo || st.cadastrado) return;
-    await this.subirFallback(botId, modo);
-  }
+  async aoLigarPc(botId: string) { await avisarProvedores("ligar", botId); }
 
-  async aoDesligarPc(botId: string) {
-    this.telas.parar(botId);
+  async aoDesligarPc(botId: string) { await avisarProvedores("desligar", botId); }
+
+  /** O provedor redroid chama isto. Aparelho já cadastrado não é substituído. */
+  async subirFallback(botId: string) {
+    const modo = modoFallbackDoAmbiente();
+    if (!modo) return;
+    await this.subirContainer(botId, modo);
   }
 
   /**
    * Container mybots-android-<botId>, publicado só em 127.0.0.1.
    * Não baixa imagem nenhuma se o host não aguenta — e o padrão é nem tentar.
    */
-  async subirFallback(botId: string, modo: "redroid" | "emulador") {
+  private async subirContainer(botId: string, modo: "redroid" | "emulador") {
     const v = await avaliarEsteHost();
     const item = modo === "redroid" ? v.redroid : v.emulador;
     if (!item.serve) return { ok: false as const, erro: item.motivo };
@@ -114,6 +136,7 @@ export class ServicoAndroid {
     const caminho = caminhoNoAndroid(url);
     if (!id || !caminho) return reply.code(404).send({ ok: false, erro: "tela indisponível" });
     if (!idDeBotValido(id) || !this.deps.botExiste(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    this.marcarUso(id);
     let porta: number;
     try { porta = await this.telas.portaDe(id); }
     catch (e) { return reply.code(503).send({ ok: false, erro: (e as Error).message }); }
@@ -137,6 +160,7 @@ export class ServicoAndroid {
       const caminho = caminhoNoAndroid(url);
       if (morto) return;
       if (!id || !caminho || !this.deps.botExiste(id)) { try { socket.close(); } catch { /* ok */ } return; }
+      this.marcarUso(id);
       let porta: number;
       try { porta = await this.telas.portaDe(id); }
       catch { try { socket.close(); } catch { /* ok */ } return; }

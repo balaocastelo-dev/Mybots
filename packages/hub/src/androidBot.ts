@@ -178,6 +178,13 @@ export class PareamentoAndroid {
     return aparelhosDe(r.saida).some((a) => a.serial === serial && a.estado === "device");
   }
 
+  /** Só lê `adb devices`. Não chama `adb connect` — a lista de máquinas não liga o aparelho. */
+  async conectado(botId: string): Promise<boolean> {
+    const c = this.ler(botId);
+    if (!c) return false;
+    return this.esta(c.serial);
+  }
+
   async status(botId: string): Promise<EstadoAndroid> {
     const c = this.ler(botId);
     if (!c) return { conectado: false, cadastrado: false };

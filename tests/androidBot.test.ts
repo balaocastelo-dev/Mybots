@@ -18,6 +18,11 @@ import {
 } from "../packages/hub/src/androidScrcpy.ts";
 import { argumentosDocker, avaliarFallback, nomeDoContainerAndroid } from "../packages/hub/src/androidFallback.ts";
 import { ganchoAndroid, registrarGanchoAndroid } from "../packages/hub/src/androidHook.ts";
+import {
+  PRIORIDADE_APARELHO, PRIORIDADE_REDROID, avisarProvedores, limparProvedoresAndroid, listarProvedoresAndroid,
+  provedorAparelho, provedorRedroid, publicarNoRegistroOficial, registrarProvedorAndroid, relatoDoAndroid, resolverAlvoAndroid,
+  type FonteDoProvedor,
+} from "../packages/hub/src/androidProvedor.ts";
 import { htmlDaTela } from "../packages/hub/src/androidPlayer.ts";
 import { caminhoNoAndroid, idDoAndroid, portaAndroidPermitida } from "../packages/hub/src/ponteAndroid.ts";
 import { TelasAndroid } from "../packages/hub/src/androidStream.ts";
@@ -205,6 +210,57 @@ test("o caminho /android/<bot>/ tira a senha e não escolhe host", () => {
     aoDesligarPc: async () => {},
   });
   assert.equal(ganchoAndroid()?.caminho("bia"), "/android/bia/");
+});
+
+test("o aparelho registra prioridade acima do redroid e o registro chama aoLigarPc", async () => {
+  limparProvedoresAndroid();
+  const chamadas: string[] = [];
+  const cadastro: CadastroAndroid = {
+    modo: "aparelho", ip: "192.168.15.20", portaConexao: 42111, serial: "192.168.15.20:42111", pareadoEm: 50,
+  };
+  const fonte: FonteDoProvedor = {
+    cadastro: () => cadastro,
+    conectado: async () => false,
+    uso: () => 50,
+    reconectar: async () => { chamadas.push("reconectar"); },
+    abrirWhatsapp: async () => { chamadas.push("whats"); },
+    pararTela: () => { chamadas.push("parar"); },
+    subirFallback: async () => { chamadas.push("fallback"); },
+  };
+  registrarProvedorAndroid(provedorRedroid(fonte));
+  registrarProvedorAndroid(provedorAparelho(fonte));
+  assert.deepEqual(listarProvedoresAndroid().map((p) => p.id), ["aparelho", "redroid"]);
+  assert.ok(PRIORIDADE_APARELHO > PRIORIDADE_REDROID);
+  const alvo = await resolverAlvoAndroid("bia");
+  assert.equal(alvo?.tipo, "aparelho");
+  if (alvo?.tipo === "aparelho") assert.equal(alvo.porta, 42111);
+  const relato = await relatoDoAndroid("bia");
+  assert.equal(relato.estado, "desligado");
+  assert.equal(relato.porta, 42111);
+  assert.equal(chamadas.includes("fallback"), false);
+  await avisarProvedores("ligar", "bia");
+  assert.deepEqual(chamadas, ["reconectar"]);
+  await avisarProvedores("desligar", "bia");
+  assert.equal(chamadas.at(-1), "parar");
+
+  limparProvedoresAndroid();
+  registrarProvedorAndroid({
+    id: "aparelho",
+    prioridade: PRIORIDADE_APARELHO,
+    resolver: async () => ({ tipo: "aparelho", serial: "192.168.15.9:8787", host: "192.168.15.9", porta: 8787 }),
+  });
+  registrarProvedorAndroid({
+    id: "redroid",
+    prioridade: PRIORIDADE_REDROID,
+    resolver: async () => ({ tipo: "container", nome: "mybots-android-bia", host: "127.0.0.1", porta: 5555 }),
+    relatar: async () => ({ estado: "ligado", porta: 8787 }),
+  });
+  const pulou = await resolverAlvoAndroid("bia");
+  assert.equal(pulou?.tipo, "container");
+  const relatoPorta = await relatoDoAndroid("bia");
+  assert.equal(relatoPorta.porta, null);
+  assert.equal(await publicarNoRegistroOficial(), "local");
+  limparProvedoresAndroid();
 });
 
 test("a página da tela sobe só em 127.0.0.1 e avisa quando não há aparelho", async () => {

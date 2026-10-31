@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { motivoDaQueda, recadoDaQueda } from "./diagnostico.js";
 import type { Hub } from "./hub.js";
 import { estadoDaChave } from "./chaves.js";
+import { pararPc } from "./pcs.js";
 
 export type ManagedBotDef = {
   id: string;
@@ -196,6 +197,7 @@ export class BotManager {
     // "olá" dele é recusado no Hub e o bot não reaparece no painel.
     this.hub.db.marcarExcluido(id, d?.name);
     const r = await this.stop(id);
+    void pararPc(id).catch(() => { /* sem PC registrado, ou o Docker nem está no ar */ });
     this.hub.db.deleteManaged(id);
     this.hub.db.audit(id, "bot.removed", { purge, morreu: r.morreu, pids: r.pids });
     this.hub.removeBot(id, purge); // tira da lista do painel, senão ele continua aparecendo

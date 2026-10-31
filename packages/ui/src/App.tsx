@@ -14,6 +14,7 @@ import { TelaCreditos } from "./creditos";
 import { Fragment } from "react";
 import { usePainelPrefs, nomeNaTela, ChipTrocas, FolhaAbrirTroca, TrocaEntreBots, DialogoTexto, type Troca, type PrefDoBot } from "./painel";
 import { montarLista } from "./lista";
+import { lerLinkGuia } from "./guiaPainel";
 import { api } from "./api";
 import { Tema, Tamanho, Configuracao } from "./tema";
 import { Maquina } from "./maquina";
@@ -67,6 +68,18 @@ export function App() {
   const [aExcluir, setAExcluir] = useState<BotSummary | null>(null);
   const carregarEmpresas = async () => { try { const r = await api("/empresas"); if (r.ok) setEmpresas(await r.json()); } catch {} finally { setEmpresasCarregadas(true); } };
   useEffect(() => { void carregarEmpresas(); }, []);
+  useEffect(() => {
+    const ir = () => {
+      const link = lerLinkGuia(location.hash);
+      if (!link) return;
+      setEmpresaAtiva(link.empresaId);
+      const g = state.bots.find((b) => b.empresaId === link.empresaId && /gerente/i.test(`${b.role} ${b.name}`));
+      if (g) setSelected(dmConversation(g.id));
+    };
+    ir();
+    window.addEventListener("hashchange", ir);
+    return () => window.removeEventListener("hashchange", ir);
+  }, [state.bots]);
   useEffect(() => { try { localStorage.setItem("mybots-empresa", empresaAtiva); } catch {} }, [empresaAtiva]);
   // Empresa escolhida que não existe mais (apagada, renomeada, banco zerado) escondia
   // TODOS os bots sem dizer por quê. Some o filtro em vez de sumir a equipe.

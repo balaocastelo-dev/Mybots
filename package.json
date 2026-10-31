@@ -14,7 +14,7 @@
     "node": "npm run start -w @mybots/node",
     "build:ui": "npm run build -w @mybots/ui",
     "dev:ui": "npm run dev -w @mybots/ui",
-    "test": "node --import tsx tests/usoDoPc.test.ts && node --import tsx tests/ponteVnc.test.ts && node --import tsx tests/gravacao.test.ts && node --import tsx tests/scrcpy.test.ts && node --import tsx tests/celularEmpresa.test.ts && node --import tsx tests/cotas.test.ts && node --import tsx tests/e2e.test.ts && node --import tsx tests/diagnostico.test.ts && node --import tsx tests/sala.test.ts && node --import tsx tests/media.test.ts && node --import tsx tests/fala.test.ts && node --import tsx tests/trava.test.ts && node --import tsx tests/folha.test.ts && node --import tsx tests/lista.test.ts && node --import tsx tests/atividade.test.ts",
+    "test": "node --import tsx tests/pcs.test.ts && node --import tsx tests/usoDoPc.test.ts && node --import tsx tests/ponteVnc.test.ts && node --import tsx tests/gravacao.test.ts && node --import tsx tests/scrcpy.test.ts && node --import tsx tests/celularEmpresa.test.ts && node --import tsx tests/cotas.test.ts && node --import tsx tests/e2e.test.ts && node --import tsx tests/diagnostico.test.ts && node --import tsx tests/sala.test.ts && node --import tsx tests/media.test.ts && node --import tsx tests/fala.test.ts && node --import tsx tests/trava.test.ts && node --import tsx tests/folha.test.ts && node --import tsx tests/lista.test.ts && node --import tsx tests/atividade.test.ts && node --import tsx tests/guia.test.ts",
     "test:opencode": "node --import tsx tests/opencode.test.ts"
   },
   "engines": {

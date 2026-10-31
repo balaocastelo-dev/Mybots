@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PendingApproval, PendingQuestion, StoredMessage } from "@mybots/shared";
 import { useToqueLongo } from "./ContextMenu";
 import type { ToolInfo } from "./hub";
+import { GuiaCartao } from "./guiaPainel";
 
 /** Raciocínio do modelo: letra de máquina atrás de um vidro azul, fechado por padrão.
  *  Nunca é lido em voz alta — a fala usa só a resposta. */
@@ -46,6 +47,13 @@ export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, o
           )}
           <time>{m.pinned ? "📌 " : ""}{m.meta?.interrompido ? "interrompido · " : ""}{m.editOf ? "editado · " : ""}{new Date(m.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time>
         </div>
+      ) : null}
+      {m.meta?.guia && typeof m.meta.guia === "object" ? (
+        <GuiaCartao
+          empresaId={String((m.meta.guia as any).empresaId ?? "")}
+          passo={String((m.meta.guia as any).passo ?? "")}
+          legenda={String((m.meta.guia as any).legenda ?? m.text)}
+        />
       ) : null}
     </div>
   );

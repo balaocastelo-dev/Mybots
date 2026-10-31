@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { BotSummary, HubToUi, UsoDoPc } from "@mybots/shared";
 import { Icone } from "./icones";
+import { BarraGuia } from "./guiaPainel";
 import { TelaDoMac } from "./mac";
 import { TelasDoBot } from "./telasBot";
 import { Trabalhos } from "./trabalhos";
@@ -317,6 +318,7 @@ export function PainelDoPc({
       {aba === "trabalho" && (
         <div className="lado-trabalho">
           <VisaoDaEmpresa nome={nome} empresaId={empresaId} rotinas={rotinas.length} arquivos={arquivos.length} />
+          {empresaId && <BarraGuia empresaId={empresaId} />}
           <b>Rotinas</b>
           <ul className="pc-hist lado-lista">
             {rotinas.length ? rotinas.map((r) => <li key={r.id}><b>{r.nome}</b><span>{r.cron}</span></li>) : <li className="muted">Nenhuma rotina neste bot.</li>}

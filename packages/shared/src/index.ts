@@ -200,7 +200,9 @@ export type UiToHub =
   /** PARAR TUDO: toda janela, todo bot, toda fala. O ⏹ grande, o Esc e o fechar da janela. */
   | { type: "stop"; reason?: string }
   /** abriu ou saiu de uma conversa: o Hub pede ao nó para manter o modelo quente */
-  | { type: "warm"; conversationId: string; ativo: boolean };
+  | { type: "warm"; conversationId: string; ativo: boolean }
+  /** Para as tarefas ainda abertas. `alvo` é a lista de destinatários, ou todos. */
+  | { type: "colab.parar"; alvo: "todos" | string[]; por: "humano" };
 
 /** Hub → Interface */
 export type HubToUi =
@@ -335,3 +337,4 @@ export const IDIOMAS: Array<{ id: Idioma; nome: string }> = [
 ];
 export type Empresa = { id: string; nome: string; regras: string; cor?: string; idioma: Idioma; criadaEm: number; bots: number };
 export * from "./cotas.js";
+export * from "./colab.ts";

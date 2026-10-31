@@ -34,13 +34,13 @@ const TAMANHOS = new Map<string, { largura: number; altura: number }>();
 
 function caminhoDoAdb(): string | null {
   const raiz = raizDoProjeto();
+  const noWindows = process.platform === "win32";
   const tentativas = [
     process.env.MYBOTS_ADB,
-    path.join(raiz, "ferramentas", "scrcpy", "adb.exe"),
-    path.join(raiz, "ferramentas", "scrcpy", "adb"),
-    "C:\\android\\sdk\\platform-tools\\adb.exe",
-    `${process.env.LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe`,
-    `${process.env.USERPROFILE}\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe`,
+    noWindows ? path.join(raiz, "ferramentas", "scrcpy", "adb.exe") : path.join(raiz, "ferramentas", "scrcpy", "adb"),
+    noWindows ? "C:\\android\\sdk\\platform-tools\\adb.exe" : "",
+    noWindows ? `${process.env.LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe` : "",
+    noWindows ? `${process.env.USERPROFILE}\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe` : "",
     "adb",
   ].filter(Boolean) as string[];
   for (const p of tentativas) {
@@ -64,6 +64,15 @@ function adb(args: string[], msTeto = 20000, binario = false): Promise<{ ok: boo
 }
 
 export function temAdb(): boolean { return caminhoDoAdb() !== null; }
+
+/** Caminho do adb deste PC. No Windows é o adb.exe que vem em ferramentas/scrcpy. */
+export function binarioDoAdb(): string | null { return caminhoDoAdb(); }
+
+/** Roda o adb do host. A saída junta stdout e stderr. Não registra o código de pareamento. */
+export async function executarAdb(args: string[], msTeto = 20000): Promise<{ ok: boolean; saida: string }> {
+  const r = await adb(args, msTeto);
+  return { ok: r.ok, saida: r.saida };
+}
 
 export async function listar(): Promise<Aparelho[]> {
   const r = await adb(["devices", "-l"], 15000);

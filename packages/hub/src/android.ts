@@ -47,6 +47,10 @@ export type ProvedorAndroid = {
    * Sem `relatar`, a lista olha o alvo do `resolver`: se houver, estado `ligado`.
    */
   relatar?(botId: string): Promise<RelatoAndroid | null>;
+  /** Opcional. O PC do bot acabou de ligar. Quem não tem o método é pulado. */
+  aoLigarPc?(botId: string): Promise<void>;
+  /** Opcional. O PC ocioso desligou. O pareamento do aparelho fica. */
+  aoDesligarPc?(botId: string): Promise<void>;
 };
 
 export type ContextoAndroid = { botId: string; alvo: AlvoAndroid };
@@ -153,6 +157,18 @@ export async function relatoDoAndroid(botId: string): Promise<{ estado: EstadoRe
   const alvo = await resolverAlvoAndroid(botId);
   if (alvo) return { estado: "ligado", porta: alvo.porta, ultimoUso: null };
   return { estado: "sem-provedor", porta: null, ultimoUso: null };
+}
+
+/**
+ * O registro chama o método opcional de cada provedor, do mais prioritário ao menor.
+ * Aparelho (10) corre antes do redroid (1). Falha de um não impede o próximo.
+ */
+export async function avisarAndroid(evento: "ligar" | "desligar", botId: string): Promise<void> {
+  for (const p of ordemDosProvedores()) {
+    const fn = evento === "ligar" ? p.aoLigarPc : p.aoDesligarPc;
+    if (!fn) continue;
+    try { await fn.call(p, botId); } catch { /* o próximo ainda corre */ }
+  }
 }
 
 export function rotaAndroid(botId: string) {

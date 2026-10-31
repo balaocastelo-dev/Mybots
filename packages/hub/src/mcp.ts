@@ -8,6 +8,7 @@ import { z } from "zod";
 import { tipoDeAprovacao } from "@mybots/shared";
 import { botForToken, config, tokenAllows } from "./config.js";
 import type { Hub } from "./hub.js";
+import { chamarColabLocal } from "./colab/cliente.js";
 
 export async function registerMcp(app: FastifyInstance, hub: Hub) {
   app.all("/mcp", async (req, reply) => {
@@ -165,6 +166,37 @@ export function buildMcpServer(hub: Hub, botId: string) {
   });
 
   server.registerTool("list_routines", { description: "Lista suas rotinas agendadas.", inputSchema: {} }, async () => text(JSON.stringify(hub.db.listRoutines(botId), null, 2)));
+
+  server.registerTool("delegate_task", {
+    description: "Entrega uma tarefa a outro Bot e segue o seu trabalho. O resultado volta depois e acorda você. Você não aprova esta delegação; pagar, enviar, apagar ou publicar continua pedindo o chefe em /api/approvals.",
+    inputSchema: {
+      para: z.string().describe("id do Bot que vai fazer"),
+      objetivo: z.string(),
+      contexto: z.string(),
+      criterioSucesso: z.string().describe("como saber que ficou pronto"),
+      prazo: z.union([z.string(), z.number()]).optional().describe("epoch em ms ou ISO 8601"),
+      formatoEntrega: z.string().optional(),
+    },
+  }, async ({ para, objetivo, contexto, criterioSucesso, prazo, formatoEntrega }) => {
+    const r = await chamarColabLocal(botId, "POST", "/api/colab/tarefas", { de: botId, para, objetivo, contexto, criterioSucesso, prazo, formatoEntrega });
+    return text(r.status >= 400 ? `Falhou: ${r.corpo?.error ?? r.status}` : JSON.stringify(r.corpo));
+  });
+
+  server.registerTool("check_task", {
+    description: "Consulta uma tarefa delegada pelo id.",
+    inputSchema: { taskId: z.string() },
+  }, async ({ taskId }) => {
+    const r = await chamarColabLocal(botId, "GET", `/api/colab/tarefas/${encodeURIComponent(taskId)}`);
+    return text(r.status >= 400 ? `Falhou: ${r.corpo?.error ?? r.status}` : JSON.stringify(r.corpo));
+  });
+
+  server.registerTool("cancel_task", {
+    description: "Cancela uma tarefa que você delegou e ainda não terminou.",
+    inputSchema: { taskId: z.string(), motivo: z.string().optional() },
+  }, async ({ taskId, motivo }) => {
+    const r = await chamarColabLocal(botId, "POST", `/api/colab/tarefas/${encodeURIComponent(taskId)}/cancelar`, motivo ? { motivo } : {});
+    return text(r.status >= 400 ? `Falhou: ${r.corpo?.error ?? r.status}` : JSON.stringify(r.corpo));
+  });
 
   server.registerTool("cancel_routine", { description: "Cancela uma rotina sua pelo id.", inputSchema: { id: z.string() } }, async ({ id }) => {
     const r = hub.db.listRoutines(botId).find((x) => x.id === id);

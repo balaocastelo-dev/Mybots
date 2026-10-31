@@ -3,15 +3,33 @@ import { api } from "./api";
 
 // ---------------- tema: Balcao (claro) e Bancada (escuro) ----------------
 
+export type TemaNome = "claro" | "escuro";
+
+/** Grava o tema e avisa quem mais mostra o mesmo controle (a engrenagem e o
+ *  botão do topo). Se o valor já está aplicado, não dispara de novo. */
+export function gravarTema(tema: TemaNome) {
+  const igual = document.documentElement.dataset.tema === tema;
+  document.documentElement.dataset.tema = tema;
+  try { localStorage.setItem("mybots.tema", tema); } catch { /* navegador privado */ }
+  if (!igual) window.dispatchEvent(new CustomEvent("mybots-tema", { detail: tema }));
+}
+
+export function lerTema(): TemaNome {
+  try { return localStorage.getItem("mybots.tema") === "escuro" ? "escuro" : "claro"; } catch { return "claro"; }
+}
+
 /** O tema nao segue o sistema operacional: quem manda e este botao, e a
  *  escolha fica guardada no navegador. Claro e o padrao. */
 export function Tema() {
-  const [tema, setTema] = useState<"claro" | "escuro">(
-    () => (localStorage.getItem("mybots.tema") === "escuro" ? "escuro" : "claro"),
-  );
+  const [tema, setTema] = useState<TemaNome>(lerTema);
+  useEffect(() => { gravarTema(tema); }, [tema]);
   useEffect(() => {
-    document.documentElement.dataset.tema = tema;
-    localStorage.setItem("mybots.tema", tema);
+    const ouvir = (e: Event) => {
+      const t = (e as CustomEvent<string>).detail;
+      if ((t === "claro" || t === "escuro") && t !== tema) setTema(t);
+    };
+    window.addEventListener("mybots-tema", ouvir);
+    return () => window.removeEventListener("mybots-tema", ouvir);
   }, [tema]);
   return (
     <div className="tema" role="group" aria-label="Tema do painel">
@@ -27,14 +45,31 @@ export function Tema() {
  *  reflui o layout de verdade: tudo cresce junto e nada estoura.
  *  A abertura e as telas de cadastro cancelam o zoom no CSS (elas se medem pela
  *  janela), senao a tela de particulas sairia maior que o monitor. */
-export function Tamanho() {
-  const [escala, setEscala] = useState<number>(() => {
+export function lerEscala(): number {
+  try {
     const g = Number(localStorage.getItem("mybots.escala"));
     return Number.isFinite(g) && g >= 0.8 && g <= 1.5 ? g : 1;
-  });
+  } catch { return 1; }
+}
+
+export function gravarEscala(escala: number) {
+  const proxima = String(escala);
+  const igual = document.documentElement.style.getPropertyValue("--escala") === proxima;
+  document.documentElement.style.setProperty("--escala", proxima);
+  try { localStorage.setItem("mybots.escala", proxima); } catch { /* navegador privado */ }
+  if (!igual) window.dispatchEvent(new CustomEvent("mybots-escala", { detail: escala }));
+}
+
+export function Tamanho() {
+  const [escala, setEscala] = useState<number>(lerEscala);
+  useEffect(() => { gravarEscala(escala); }, [escala]);
   useEffect(() => {
-    document.documentElement.style.setProperty("--escala", String(escala));
-    localStorage.setItem("mybots.escala", String(escala));
+    const ouvir = (e: Event) => {
+      const n = (e as CustomEvent<number>).detail;
+      if (typeof n === "number" && n !== escala) setEscala(n);
+    };
+    window.addEventListener("mybots-escala", ouvir);
+    return () => window.removeEventListener("mybots-escala", ouvir);
   }, [escala]);
   const muda = (d: number) => setEscala((v) => Math.min(1.5, Math.max(0.8, Math.round((v + d) * 100) / 100)));
   return (
@@ -46,130 +81,134 @@ export function Tamanho() {
   );
 }
 
-/** Configuracao da casa: o que decide SE o sistema consegue pensar — motor, contas e
- *  IA local — mais o reset de fabrica. Fica fora do menu de cada bot de proposito:
- *  isto vale para a casa inteira, nao para um bot so. */
-export function Configuracao() {
-  const [aberto, setAberto] = useState(false);
+/** A engrenagem do painel. A tela em si mora em configuracoes/Tela.tsx. */
+export function Configuracao({ aberto, onOpen }: { aberto?: boolean; onOpen: () => void }) {
   return (
-    <>
-      <button className="tema-cfg" title="Configuracao do MyBots" aria-label="Configuracao" onClick={() => setAberto(true)}>&#9881;</button>
-      {aberto && <ConfiguracaoDialog onClose={() => setAberto(false)} />}
-    </>
+    <button className={"tema-cfg" + (aberto ? " on" : "")} title="Configurações do MyBots" aria-label="Configurações" aria-expanded={!!aberto} onClick={onOpen}>&#9881;</button>
   );
 }
 
-export function ConfiguracaoDialog({ onClose }: { onClose: () => void }) {
-  const [provs, setProvs] = useState<any[]>([]);
+/** Quem atende primeiro. Vale para a casa inteira. */
+export function PreferenciaDaCasa() {
   const [local, setLocal] = useState<any>(null);
   const [pref, setPref] = useState("nuvem");
-  const [testes, setTestes] = useState<Record<string, any>>({});
-  const [frase, setFrase] = useState("");
-  const [recado, setRecado] = useState("");
 
   useEffect(() => {
     void (async () => {
-      try { setProvs(await (await api("/config/provedores")).json()); } catch { /* sem rede */ }
-      try { setLocal(await (await api("/config/local")).json()); } catch { /* idem */ }
+      try { setLocal(await (await api("/config/local")).json()); } catch { /* sem rede */ }
       try { setPref(((await (await api("/config/preferencia")).json()) as any).ordem ?? "nuvem"); } catch { /* idem */ }
     })();
   }, []);
-
-  // chave "salva" nao e chave "funcionando": o teste faz uma chamada de verdade
-  const testar = async (id: string) => {
-    setTestes((t) => ({ ...t, [id]: { testando: true } }));
-    try {
-      const r = await api(`/config/provedores/${id}/testar`, { method: "POST", body: "{}" });
-      const j = await r.json();
-      setTestes((t) => ({ ...t, [id]: j }));
-    } catch (e) {
-      setTestes((t) => ({ ...t, [id]: { ok: false, erro: (e as Error).message } }));
-    }
-  };
 
   const salvarPref = async (o: string) => {
     setPref(o);
     try { await api("/config/preferencia", { method: "PUT", body: JSON.stringify({ ordem: o }) }); } catch { /* best effort */ }
   };
 
+  return (
+    <div className="cfg-motor">
+      {local ? (
+        <div className="cfg-local">
+          <div>Placa: <b>{local.vram ? `${local.vram.nome} (${local.vram.totalGb} GB)` : "nenhuma NVIDIA detectada"}</b></div>
+          <div>Ollama: <b className={local.ollama?.ok ? "cfg-ok" : "cfg-ruim"}>{local.ollama?.ok ? "no ar" : (local.ollama?.erro ?? "fora do ar")}</b></div>
+        </div>
+      ) : <div className="hint">Lendo a máquina…</div>}
+      <div className="cfg-pref">
+        {[["nuvem", "Nuvem primeiro"], ["local", "Local primeiro"], ["so-nuvem", "Só nuvem"], ["so-local", "Só local"]].map(([v, rotulo]) => (
+          <button key={v} type="button" className={pref === v ? "on" : ""} aria-pressed={pref === v} onClick={() => void salvarPref(v)}>{rotulo}</button>
+        ))}
+      </div>
+      <p className="hint">Sem placa de vídeo, “local primeiro” deixa a casa lenta. Com placa, ela economiza cota.</p>
+    </div>
+  );
+}
+
+/** Apaga a casa inteira. A frase é a trava. */
+export function ResetDaCasa() {
+  const [frase, setFrase] = useState("");
+  const [recado, setRecado] = useState("");
   const resetar = async () => {
     setRecado("");
     try {
       const r = await api("/config/reset", { method: "POST", body: JSON.stringify({ confirmacao: frase }) });
       const j = await r.json() as any;
-      if (!r.ok) { setRecado(j.error ?? "nao deu"); return; }
-      setRecado(`Apagados: ${j.bots} bot(s) e ${j.empresas} empresa(s). Recarregando...`);
+      if (!r.ok) { setRecado(j.error ?? "não deu"); return; }
+      setRecado(`Apagados: ${j.bots} bot(s) e ${j.empresas} empresa(s). Recarregando…`);
       setTimeout(() => location.reload(), 1400);
     } catch (e) { setRecado((e as Error).message); }
   };
-
-  const ligadas = provs.filter((p) => p.configurada).length;
-
   return (
-    <div className="backdrop" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-        <h3>Configuracao do MyBots</h3>
-
-        <p className="hint">
-          {ligadas === 0 ? "Nenhuma chave ligada: a casa so pensa com a IA local." :
-           ligadas === 1 ? "Uma chave ligada. Com uma so nao existe roleta: se ela recusar, nao ha para onde desviar." :
-           `${ligadas} chaves ligadas — a roleta tem para onde desviar.`}
-        </p>
-
-        <h4>Motor &middot; contas de IA</h4>
-        <div className="cfg-lista">
-          {provs.map((p) => {
-            const t = testes[p.id];
-            return (
-              <div key={p.id} className="cfg-item">
-                <div className="cfg-nome">
-                  <b>{p.nome}</b>
-                  <small>{p.modelo} &middot; contexto {p.contextoK}K &middot; chave: {p.env}</small>
-                  {p.aviso && <small className="cfg-aviso">{p.aviso}</small>}
-                </div>
-                <div className="cfg-acao">
-                  <span className={"cfg-tag " + (p.configurada ? "on" : "off")}>{p.configurada ? "chave no .env" : "sem chave"}</span>
-                  <button onClick={() => void testar(p.id)} disabled={!!t?.testando}>{t?.testando ? "testando..." : "testar"}</button>
-                </div>
-                {t && !t.testando && (
-                  <div className={"cfg-res " + (t.ok ? "ok" : "ruim")}>
-                    {t.ok ? `respondeu em ${t.ms} ms: "${t.resposta}"` : t.erro}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {!provs.length && <div className="hint">Carregando...</div>}
-        </div>
-
-        <h4>IA local</h4>
-        {local ? (
-          <div className="cfg-local">
-            <div>Placa: <b>{local.vram ? `${local.vram.nome} (${local.vram.totalGb} GB)` : "nenhuma NVIDIA detectada"}</b></div>
-            <div>Memoria: <b>{local.ram?.totalGb} GB</b> &middot; reserva do sistema: {local.reserva?.ramGb} GB / {local.reserva?.vramGb} GB de video</div>
-            <div>Ollama: <b className={local.ollama?.ok ? "cfg-ok" : "cfg-ruim"}>{local.ollama?.ok ? "no ar" : (local.ollama?.erro ?? "fora do ar")}</b></div>
-            {local.ollama?.ok && <div className="hint">Modelos: {local.ollama.modelos.join(", ") || "nenhum instalado"}</div>}
-          </div>
-        ) : <div className="hint">Lendo a maquina...</div>}
-
-        <h4>Quem atende primeiro</h4>
-        <div className="cfg-pref">
-          {[["nuvem", "Nuvem primeiro"], ["local", "Local primeiro"], ["so-nuvem", "So nuvem"], ["so-local", "So local"]].map(([v, rotulo]) => (
-            <button key={v} className={pref === v ? "on" : ""} onClick={() => void salvarPref(v)}>{rotulo}</button>
-          ))}
-        </div>
-        <p className="hint">Sem placa de video, "local primeiro" deixa a casa lenta. Com placa, ela economiza cota.</p>
-
-        <h4 className="cfg-perigo-titulo">Zona de perigo</h4>
-        <p className="hint">Apaga <b>todas as empresas, todos os bots e as preferencias</b>. As conversas e os arquivos dos bots vao junto. Nao ha lixeira e nao tem volta.</p>
-        <div className="cfg-reset">
-          <input value={frase} onChange={(e) => setFrase(e.target.value)} placeholder="digite APAGAR TUDO" />
-          <button className="btn danger" disabled={frase.trim().toUpperCase() !== "APAGAR TUDO"} onClick={() => void resetar()}>Resetar o MyBots</button>
-        </div>
-        {recado && <p className="hint">{recado}</p>}
-
-        <div className="acoes"><button onClick={onClose}>Fechar</button></div>
+    <div className="cfg-motor">
+      <p className="hint">Apaga todas as empresas, todos os bots e as preferências. As conversas vão junto. Não há lixeira.</p>
+      <div className="cfg-reset">
+        <input value={frase} onChange={(e) => setFrase(e.target.value)} placeholder="digite APAGAR TUDO" aria-label="Confirmação para resetar" />
+        <button type="button" className="btn danger" disabled={frase.trim().toUpperCase() !== "APAGAR TUDO"} onClick={() => void resetar()}>Resetar o MyBots</button>
       </div>
+      {recado && <p className="hint">{recado}</p>}
+    </div>
+  );
+}
+
+/** Chaves dos provedores. O valor não vem para a tela: só “configurada” ou “sem chave”, e o teste. */
+export function ChavesDaCasa() {
+  const [provs, setProvs] = useState<Array<{ id: string; nome: string; modelo?: string; contextoK?: number; configurada?: boolean; aviso?: string }>>([]);
+  const [testes, setTestes] = useState<Record<string, { testando?: boolean; ok?: boolean; ms?: number; erro?: string }>>({});
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const lista = await (await api("/config/provedores")).json() as unknown[];
+        if (!Array.isArray(lista)) return;
+        setProvs(lista.map((p) => {
+          const o = p && typeof p === "object" ? p as Record<string, unknown> : {};
+          return {
+            id: typeof o.id === "string" ? o.id : "",
+            nome: typeof o.nome === "string" ? o.nome : "Provedor",
+            modelo: typeof o.modelo === "string" ? o.modelo : "",
+            contextoK: typeof o.contextoK === "number" ? o.contextoK : undefined,
+            configurada: o.configurada === true,
+            aviso: typeof o.aviso === "string" ? o.aviso : "",
+          };
+        }).filter((p) => p.id));
+      } catch { /* Hub fora */ }
+    })();
+  }, []);
+
+  const testar = async (id: string) => {
+    setTestes((t) => ({ ...t, [id]: { testando: true } }));
+    try {
+      const r = await api(`/config/provedores/${id}/testar`, { method: "POST", body: "{}" });
+      const j = await r.json() as { ok?: boolean; ms?: number; erro?: string };
+      setTestes((t) => ({ ...t, [id]: { ok: j.ok === true, ms: j.ms, erro: j.ok ? undefined : (j.erro ?? "não respondeu") } }));
+    } catch (e) {
+      setTestes((t) => ({ ...t, [id]: { ok: false, erro: (e as Error).message } }));
+    }
+  };
+
+  if (!provs.length) return <p className="ajustes-lead">Nenhuma chave para mostrar. Quando o Hub responder, cada uma aparece mascarada.</p>;
+  return (
+    <div className="cfg-lista">
+      {provs.map((p) => {
+        const t = testes[p.id];
+        return (
+          <div key={p.id} className="cfg-item">
+            <div className="cfg-nome">
+              <b>{p.nome}</b>
+              <small>{p.modelo}{p.contextoK ? ` · contexto ${p.contextoK}K` : ""}</small>
+              {p.aviso && <small className="cfg-aviso">{p.aviso}</small>}
+            </div>
+            <div className="cfg-acao">
+              <span className={"cfg-tag " + (p.configurada ? "on" : "off")}>{p.configurada ? "••••••••" : "sem chave"}</span>
+              <button type="button" onClick={() => void testar(p.id)} disabled={!!t?.testando}>{t?.testando ? "testando…" : "testar"}</button>
+            </div>
+            {t && !t.testando && (
+              <div className={"cfg-res " + (t.ok ? "ok" : "ruim")}>
+                {t.ok ? `respondeu em ${t.ms ?? "—"} ms` : t.erro}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

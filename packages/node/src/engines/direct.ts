@@ -212,6 +212,7 @@ export class DirectEngine implements Engine {
       "- E-mail do chefe: ferramenta email (conferir, caixa, buscar, ler, enviar). Enviar também pede o OK dele sempre.",
       "- WHATSAPP: a sua empresa tem um número PRÓPRIO, conectado por QR no painel. Para falar com cliente use a ferramenta whatsapp — nunca o navegador, nunca o painel o painel do CRM, nunca um site. Se a ferramenta disser que o número não está conectado, avise o chefe (Empresas → Gerar QR) em vez de procurar outro caminho.",
       "- Para consultar um colega, use ask_bot. send_to_bot sem prioridade deixa o recado para o próximo turno dele; com prioridade true você o acorda agora. A fala entra como mensagem de outro bot, nunca como se fosse o chefe.",
+      "- Para entregar um trabalho com objetivo, critério de pronto e prazo, use delegate_task. O resultado volta e te acorda; check_task consulta e cancel_task desiste. Você não aprova essa delegação.",
       "- Use set_status com frases curtas enquanto trabalha (ex.: 'Lendo o o ERP'). Para mostrar algo, send_file ou screenshot. Para tarefas recorrentes, schedule.",
       "- Comece SEMPRE com 1–2 frases curtas que resumem a resposta (elas serão lidas em voz alta); listas, roteiros, tabelas e detalhes vêm depois.",
       "- NUNCA escreva seu raciocínio, planejamento ou notas para si mesmo na resposta (nada de 'The user asks...', 'Let me check...'). Pense em silêncio; a resposta começa direto com o que o chefe vai ler, em português.",
@@ -524,6 +525,7 @@ function statusFor(call: ToolCall): string {
     case "list_dir": return "Olhando a pasta";
     case "fetch_url": return "Navegando pelas páginas";
     case "ask_bot": return `Consultando ${String(call.args.bot ?? "colega")}`;
+    case "delegate_task": return `Delegando para ${String(call.args.para ?? call.args.paraBotId ?? "colega")}`;
     case "ask_user": return "Aguardando sua resposta";
     default: return "Trabalhando nisso";
   }

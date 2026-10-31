@@ -1553,6 +1553,11 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 1px var(--line);
 }
 .pc-segmento button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.bots li.atalhos-wrap { display: block; padding: 2px 0 8px; cursor: default; background: transparent; box-shadow: none; }
+.bots li.atalhos-wrap:hover { background: transparent; }
+.lista-atalhos { margin: 4px 2px 0; }
+.lista-atalhos button { min-height: 52px; padding: 6px 2px; font-size: 10.5px; }
+.lista-atalhos button span { white-space: normal; text-overflow: clip; line-height: 1.15; }
 .lado-trabalho { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow: auto; min-height: 0; }
 .lado-trabalho > b { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--fraco); }
 .cel-emp { display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 0; overflow: auto; }

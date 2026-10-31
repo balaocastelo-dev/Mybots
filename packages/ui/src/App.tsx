@@ -23,6 +23,7 @@ import { montarLista } from "./lista";
 import { lerLinkGuia } from "./guiaPainel";
 import { api } from "./api";
 import { Tema, Tamanho, Configuracao } from "./tema";
+import { TelaConfiguracoes, type AbaConfig } from "./configuracoes/Tela";
 import { Maquina } from "./maquina";
 import { Aviso, GlobalControl, notify } from "./controles";
 import { BotMenu, ImportDialog } from "./menuBot";
@@ -45,6 +46,8 @@ export function App() {
   const [mais, setMais] = useState(false);
   const [tts, setTts] = useState(() => pref("tts", true));          // resposta em áudio (ligada por padrão)
   const [handsFree, setHandsFree] = useState(() => pref("handsfree", true)); // volta a escutar depois que o bot fala
+  const [avisos, setAvisos] = useState(() => pref("avisos", true));
+  const [verConfig, setVerConfig] = useState<AbaConfig | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [newGroup, setNewGroup] = useState(false);
   const [verTrabalhos, setVerTrabalhos] = useState(false);
@@ -156,6 +159,7 @@ export function App() {
   useEffect(() => { if (selected) void loadHistory(selected); }, [selected]);
   useEffect(() => { setPref("tts", tts); }, [tts]);
   useEffect(() => { setPref("handsfree", handsFree); }, [handsFree]);
+  useEffect(() => { setPref("avisos", avisos); }, [avisos]);
   useEffect(() => { if (!selected && bots.length) setSelected(dmConversation(bots[0].id)); }, [bots.length]);
   // arrastar um arquivo para qualquer lugar da janela abre o mesmo diálogo de importação
   useEffect(() => {
@@ -193,6 +197,7 @@ export function App() {
 
   // notificações quando a aba está escondida
   useEffect(() => onEvent((m) => {
+    if (!pref("avisos", true)) return;
     if (m.type === "message" && m.message.sender.kind === "bot" && m.message.meta?.streaming !== true && document.hidden) notify(m.message.sender.name, m.message.text);
     if (m.type === "approval.request") notify("Aprovação necessária", m.approval.description);
     if (m.type === "question") notify("Precisa da sua resposta", m.question.question);
@@ -215,7 +220,7 @@ export function App() {
           <div className="brand"><span className="logo-img"><Ameba id="mybots" size={32} /></span><div><b>MyBots</b></div></div>
           <div className="sidebar-canto">
             <Tema />
-            <Configuracao />
+            <Configuracao aberto={verConfig !== null} onOpen={() => setVerConfig((v) => (v ? null : "geral"))} />
             <button className={"icon-btn canto" + (buscaAberta ? " on" : "")} type="button" title="Buscar" aria-label="Buscar" onClick={() => setBuscaAberta((v) => !v)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
             </button>
@@ -364,6 +369,18 @@ export function App() {
       </main>
 
       <Maquina bots={state.bots} pendencias={state.approvals.length + state.questions.length} voz={state.voice} />
+
+      {verConfig && (
+        <TelaConfiguracoes
+          bots={state.bots}
+          empresas={empresas}
+          abaInicial={verConfig}
+          onClose={() => setVerConfig(null)}
+          tts={tts} setTts={setTts}
+          handsFree={handsFree} setHandsFree={setHandsFree}
+          avisos={avisos} setAvisos={setAvisos}
+        />
+      )}
 
       {newGroup && <NewGroupDialog bots={state.bots} onClose={() => setNewGroup(false)} onCreated={(g) => { setNewGroup(false); setSelected(groupConversation(g.id)); }} />}
       {state.importFile && (

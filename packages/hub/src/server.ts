@@ -28,6 +28,9 @@ import { BotManager, PROVIDERS, PADRAO_DA_CASA } from "./botManager.js";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
 import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
 import { registrarGuia } from "./guiaRota.js";
+import { idDoAndroid } from "./ponteAndroid.js";
+import { ServicoAndroid, lojaDoHub } from "./androidServico.js";
+import { idDeBotValido } from "./androidBot.js";
 import * as celular from "./celular.js";
 import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
@@ -36,6 +39,8 @@ import { estadoDaChave } from "./chaves.js";
 
 export async function startServer(hub: Hub) {
   const app = Fastify({ logger: false, bodyLimit: 60 * 1024 * 1024 });
+  let atenderAndroidHttp: ((req: any, reply: any) => Promise<void>) | null = null;
+  let atenderAndroidWs: ((socket: any, req: any) => void) | null = null;
   await app.register(fastifyWebsocket, { options: { maxPayload: 60 * 1024 * 1024 } });
   // áudio e uploads chegam como binário cru
   // Corpo vazio com "content-type: application/json" é erro de cliente comum (DELETE e
@@ -76,7 +81,7 @@ export async function startServer(hub: Hub) {
   const rotaComSenha = (url: string) => {
     const caminho = url.split("?")[0];
     return caminho.startsWith("/api/") || caminho.startsWith("/ws/ui") || caminho.startsWith("/ws/vnc")
-      || caminho.startsWith("/pc/") || caminho === "/tela-vnc.html";
+      || caminho.startsWith("/pc/") || caminho.startsWith("/android/") || caminho === "/tela-vnc.html";
   };
   // A GUI do container entra por /pc/<empresa>/. O upstream é sempre 127.0.0.1
   // na porta da nossa faixa — o caminho não escolhe host. HTTP passa neste hook
@@ -115,6 +120,22 @@ export async function startServer(hub: Hub) {
     }
     const caminho = req.url.split("?")[0];
     const upgrade = String(req.headers.upgrade ?? "").toLowerCase() === "websocket";
+    if (caminho.startsWith("/android/")) {
+      if (upgrade) return;
+      const url = String(req.raw?.url || req.url || "");
+      const idAndroid = idDoAndroid(url);
+      if (idAndroid && caminho === `/android/${idAndroid}`) {
+        const busca = url.includes("?") ? url.slice(url.indexOf("?")) : "";
+        reply.redirect(`/android/${idAndroid}/${busca}`);
+        return;
+      }
+      if (!atenderAndroidHttp) {
+        reply.code(503).send({ ok: false, erro: "tela do Android ainda não subiu" });
+        return;
+      }
+      await atenderAndroidHttp(req, reply);
+      return;
+    }
     if (!caminho.startsWith("/pc/") || upgrade) return;
     const id = idDaTela(req.url);
     if (id && caminho === `/pc/${id}`) {
@@ -165,6 +186,12 @@ export async function startServer(hub: Hub) {
       if (!alvo) return fim();
       ligar(alvo);
     })();
+  });
+
+  // WebSocket da tela do Android (/android/<bot>/ws). O HTTP da mesma URL sai no hook acima.
+  app.get("/android/:id/*", { websocket: true }, (socket: any, req: any) => {
+    if (!atenderAndroidWs) { try { socket.close(); } catch { /* ok */ } return; }
+    atenderAndroidWs(socket, req);
   });
 
   // WebSocket da GUI (/pc/<empresa>/api/...). O HTTP da mesma URL sai no hook acima.
@@ -340,6 +367,26 @@ export async function startServer(hub: Hub) {
   hub.falamOutroIdioma = () => new Set(manager.list().filter((b) => ENSINA_IDIOMAS.test(b.persona ?? "")).map((b) => b.id));
   hub.managesOf = (botId) => manager.get(botId)?.manages;
   hub.ehGerente = (botId) => !!manager.get(botId)?.gerente;
+  const botConhecido = (id: string) => !!hub.db.getManaged(id) || hub.db.listBots().some((b) => b.id === id);
+  const android = new ServicoAndroid({
+    loja: lojaDoHub((k) => hub.db.getSetting(k), (k, v) => hub.db.setSetting(k, v)),
+    botExiste: botConhecido,
+  });
+  android.registrar();
+  atenderAndroidHttp = (req, reply) => android.http(req, reply);
+  atenderAndroidWs = (socket, req) => android.ws(socket, req);
+  app.post("/api/bots/:id/android/pair", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    return android.parear(id, (req.body ?? {}) as any);
+  });
+  app.get("/api/bots/:id/android/status", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    return android.status(id);
+  });
   {
     const ensinados = manager.ensinarGerentesAMontarEquipe();
     if (ensinados.length) console.log(`[hub] gerente(s) ensinados a montar equipe: ${ensinados.join(", ")}`);

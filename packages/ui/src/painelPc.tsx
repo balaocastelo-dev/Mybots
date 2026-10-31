@@ -255,7 +255,7 @@ const ABAS: { id: AbaLado; rotulo: string; icone: "pc" | "celular" | "mac" | "pa
 ];
 
 export function PainelDoPc({
-  botId, empresaId, nome, onFechar, onEvent, conversationId, rotinas = [], arquivos = [], bots = [],
+  botId, empresaId, nome, onFechar, onEvent, conversationId, rotinas = [], arquivos = [], bots = [], onAbrirBot,
 }: {
   botId: string;
   empresaId: string | null;
@@ -266,10 +266,11 @@ export function PainelDoPc({
   rotinas?: { id: string; nome: string; cron: string }[];
   arquivos?: { name: string; url: string }[];
   bots?: BotSummary[];
+  onAbrirBot?: (botId: string) => void;
 }) {
   const [aba, setAba] = useState<AbaLado>("pc");
   const [largura, setLargura] = useState(() => {
-    try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 300 && n <= 860 ? n : 640; } catch { return 640; }
+    try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 300 && n <= 760 ? n : 400; } catch { return 400; }
   });
   const larguraRef = useRef(largura);
   larguraRef.current = largura;
@@ -279,7 +280,7 @@ export function PainelDoPc({
     const inicioX = e.clientX;
     const inicioW = larguraRef.current;
     const mover = (ev: PointerEvent) => {
-      const teto = Math.min(860, Math.max(320, window.innerWidth * 0.58));
+      const teto = Math.min(760, Math.max(320, window.innerWidth * 0.58));
       const w = Math.min(teto, Math.max(300, inicioW + (inicioX - ev.clientX)));
       setLargura(w);
     };
@@ -314,7 +315,7 @@ export function PainelDoPc({
         <TelasDoBot botId={botId} nome={nome} mostrarPareamento={aba === "celular"} />
       )}
       {aba === "mac" && <TelaDoMac embutido />}
-      {aba === "trabalhos" && <Trabalhos bots={bots} botInicial={botId} embutido />}
+      {aba === "trabalhos" && <Trabalhos bots={bots} botInicial={botId} embutido onAbrirBot={onAbrirBot} />}
       {aba === "trabalho" && (
         <div className="lado-trabalho">
           <VisaoDaEmpresa nome={nome} empresaId={empresaId} rotinas={rotinas.length} arquivos={arquivos.length} />

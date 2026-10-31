@@ -43,7 +43,8 @@ export function DesktopAoVivo({ bot, empresaId, nome, onFechar }: {
   const aviso = fase === "iniciando" ? "Iniciando o desktop..." : "Conectando...";
 
   return (
-    <div className="desktop-fundo" role="dialog" aria-label={`Desktop de ${bot.name}`}>
+    <div className="desktop-fundo" role="dialog" aria-label={`Desktop de ${bot.name}`} onClick={onFechar}>
+      <div className="desktop-folha" onClick={(e) => e.stopPropagation()}>
       <header className="desktop-topo">
         <button className="icon-btn" type="button" title="Fechar" aria-label="Fechar o desktop" onClick={onFechar}>×</button>
         <Avatar bot={bot} size={28} />
@@ -56,7 +57,7 @@ export function DesktopAoVivo({ bot, empresaId, nome, onFechar }: {
       <div className="desktop-corpo">
         {fase !== "aberto" && (
           <div className="desktop-aviso">
-            <Avatar bot={bot} size={72} />
+            <Avatar bot={bot} size={144} />
             <strong>{bot.name}</strong>
             <span className="gira-lento" aria-hidden />
             <p>{aviso}</p>
@@ -79,6 +80,7 @@ export function DesktopAoVivo({ bot, empresaId, nome, onFechar }: {
           <button type="button" onClick={() => tecla("Enter")}>↵</button>
         </div>
       )}
+      </div>
     </div>
   );
 }

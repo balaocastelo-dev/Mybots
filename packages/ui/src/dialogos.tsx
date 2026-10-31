@@ -105,64 +105,81 @@ export function personaTemplate(name: string, role: string) {
   return `# ${name}\n\nVocê é ${name}, ${role} da equipe de Bots do sua empresa.\nSeu chefe é o o chefe. Você fala em português, de forma direta, curta e simpática.\n\n## O que você faz\n- (descreva aqui as tarefas típicas)\n- Mantém um LOG.md no workspace com o que fez.\n- Quando precisa de algo de outra área, consulta o Bot certo (ask_bot).\n\n## Regras\n- Antes de qualquer ação crítica (apagar, pagar, enviar, publicar, instalar), peça aprovação.\n- Se faltar informação, pergunte ao chefe com opções curtas em vez de supor.\n- Quando terminar algo, avise o chefe com uma frase.\n- Nunca exponha chaves, senhas ou dados de cliente.\n`;
 }
 
-export function BotForm({ value, onChange, providers, voices, isNew }: { value: any; onChange: (v: any) => void; providers: ProviderInfo[]; voices: Array<{ valor: string; nome: string; clonada?: boolean }>; isNew: boolean }) {
+export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tudo" }: { value: any; onChange: (v: any) => void; providers: ProviderInfo[]; voices: Array<{ valor: string; nome: string; clonada?: boolean }>; isNew: boolean; etapa?: "identidade" | "modelo" | "tudo" }) {
   const prov = providers.find((p) => p.kind === value.provider?.kind);
   const set = (patch: any) => onChange({ ...value, ...patch });
   const setProv = (patch: any) => onChange({ ...value, provider: { ...value.provider, ...patch } });
+  const identidade = etapa === "identidade" || etapa === "tudo";
+  const modelo = etapa === "modelo" || etapa === "tudo";
   return (
     <div className="form">
-      <div className="row">
-        <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
-        <div className="campo-rosto">
-          <RetratoPreview id={value.id ?? value.name ?? ""} avatar={value.avatar} />
-          <label className="narrow">Rosto<input value={value.avatar} onChange={(e) => set({ avatar: e.target.value })} placeholder="deixe vazio: desenho próprio" /><small>Vazio = retrato desenhado para este bot. Pode pôr um emoji ou o endereço de uma foto.</small></label>
-        </div>
-      </div>
-      <label>Função<input value={value.role} onChange={(e) => set({ role: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(value.name, e.target.value) } : {}) })} placeholder="Ex.: Marketing e redes sociais" /></label>
-      <div className="row">
-        <label>Provedor do modelo
-          <select value={value.provider?.kind ?? "anthropic"} onChange={(e) => { const p = providers.find((x) => x.kind === e.target.value); setProv({ kind: e.target.value, model: p?.defaultModel ?? "", baseURL: p?.defaultBaseURL ?? "" }); if (e.target.value === "opencode") set({ engine: "opencode", provider: { kind: "opencode", model: p?.defaultModel ?? "big-pickle" } }); }}>
-            {/* quem ja tem chave no Hub vem marcado: evita escolher um provedor que nao responde */}
+      {identidade && (
+        <>
+          <div className="row">
+            <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
+            <div className="campo-rosto">
+              <RetratoPreview id={value.id ?? value.name ?? ""} avatar={value.avatar} />
+              <label className="narrow">Rosto<input value={value.avatar} onChange={(e) => set({ avatar: e.target.value })} placeholder="deixe vazio: desenho próprio" /><small>Vazio = retrato desenhado para este bot. Pode pôr um emoji ou o endereço de uma foto.</small></label>
+            </div>
+          </div>
+          <label>Função<input value={value.role} onChange={(e) => set({ role: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(value.name, e.target.value) } : {}) })} placeholder="Ex.: Marketing e redes sociais" /></label>
+          {isNew && (
+            <details className="persona-sanfona">
+              <summary>Personalidade</summary>
+              <textarea rows={6} aria-label="Personalidade" value={value.persona} onChange={(e) => set({ persona: e.target.value, personaTouched: true })} />
+            </details>
+          )}
+        </>
+      )}
+      {modelo && (
+        <>
+          <div className="row">
+            <label>Provedor do modelo
+              <select value={value.provider?.kind ?? "anthropic"} onChange={(e) => { const p = providers.find((x) => x.kind === e.target.value); setProv({ kind: e.target.value, model: p?.defaultModel ?? "", baseURL: p?.defaultBaseURL ?? "" }); if (e.target.value === "opencode") set({ engine: "opencode", provider: { kind: "opencode", model: p?.defaultModel ?? "big-pickle" } }); }}>
                 {providers.map((p) => <option key={p.kind} value={p.kind}>{p.label}{p.chaveDaCasa ? "  \u2713 chave pronta" : p.needsKey ? "  (sem chave)" : ""}</option>)}
-          </select>
-        </label>
-        <label>Modelo
-          <input list="models" value={value.provider?.model ?? ""} onChange={(e) => setProv({ model: e.target.value })} />
-          <datalist id="models">{(prov?.models ?? []).map((m) => <option key={m} value={m} />)}</datalist>
-        </label>
-      </div>
-      {prov?.needsKey && (prov.chaveDaCasa
-        ? <p className="hint-inline">🔑 A chave da casa ({prov.keyEnv}) já está no Hub — este bot usa ela, você não precisa digitar nada.</p>
-        : <label>Chave de API ({prov.keyEnv})<input type="password" value={value.provider?.apiKey ?? ""} onChange={(e) => setProv({ apiKey: e.target.value })} placeholder={isNew ? "cole a chave" : "deixe em branco para manter"} /></label>)}
-      {prov?.kind === "ollama" && <label>Endereço do Ollama<input value={value.provider?.baseURL ?? ""} onChange={(e) => setProv({ baseURL: e.target.value })} placeholder="http://192.168.0.50:11434/v1" /></label>}
-      <div className="row">
-        <label>Motor
-          <select value={value.engine} disabled={value.provider?.kind === "opencode"} onChange={(e) => set({ engine: e.target.value })}>
-            <option value="opencode">OpenCode (agente completo, ferramentas do OpenCode)</option>
-            <option value="direct">Direto na API (mais leve, ferramentas do MyBots)</option>
-          </select>
-        </label>
-        <label>Voz
-          <select value={value.voice ?? ""} onChange={(e) => set({ voice: e.target.value })}>
-            <option value="">automática</option>
-            {voices.some((v) => v.clonada) && (
-              <optgroup label="Vozes da casa (clonadas, na 4090)">
-                {voices.filter((v) => v.clonada).map((v) => <option key={v.valor} value={v.valor}>{v.nome}</option>)}
-              </optgroup>
-            )}
-            <optgroup label="Vozes prontas">
-              {voices.filter((v) => !v.clonada).map((v) => <option key={v.valor} value={v.valor}>{v.nome}</option>)}
-            </optgroup>
-          </select>
-        </label>
-      </div>
-      <label>Nível de controle (automode)
-        <select value={value.controlMode ?? "supervisionado"} onChange={(e) => { const m = e.target.value as ControlMode; if (m === "deus" && !confirmDeus()) return; set({ controlMode: m }); }}>
-          {CONTROL_MODES.map((m) => <option key={m} value={m}>{CONTROL_LABELS[m]}</option>)}
-        </select>
-        <small className="hint-inline">{CONTROL_DESCRIPTIONS[(value.controlMode ?? "supervisionado") as ControlMode]} O seletor "Controle" da lista de bots, quando não está em "Por bot", vale sobre este.</small>
-      </label>
-      <label>Personalidade (system prompt)<textarea rows={8} value={value.persona} onChange={(e) => set({ persona: e.target.value, personaTouched: true })} /></label>
+              </select>
+            </label>
+            <label>Modelo
+              <input list="models" value={value.provider?.model ?? ""} onChange={(e) => setProv({ model: e.target.value })} />
+              <datalist id="models">{(prov?.models ?? []).map((m) => <option key={m} value={m} />)}</datalist>
+            </label>
+          </div>
+          {prov?.needsKey && (prov.chaveDaCasa
+            ? <p className="hint-inline">🔑 A chave da casa ({prov.keyEnv}) já está no Hub — este bot usa ela, você não precisa digitar nada.</p>
+            : <label>Chave de API ({prov.keyEnv})<input type="password" value={value.provider?.apiKey ?? ""} onChange={(e) => setProv({ apiKey: e.target.value })} placeholder={isNew ? "cole a chave" : "deixe em branco para manter"} autoComplete="off" /></label>)}
+          {prov?.kind === "ollama" && <label>Endereço do Ollama<input value={value.provider?.baseURL ?? ""} onChange={(e) => setProv({ baseURL: e.target.value })} placeholder="http://192.168.0.50:11434/v1" /></label>}
+          <div className="row">
+            <label>Motor
+              <select value={value.engine} disabled={value.provider?.kind === "opencode"} onChange={(e) => set({ engine: e.target.value })}>
+                <option value="opencode">OpenCode (agente completo, ferramentas do OpenCode)</option>
+                <option value="direct">Direto na API (mais leve, ferramentas do MyBots)</option>
+              </select>
+            </label>
+            <label>Voz
+              <select value={value.voice ?? ""} onChange={(e) => set({ voice: e.target.value })}>
+                <option value="">automática</option>
+                {voices.some((v) => v.clonada) && (
+                  <optgroup label="Vozes da casa (clonadas, na 4090)">
+                    {voices.filter((v) => v.clonada).map((v) => <option key={v.valor} value={v.valor}>{v.nome}</option>)}
+                  </optgroup>
+                )}
+                <optgroup label="Vozes prontas">
+                  {voices.filter((v) => !v.clonada).map((v) => <option key={v.valor} value={v.valor}>{v.nome}</option>)}
+                </optgroup>
+              </select>
+            </label>
+          </div>
+          <label>Nível de controle (automode)
+            <select value={value.controlMode ?? "supervisionado"} onChange={(e) => { const m = e.target.value as ControlMode; if (m === "deus" && !confirmDeus()) return; set({ controlMode: m }); }}>
+              {CONTROL_MODES.map((m) => <option key={m} value={m}>{CONTROL_LABELS[m]}</option>)}
+            </select>
+            <small className="hint-inline">{CONTROL_DESCRIPTIONS[(value.controlMode ?? "supervisionado") as ControlMode]} O seletor "Controle" da lista de bots, quando não está em "Por bot", vale sobre este.</small>
+          </label>
+        </>
+      )}
+      {!isNew && (
+        <label>Personalidade (system prompt)<textarea rows={8} value={value.persona} onChange={(e) => set({ persona: e.target.value, personaTouched: true })} /></label>
+      )}
     </div>
   );
 }
@@ -171,6 +188,7 @@ export function BotForm({ value, onChange, providers, voices, isNew }: { value: 
 export function NewGerenteDialog({ bots, onClose, onCreated }: { bots: BotSummary[]; onClose: () => void; onCreated: (id: string) => void }) {
   const { providers, voices } = usePresets();
   const [equipe, setEquipe] = useState<string[]>(bots.filter((b) => !b.manages?.length).map((b) => b.id));
+  const [etapa, setEtapa] = useState<0 | 1 | 2>(0);
   const [v, setV] = useState<any>({ name: "", role: "Gerente da equipe", avatar: "", voice: "", ...PADRAO_DA_CASA });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -191,27 +209,34 @@ export function NewGerenteDialog({ bots, onClose, onCreated }: { bots: BotSummar
     <div className="modal-bg" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>👑 Novo gerente</h3>
+        <p className="passos-wizard">Passo {etapa + 1} de 3 — {etapa === 0 ? "Equipe" : etapa === 1 ? "Identidade" : "Modelo e controle"}</p>
         <p className="muted">Ele fica acima dos bots escolhidos: você pede a ele, ele distribui e volta com o resultado. É quem atende no Telegram por padrão.</p>
         {!candidatos.length ? <p>Crie pelo menos um bot antes de nomear um gerente.</p> : (
           <>
-            <label>Quem ele gerencia <small className="muted">({equipe.length} de {candidatos.length})</small></label>
-            <div className="equipe">
-              {candidatos.map((b) => (
-                <button key={b.id} className={"equipe-item" + (equipe.includes(b.id) ? " on" : "")} onClick={() => alterna(b.id)}>
-                  <span>{equipe.includes(b.id) ? "☑" : "☐"}</span>
-                  <b>{b.avatar || "·"} {b.name}</b>
-                  <small>{b.role}</small>
-                </button>
-              ))}
-            </div>
-            <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew />
-            <p className="muted">A persona de gerente é escrita automaticamente com a equipe escolhida. Dá para editar depois no ⚙️ dele.</p>
+            {etapa === 0 && (
+              <>
+                <label>Quem ele gerencia <small className="muted">({equipe.length} de {candidatos.length})</small></label>
+                <div className="equipe">
+                  {candidatos.map((b) => (
+                    <button key={b.id} type="button" className={"equipe-item" + (equipe.includes(b.id) ? " on" : "")} aria-pressed={equipe.includes(b.id)} onClick={() => alterna(b.id)}>
+                      <span>{equipe.includes(b.id) ? "☑" : "☐"}</span>
+                      <b>{b.avatar || "·"} {b.name}</b>
+                      <small>{b.role}</small>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {etapa > 0 && <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew etapa={etapa === 1 ? "identidade" : "modelo"} />}
+            {etapa === 1 && <p className="muted">A persona de gerente é escrita automaticamente com a equipe escolhida. Dá para editar no sanfona, ou depois no ⚙️ dele.</p>}
           </>
         )}
         {err && <div className="err">{err}</div>}
         <div className="modal-foot">
-          <button className="btn" onClick={onClose}>Cancelar</button>
-          <button className="btn primary" disabled={busy || !v.name.trim() || !equipe.length} onClick={() => void criar()}>{busy ? "Criando…" : "Criar gerente"}</button>
+          <button className="btn" type="button" onClick={() => etapa === 0 ? onClose() : setEtapa((etapa - 1) as 0 | 1)}>{etapa === 0 ? "Cancelar" : "Voltar"}</button>
+          {etapa < 2
+            ? <button className="btn primary" type="button" disabled={etapa === 0 && !equipe.length} onClick={() => setEtapa((etapa + 1) as 1 | 2)}>Continuar</button>
+            : <button className="btn primary" type="button" disabled={busy || !v.name.trim() || !equipe.length} onClick={() => void criar()}>{busy ? "Criando…" : "Criar gerente"}</button>}
         </div>
       </div>
     </div>
@@ -226,6 +251,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
     empresaAtiva !== "todas" ? empresaAtiva : (empresas.length === 1 ? empresas[0].id : ""),
   );
   const [ponte, setPonte] = useState(false);
+  const [etapa, setEtapa] = useState<1 | 2>(1);
   const [v, setV] = useState<any>({ name: "", role: "", avatar: "", voice: "", ...PADRAO_DA_CASA, persona: personaTemplate("", "") });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -244,26 +270,35 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
     <div className="modal-bg" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>Novo bot</h3>
-        <div className="seg">
-          <button className={where === "hub" ? "on" : ""} onClick={() => setWhere("hub")}>Roda neste PC (o Hub cuida dele)</button>
-          <button className={where === "other" ? "on" : ""} onClick={() => setWhere("other")}>Roda em outro PC</button>
+        <p className="passos-wizard">Passo {etapa} de 2 — {etapa === 1 ? "Identidade" : "Modelo e controle"}</p>
+        <div className="seg" role="group" aria-label="Onde o bot roda">
+          <button type="button" className={where === "hub" ? "on" : ""} aria-pressed={where === "hub"} onClick={() => setWhere("hub")}>Roda neste PC (o Hub cuida dele)</button>
+          <button type="button" className={where === "other" ? "on" : ""} aria-pressed={where === "other"} onClick={() => setWhere("other")}>Roda em outro PC</button>
         </div>
-        <label>Empresa <small className="muted">(todo bot pertence a uma)</small></label>
-        <select value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
-          <option value="" disabled>Escolha a empresa…</option>
-          {empresas.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-        </select>
-        {!empresas.length && <p className="muted">Nenhuma empresa cadastrada ainda — crie a empresa primeiro, em ＋ gerenciar empresas.</p>}
-        <label className="linha-check"><input type="checkbox" checked={ponte} onChange={(e) => setPonte(e.target.checked)} /> Ponte: pode falar com bots de outras empresas</label>
+        {etapa === 1 && (
+          <>
+            <label>Empresa <small className="muted">(todo bot pertence a uma)</small></label>
+            <select aria-label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+              <option value="" disabled>Escolha a empresa…</option>
+              {empresas.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
+            </select>
+            {!empresas.length && <p className="muted">Nenhuma empresa cadastrada ainda — crie a empresa primeiro, em ＋ gerenciar empresas.</p>}
+            <label className="linha-check"><input type="checkbox" checked={ponte} onChange={(e) => setPonte(e.target.checked)} /> Ponte: pode falar com bots de outras empresas</label>
+          </>
+        )}
 
-        <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew />
-        {where === "other" && (
+        <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew etapa={etapa === 1 ? "identidade" : "modelo"} />
+        {etapa === 2 && where === "other" && (
           <div className="hint-box">Na pasta <code>mybots</code> do outro PC, rode no PowerShell:<pre>{cmd}</pre>Depois inicie com <code>bots\{id}\start-bot.cmd</code>. O bot aparece aqui assim que conectar.</div>
         )}
         {err && <div className="err">{err}</div>}
         <div className="card-actions">
-          {where === "hub" ? <button className="btn primary" disabled={!v.name.trim() || !empresa || busy} onClick={create}>{busy ? "Criando…" : `Criar e iniciar (${id})`}</button> : <button className="btn primary" onClick={() => { navigator.clipboard?.writeText(cmd); onClose(); }}>Copiar comando e fechar</button>}
-          <button className="btn" onClick={onClose}>Cancelar</button>
+          <button className="btn" type="button" onClick={() => etapa === 1 ? onClose() : setEtapa(1)}>{etapa === 1 ? "Cancelar" : "Voltar"}</button>
+          {etapa === 1
+            ? <button className="btn primary" type="button" disabled={!v.name.trim()} onClick={() => setEtapa(2)}>Continuar</button>
+            : where === "hub"
+              ? <button className="btn primary" type="button" disabled={!v.name.trim() || !empresa || busy} onClick={create}>{busy ? "Criando…" : `Criar e iniciar (${id})`}</button>
+              : <button className="btn primary" type="button" onClick={() => { navigator.clipboard?.writeText(cmd); onClose(); }}>Copiar comando e fechar</button>}
         </div>
       </div>
     </div>

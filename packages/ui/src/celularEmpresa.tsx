@@ -196,7 +196,10 @@ export function CelularDaEmpresaPainel({
         ? <div className="pc-selo"><i className={"pc-luz" + (online ? " on" : "")} />
             <span><b>{vinculo.modelo}</b> · {vinculo.serial}{trava ? ` · ${trava.nome} está nele` : ""}</span>
           </div>
-        : <p className="muted">Nenhum celular vinculado a esta empresa.</p>}
+        : <div className="cel-vazio">
+            <div className="quadro quadro-android cel-vazio-moldura" aria-hidden><div className="quadro-estado">Nenhum celular</div></div>
+            <p className="muted">Nenhum celular vinculado a esta empresa. O pareamento fica aqui embaixo: mesma rede, IP, porta e o código de 6 dígitos.</p>
+          </div>}
       {uso.usando && <p className="muted">Última ação: <b>{uso.usando.nome}</b> {uso.usando.resumo}</p>}
 
       {aoVivo && (

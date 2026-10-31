@@ -247,20 +247,24 @@ export function summarize(input: unknown): string {
   return "";
 }
 
-export function ApprovalCard({ a, botName, onAnswer }: { a: PendingApproval; botName?: string; onAnswer: (allow: boolean, remember?: boolean) => void }) {
+export function ApprovalCard({ a, botName, onAnswer, auditoria = false }: { a: PendingApproval; botName?: string; onAnswer: (allow: boolean, remember?: boolean) => void; auditoria?: boolean }) {
   const cmd = (a.input as any)?.command ?? (a.input as any)?.patterns?.join("\n") ?? (a.input as any)?.detail;
   const showCmd = cmd && !a.description.includes(String(cmd));
+  const alto = a.risk === "high" && !auditoria;
   return (
-    <div className={"card approval risk-" + a.risk}>
-      <div className="card-title">🔐 Permitir que {botName ?? "o bot"} execute?</div>
+    <div className={"card approval risk-" + a.risk + (auditoria ? " auditoria" : "")} role={alto ? "alertdialog" : "group"} aria-label={auditoria ? "Auditoria" : "Espera o seu OK"}>
+      {auditoria && <span className="pill-auditoria">auditoria</span>}
+      <div className="card-title">{auditoria ? "Registro" : "🔐 Permitir que " + (botName ?? "o bot") + " execute?"}</div>
       <div className="card-desc">{a.description}</div>
       {showCmd && <pre>{String(cmd)}</pre>}
       <div className="card-meta">ferramenta {a.tool} · risco {{ low: "baixo", medium: "médio", high: "ALTO" }[a.risk]}</div>
-      <div className="card-actions">
-        <button className="btn primary" onClick={() => onAnswer(true)}>Permitir</button>
-        {a.tool === "run_command" || a.tool === "bash" ? <button className="btn" onClick={() => onAnswer(true, true)}>Permitir sempre</button> : null}
-        <button className="btn danger" onClick={() => onAnswer(false)}>Negar</button>
-      </div>
+      {!auditoria && (
+        <div className="card-actions">
+          <button className="btn primary" onClick={() => onAnswer(true)}>Aprovar</button>
+          {a.tool === "run_command" || a.tool === "bash" ? <button className="btn" onClick={() => onAnswer(true, true)}>Permitir sempre</button> : null}
+          <button className="btn danger" onClick={() => onAnswer(false)}>Recusar</button>
+        </div>
+      )}
     </div>
   );
 }

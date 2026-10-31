@@ -18,6 +18,17 @@ export function lerTema(): TemaNome {
   try { return localStorage.getItem("mybots.tema") === "escuro" ? "escuro" : "claro"; } catch { return "claro"; }
 }
 
+const CHAVE_PULAR_ABERTURA = "mybots.pular-abertura";
+
+/** A abertura (partículas) pode ser pulada. A escolha fica neste navegador. */
+export function pularAbertura(): boolean {
+  try { return localStorage.getItem(CHAVE_PULAR_ABERTURA) === "1"; } catch { return false; }
+}
+
+export function gravarPularAbertura(pular: boolean) {
+  try { localStorage.setItem(CHAVE_PULAR_ABERTURA, pular ? "1" : "0"); } catch { /* privado */ }
+}
+
 /** O tema nao segue o sistema operacional: quem manda e este botao, e a
  *  escolha fica guardada no navegador. Claro e o padrao. */
 export function Tema() {

@@ -1,5 +1,10 @@
 import fs from "node:fs";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import { execFile } from "node:child_process";
+import { raizDoProjeto } from "./config.js";
+import { hostsParaVarredura, varrerPorta } from "./celularEmpresa.js";
 
 /**
  * O CELULAR DA EMPRESA
@@ -28,8 +33,11 @@ export type Aparelho = {
 const TAMANHOS = new Map<string, { largura: number; altura: number }>();
 
 function caminhoDoAdb(): string | null {
+  const raiz = raizDoProjeto();
   const tentativas = [
     process.env.MYBOTS_ADB,
+    path.join(raiz, "ferramentas", "scrcpy", "adb.exe"),
+    path.join(raiz, "ferramentas", "scrcpy", "adb"),
     "C:\\android\\sdk\\platform-tools\\adb.exe",
     `${process.env.LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe`,
     `${process.env.USERPROFILE}\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe`,
@@ -143,6 +151,56 @@ export async function conectar(ipPorta: string): Promise<{ ok: boolean; msg: str
   const alvo = /:\d+$/.test(ipPorta) ? ipPorta : ipPorta + ":5555";
   const r = await adb(["connect", alvo], 25000);
   return { ok: r.ok && /connected/i.test(r.saida), msg: r.saida.trim().slice(0, 200) };
+}
+
+export async function mdns(): Promise<string> {
+  const r = await adb(["mdns", "services"], 8000);
+  return r.saida;
+}
+
+/** Código de 6 dígitos do Android. O código não fica guardado. */
+export async function parear(host: string, porta: number, codigo: string): Promise<{ ok: boolean; msg: string }> {
+  if (!/^\d{6}$/.test(codigo) || porta === 8787 || porta < 1 || porta > 65535) return { ok: false, msg: "código ou porta inválidos" };
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return { ok: false, msg: "endereço inválido" };
+  const r = await adb(["pair", `${host}:${porta}`, codigo], 20000);
+  const ok = r.ok && /successfully paired/i.test(r.saida);
+  return { ok, msg: r.saida.replace(codigo, "******").trim().slice(0, 240) || (ok ? "pareado" : "não pareou") };
+}
+
+export async function abrirApp(serial: string, pacote: string): Promise<boolean> {
+  const r = await adb(["-s", serial, "shell", "monkey", "-p", pacote, "-c", "android.intent.category.LAUNCHER", "1"], 20000);
+  return r.ok && !/error|Exception/i.test(r.saida);
+}
+
+export async function modeloDe(serial: string): Promise<string> {
+  const r = await adb(["-s", serial, "shell", "getprop", "ro.product.model"], 8000);
+  return r.ok ? r.saida.trim().slice(0, 80) : "";
+}
+
+/** TCP curto na 5555. Porta 8787 nem chega a ser aberta. */
+export function portaAberta(host: string, porta: number, ms = 180): Promise<boolean> {
+  if (porta !== 5555 || !/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const s = net.connect({ host, port: porta, family: 4 });
+    let acabou = false;
+    const fim = (ok: boolean) => { if (acabou) return; acabou = true; s.destroy(); resolve(ok); };
+    s.setTimeout(ms);
+    s.once("connect", () => fim(true));
+    s.once("timeout", () => fim(false));
+    s.once("error", () => fim(false));
+  });
+}
+
+/** Aparelhos com adb tcpip na rede local. MYBOTS_CELULAR_VARREDURA=0 desliga. */
+export async function varrerRedeLocal(): Promise<string[]> {
+  if (/^(0|nao|não|false|off|no)$/i.test(String(process.env.MYBOTS_CELULAR_VARREDURA ?? ""))) return [];
+  const locais: string[] = [];
+  for (const lista of Object.values(os.networkInterfaces())) {
+    for (const i of lista ?? []) {
+      if (i.family === "IPv4" && !i.internal) locais.push(i.address);
+    }
+  }
+  return varrerPorta(hostsParaVarredura(locais), 5555, portaAberta);
 }
 
 export async function acordar(serial: string): Promise<boolean> {

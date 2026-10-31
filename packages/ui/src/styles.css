@@ -1535,6 +1535,18 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
 .pc-comandos { display: flex; flex-wrap: wrap; gap: 6px; flex: none; }
 .pc-comandos .btn { font-size: 12.5px; padding: 5px 10px; }
 .pc-comandos .btn.gravando { border-color: var(--danger, #d4453c); color: var(--danger, #d4453c); }
+.pc-abas { display: flex; gap: 6px; padding: 8px 10px 0; }
+.pc-abas button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.pc-abas button.on { background: var(--panel-2); border-color: var(--accent); }
+.cel-emp { display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 0; overflow: auto; }
+.cel-emp-passo { font-size: 12.5px; margin: 0; }
+.cel-visor { min-height: 220px; }
+.cel-visor img { width: 100%; height: 100%; object-fit: contain; background: #000; cursor: crosshair; }
+.cel-visor.sover img { pointer-events: none; cursor: default; }
+.cel-achados { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cel-achados li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cel-parear { display: flex; gap: 6px; flex-wrap: wrap; }
+.cel-parear input { flex: 1; min-width: 90px; }
 .pc-selo {
   display: flex; align-items: flex-start; gap: 8px;
   font-size: 12.5px; line-height: 1.35;

@@ -161,7 +161,9 @@ test("o roteiro anda um passo por vez e cada um pode ser pulado", async () => {
   assert.equal(proximoDepoisDe("empresa", true), "imagem");
   assert.equal(proximoDepoisDe("time", true), "whatsapp");
   assert.equal(proximoDepoisDe("imagem", true), "resumo");
-  assert.equal(proximoDepoisDe("imagem", false), "whatsapp");
+  assert.equal(proximoDepoisDe("imagem", false), "celular");
+  assert.equal(proximoDepoisDe("celular", false), "whatsapp");
+  assert.equal(proximoDepoisDe("celular", true), "whatsapp");
 
   const falas: string[] = [];
   const perguntas: Array<{ id: string; texto: string }> = [];

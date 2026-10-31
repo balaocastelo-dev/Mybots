@@ -522,17 +522,78 @@ export async function startServer(hub: Hub) {
   app.get("/api/empresas/:id/maquina/gravacao", async (req, reply) => {
     const id = (req.params as any).id as string;
     if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
-    return hub.estadoGravacao(id);
+    const onde = (req.query as any).onde === "celular" ? "celular" : "pc";
+    return hub.estadoGravacao(id, onde);
   });
   app.post("/api/empresas/:id/maquina/gravacao", async (req, reply) => {
     const id = (req.params as any).id as string;
     if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
-    const b = (req.body ?? {}) as { acao?: string; conversationId?: string; legenda?: string };
+    const b = (req.body ?? {}) as { acao?: string; conversationId?: string; legenda?: string; onde?: string };
+    const onde = b.onde === "celular" ? "celular" as const : "pc" as const;
     if (b.acao === "iniciar") {
-      return await hub.iniciarGravacao({ empresaId: id, por: "chefe", nome: "você", conversationId: b.conversationId });
+      return await hub.iniciarGravacao({ empresaId: id, por: "chefe", nome: "você", conversationId: b.conversationId, onde });
     }
-    if (b.acao === "parar") return await hub.pararGravacao(id, b.legenda);
+    if (b.acao === "parar") return await hub.pararGravacao(id, b.legenda, onde);
     return reply.code(400).send({ error: "acao deve ser iniciar ou parar" });
+  });
+  app.get("/api/celulares/descobrir", async () => hub.descobrirCelulares());
+  app.get("/api/empresas/:id/celular", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    const v = hub.vinculoDoCelular(id);
+    const online = v ? (await celular.listar()).some((a) => a.serial === v.serial && a.estado === "device") : false;
+    return { vinculo: v, online, trava: hub.travaCelular.ver(id) };
+  });
+  app.post("/api/empresas/:id/celular", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    return hub.vincularCelular(id, String((req.body as any)?.serial ?? ""));
+  });
+  app.delete("/api/empresas/:id/celular", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    hub.esquecerCelular(id);
+    return { ok: true };
+  });
+  app.post("/api/empresas/:id/celular/parear", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    return hub.parearCelular(id, (req.body ?? {}) as any);
+  });
+  app.post("/api/empresas/:id/celular/assumir", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    return hub.assumirCelular(id, (req.body as any)?.assumir !== false);
+  });
+  app.get("/api/empresas/:id/celular/uso", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    return hub.usoDoCelular(id);
+  });
+  app.get("/api/empresas/:id/celular/tela", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    const v = hub.vinculoDoCelular(id);
+    if (!v) return reply.code(404).send({ error: "celular não vinculado" });
+    const png = await celular.tela(v.serial);
+    if (!png) return reply.code(503).send({ error: "não consegui ver a tela" });
+    return reply.type("image/png").header("cache-control", "no-store").send(png);
+  });
+  app.post("/api/empresas/:id/celular/tocar", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    const v = hub.vinculoDoCelular(id);
+    if (!v) return reply.code(404).send({ error: "celular não vinculado" });
+    const trava = hub.travaCelular.ver(id);
+    if (!trava || trava.id !== "chefe") {
+      return reply.code(409).send({ error: trava ? `${trava.nome} está no celular` : "assuma o celular antes de tocar" });
+    }
+    const b = req.body as { x?: number; y?: number };
+    return { ok: await celular.tocar(v.serial, Number(b?.x), Number(b?.y)) };
+  });
+  app.post("/api/empresas/:id/celular/janela", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    const r = hub.abrirJanelaDoCelular(id);
+    return r.ok ? r : reply.code(400).send(r);
   });
   app.post("/api/empresas/:id/maquina/ligar", async (req) => {
     const id = (req.params as any).id as string;

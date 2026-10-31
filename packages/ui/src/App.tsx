@@ -13,6 +13,7 @@ import { Abertura, PrimeiraEmpresa, EscolhaIdioma } from "./abertura";
 import { TelaLegal } from "./legal";
 import { TelaCreditos } from "./creditos";
 import { PcDaEmpresa } from "./pc";
+import { AtalhoCelular, CelularDaEmpresaPainel } from "./celularEmpresa";
 import { PainelDoPc } from "./painelPc";
 import { CelularDaEmpresa } from "./celular";
 import { TelaDoMac } from "./mac";
@@ -186,7 +187,7 @@ export function App() {
         <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} />
         <ul className="bots">
           <li className="atalho-trabalhos" onClick={() => { setVerCelular(true); if (window.innerWidth < 620) setSidebarOpen(false); }}>
-            <span className="at-icone" aria-hidden="true">{"\uD83D\uDCF1"}</span><div><b>Celular</b><small>o aparelho da loja, por WiFi</small></div>
+            <span className="at-icone" aria-hidden="true">{"\uD83D\uDCF1"}</span><div><b>Celular</b><small>um Android por empresa</small></div>
           </li>
           <li className="atalho-trabalhos" onClick={() => { setVerMac(true); if (window.innerWidth < 620) setSidebarOpen(false); }}>
             <span className="at-icone" aria-hidden="true">{"\uD83C\uDF4E"}</span><div><b>Tela do Mac</b><small>o MacBook da rede, ao vivo</small></div>
@@ -324,6 +325,8 @@ export function App() {
       )}
       {legalPara && <TelaLegal empresaId={legalPara} empresaNome={empresas.find((e) => e.id === legalPara)?.nome ?? legalPara}
         onClose={() => { setLegalPara(null); setVerEmpresas(true); }} />}
+      {verCelular && <AtalhoCelular empresas={empresas} ativa={empresaAtiva} onFechar={() => setVerCelular(false)} />}
+      {verMac && <TelaDoMac onFechar={() => setVerMac(false)} />}
       {verEmpresas && <EmpresasDialog empresas={empresas} bots={state.bots} onClose={() => { setVerEmpresas(false); void carregarEmpresas(); }} />}
       {newBot && <NewBotDialog empresas={empresas} empresaAtiva={empresaAtiva} onCriou={() => void carregarEmpresas()} onClose={() => setNewBot(false)} onCreated={(id) => { setNewBot(false); setSelected(dmConversation(id)); }} />}
 
@@ -2168,7 +2171,7 @@ function EmpresasDialog({ empresas, bots, onClose }: { empresas: Array<{ id: str
               }}>{analisando ? "Lendo…" : "Sugerir pelo site acima"}</button>
               <button className="btn" onClick={() => setLegal(sel)}>Leis e consentimentos</button>
               <button className="btn" onClick={() => setVerPc(sel)}>🖥️ Ver o PC da empresa</button>
-              <button className="btn" hidden onClick={() => {}}>📱 Ver o celular</button>
+              <button className="btn" onClick={() => setVerCelular(true)}>📱 Celular da empresa</button>
               <button className="btn" hidden onClick={() => {}}>🍎 Tela do Mac</button>
               <button className="btn" onClick={() => setCreditos(sel)}>Créditos e Pix</button>
               <button className="btn perigo" onClick={() => void apagar(sel)}>Apagar empresa</button>
@@ -2230,6 +2233,15 @@ function EmpresasDialog({ empresas, bots, onClose }: { empresas: Array<{ id: str
           </>
         )}
         {verPc && <PcDaEmpresa empresaId={verPc} nome={lista.find((e) => e.id === verPc)?.nome ?? verPc} onFechar={() => setVerPc(null)} />}
+        {verCelular && sel && (
+          <div className="modal-bg" onClick={() => setVerCelular(false)}>
+            <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+              <h3>Celular da {lista.find((e) => e.id === sel)?.nome ?? sel}</h3>
+              <CelularDaEmpresaPainel empresaId={sel} nome={lista.find((e) => e.id === sel)?.nome ?? sel} aoVivo />
+              <div className="modal-foot"><button className="btn" onClick={() => setVerCelular(false)}>Fechar</button></div>
+            </div>
+          </div>
+        )}
       {creditos && <TelaCreditos empresaId={creditos} empresaNome={lista.find((e) => e.id === creditos)?.nome ?? creditos} onClose={() => setCreditos(null)} />}
         {legal && <TelaLegal empresaId={legal} empresaNome={lista.find((e) => e.id === legal)?.nome ?? legal} onClose={() => setLegal(null)} />}
         {err && <div className="err">{err}</div>}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { HubToUi, UsoDoPc } from "@mybots/shared";
+import { CelularDaEmpresaPainel } from "./celularEmpresa";
 
 /**
  * O PC da empresa, do lado do chat.
@@ -89,7 +90,7 @@ export function TelaDaEmpresa({
     if (!ouvir) return;
     return ouvir((ev) => {
       if (ev.type === "pc.uso" && ev.empresaId === empresaId) setUso(ev.uso);
-      if (ev.type === "pc.gravacao" && ev.empresaId === empresaId) setGrav({ gravando: ev.gravando, desde: ev.desde, nome: ev.nome });
+      if (ev.type === "pc.gravacao" && ev.empresaId === empresaId && ev.onde !== "celular") setGrav({ gravando: ev.gravando, desde: ev.desde, nome: ev.nome });
     });
   }, [empresaId]);
 
@@ -224,6 +225,7 @@ export function PainelDoPc({
   onEvent?: (l: (m: HubToUi) => void) => () => void;
   conversationId?: string;
 }) {
+  const [aba, setAba] = useState<"pc" | "celular">("pc");
   const [largura, setLargura] = useState(() => {
     try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 300 && n <= 760 ? n : 400; } catch { return 400; }
   });
@@ -254,13 +256,19 @@ export function PainelDoPc({
       <header className="pc-lado-topo">
         <div>
           <b>Computer</b>
-          <small>{empresaId ? (nome || "PC da empresa") : "sem empresa"}</small>
+          <small>{empresaId ? (nome || "da empresa") : "sem empresa"}</small>
         </div>
         <button className="icon-btn" type="button" title="Recolher a tela" onClick={onFechar}>›</button>
       </header>
-      {empresaId
-        ? <TelaDaEmpresa empresaId={empresaId} nome={nome} onEvent={onEvent} conversationId={conversationId} compacto />
-        : <p className="pc-sem-empresa">Este bot não está numa empresa. O PC é um só por empresa, compartilhado por todos os bots dela.</p>}
+      {empresaId && (
+        <div className="pc-abas" role="tablist">
+          <button type="button" className={aba === "pc" ? "on" : ""} onClick={() => setAba("pc")}>PC</button>
+          <button type="button" className={aba === "celular" ? "on" : ""} onClick={() => setAba("celular")}>Celular</button>
+        </div>
+      )}
+      {!empresaId && <p className="pc-sem-empresa">Este bot não está numa empresa. O PC e o celular são um de cada, compartilhados pelos bots dela.</p>}
+      {empresaId && aba === "pc" && <TelaDaEmpresa empresaId={empresaId} nome={nome} onEvent={onEvent} conversationId={conversationId} compacto />}
+      {empresaId && aba === "celular" && <CelularDaEmpresaPainel empresaId={empresaId} nome={nome} conversationId={conversationId} onEvent={onEvent} aoVivo />}
     </aside>
   );
 }

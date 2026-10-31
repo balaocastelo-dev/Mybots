@@ -49,7 +49,7 @@ export type HubParaPassos = {
   raizDoProjeto: string;
 };
 
-export const PASSOS = ["ola", "empresa", "time", "imagem", "whatsapp", "voz", "email", "telegram", "resumo", "fim"] as const;
+export const PASSOS = ["ola", "empresa", "time", "imagem", "celular", "whatsapp", "voz", "email", "telegram", "resumo", "fim"] as const;
 export type Passo = (typeof PASSOS)[number];
 
 type Estado = {
@@ -87,7 +87,8 @@ export function proximoDepoisDe(passo: Passo, pular: boolean): Passo | null {
   if (passo === "ola") return pular ? "time" : "empresa";
   if (passo === "empresa") return pular ? "imagem" : "time";
   if (passo === "time") return pular ? "whatsapp" : "imagem";
-  if (passo === "imagem") return pular ? "resumo" : "whatsapp";
+  if (passo === "imagem") return pular ? "resumo" : "celular";
+  if (passo === "celular") return "whatsapp";
   return null;
 }
 
@@ -212,6 +213,7 @@ export class PrimeirosPassos {
       case "empresa": return this.dadosDaEmpresa(e);
       case "time": return this.time(e);
       case "imagem": return this.imagem(e);
+      case "celular": return this.celular(e);
       case "whatsapp": return this.whatsapp(e);
       case "voz": return this.voz(e);
       case "email": return this.pedirEmail(e);
@@ -276,7 +278,22 @@ export class PrimeirosPassos {
     const imagem = await this.gerar("imagem", this.ficha(e), this.guardador(e.botId)).catch((err): PecaDemo => ({ tipo: "imagem", titulo: "Uma imagem", texto: "", erro: (err as Error).message }));
     this.mostrar(e, imagem, "imagem");
     this.gravar(e);
-    this.pergunta(e, "imagem", "Agora os canais. Começo pelo WhatsApp?", ["Pode seguir", "Pular"]);
+    this.pergunta(e, "imagem", "Agora o celular da empresa, na mesma rede?", ["Pode seguir", "Pular"]);
+  }
+
+  /** Celular Android desta empresa, por depuração sem fio. Dá para pular. */
+  private async celular(e: Estado): Promise<void> {
+    const nome = this.hub.empresa(e.empresaId)?.nome ?? "a empresa";
+    this.hub.falar(e.botId,
+      "**Celular da " + nome + ".** Um aparelho Android só desta empresa — o WhatsApp, o banco e os apps ficam nele.\n\n" +
+      "No telefone, na mesma rede Wi-Fi deste Hub:\n" +
+      "1. Ajustes → Sobre o telefone → toque 7 vezes em Número da versão.\n" +
+      "2. Ajustes → Sistema → Opções do desenvolvedor → ligue Depuração sem fio.\n" +
+      "3. Toque em Parear dispositivo com código (6 dígitos) ou Parear com QR code.\n" +
+      "4. No painel: Empresas → Celular da empresa. Eu mostro o modelo e o serial para você reconhecer o aparelho, " +
+      "e você digita o código. Se o IP mudar, eu reconecto sozinho.\n\n" +
+      "Pode pular e ligar isso depois.");
+    this.pergunta(e, "celular", "Vinculou o celular, ou pulamos?", ["Já vinculei", "Pular"]);
   }
 
   /** Põe a peça no chat como anexo de verdade, ou diz em uma linha por que não saiu. */

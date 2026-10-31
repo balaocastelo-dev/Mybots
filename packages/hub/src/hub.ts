@@ -24,6 +24,13 @@ import type { Attachment, MediaKind, MediaResult, UsoDoPc } from "@mybots/shared
 import { UsosDoPc } from "./usoDoPc.js";
 import { Gravacoes, codificarMp4, ligarCdp, portaCdpPermitida, temFfmpeg, limitesDaGravacao } from "./gravacao.js";
 import { estadoDa as estadoDaMaquina } from "./maquinas.js";
+import * as celular from "./celular.js";
+import {
+  TravaDosCelulares, acaoSensivel, enderecoParaReconectar, lerMdns, lerPareamento, pacoteValido, resumoDoCelular,
+  type VinculoCelular,
+} from "./celularEmpresa.js";
+import { argumentosScrcpy } from "./scrcpy.js";
+import { spawn } from "node:child_process";
 
 const STREAM_DELTAS = process.env.MYBOTS_STREAM_DELTAS === "1";
 
@@ -182,6 +189,13 @@ export class Hub {
     ligarFonte: (empresaId, onFrame) => this.fonteDaTela(empresaId, onFrame),
     aoLimite: (empresaId) => { void this.pararGravacao(empresaId, "Gravação da tela (parou no limite de tempo ou de tamanho)."); },
   });
+  readonly gravacoesCelular = new Gravacoes({
+    ligarFonte: (empresaId, onFrame) => this.fonteDoCelular(empresaId, onFrame),
+    aoLimite: (empresaId) => { void this.pararGravacao(empresaId, "Gravação do celular (parou no limite).", "celular"); },
+  });
+  readonly travaCelular = new TravaDosCelulares();
+  private usosCelular = new UsosDoPc();
+  private relogioCelular: NodeJS.Timeout | null = null;
   private pendingAsks = new Map<string, PendingAsk>();
   private approvalOwner = new Map<string, string>();
   private questionOwner = new Map<string, string>();
@@ -203,6 +217,8 @@ export class Hub {
     // O roteiro dos primeiros passos fala PELO Gerente. A interface e minuscula de
     // proposito: ele nao enxerga o Hub inteiro, so o que precisa para falar, perguntar,
     // guardar arquivo e ler a empresa.
+    this.relogioCelular = setInterval(() => { void this.reconectarCelulares(); }, 20_000);
+    if (typeof this.relogioCelular.unref === "function") this.relogioCelular.unref();
     this.passos = new PrimeirosPassos({
       falar: (botId, texto, anexos) =>
         void this.storeMessage(dmConversation(botId), this.botSender(botId), texto, anexos?.length ? { files: anexos } : undefined),
@@ -833,30 +849,36 @@ export class Hub {
     return ligarCdp(m.portaCdp, onFrame, limitesDaGravacao().fps);
   }
 
-  async iniciarGravacao(p: { empresaId: string; por: string; nome: string; conversationId?: string }) {
-    const r = await this.gravacoes.iniciar(p);
-    if (r.ok) this.broadcastUi({ type: "pc.gravacao", empresaId: p.empresaId, gravando: true, desde: r.desde, nome: p.nome });
+  private gravadorDe(onde: "pc" | "celular") {
+    return onde === "celular" ? this.gravacoesCelular : this.gravacoes;
+  }
+
+  async iniciarGravacao(p: { empresaId: string; por: string; nome: string; conversationId?: string; onde?: "pc" | "celular" }) {
+    const onde = p.onde === "celular" ? "celular" : "pc";
+    const r = await this.gravadorDe(onde).iniciar(p);
+    if (r.ok) this.broadcastUi({ type: "pc.gravacao", empresaId: p.empresaId, gravando: true, desde: r.desde, nome: p.nome, onde });
     return r;
   }
 
-  estadoGravacao(empresaId: string) {
-    return this.gravacoes.estado(empresaId);
+  estadoGravacao(empresaId: string, onde: "pc" | "celular" = "pc") {
+    return this.gravadorDe(onde).estado(empresaId);
   }
 
-  private async atenderGravacao(botId: string, acao: "iniciar" | "parar" | "estado", conversationId?: string, legenda?: string): Promise<{ ok: boolean; texto: string }> {
+  private async atenderGravacao(botId: string, acao: "iniciar" | "parar" | "estado", conversationId?: string, legenda?: string, onde: "pc" | "celular" = "pc"): Promise<{ ok: boolean; texto: string }> {
     const emp = this.empresaDe(botId).id;
-    if (!emp) return { ok: false, texto: "Você não está numa empresa, então não tem PC para gravar." };
+    if (!emp) return { ok: false, texto: "Você não está numa empresa, então não tem tela para gravar." };
+    const qual = onde === "celular" ? "celular" : "PC";
     if (acao === "estado") {
-      const e = this.gravacoes.estado(emp);
-      return { ok: true, texto: e.gravando ? `Gravando há ${e.segundos ?? 0}s (${e.nome ?? "alguém"}).` : "A tela não está sendo gravada." };
+      const e = this.estadoGravacao(emp, onde);
+      return { ok: true, texto: e.gravando ? `Gravando o ${qual} há ${e.segundos ?? 0}s (${e.nome ?? "alguém"}).` : `O ${qual} não está sendo gravado.` };
     }
     if (acao === "iniciar") {
-      const r = await this.iniciarGravacao({ empresaId: emp, por: botId, nome: this.botSender(botId).name, conversationId });
+      const r = await this.iniciarGravacao({ empresaId: emp, por: botId, nome: this.botSender(botId).name, conversationId, onde });
       return r.ok
-        ? { ok: true, texto: "Gravando a tela do PC. Quando terminar, chame gravar_tela com acao parar e uma legenda de uma linha do que fez." }
+        ? { ok: true, texto: `Gravando a tela do ${qual}. Quando terminar, chame gravar_tela com acao parar e uma legenda de uma linha do que fez.` }
         : { ok: false, texto: r.erro };
     }
-    const r = await this.pararGravacao(emp, legenda);
+    const r = await this.pararGravacao(emp, legenda, onde);
     return r.ok
       ? { ok: true, texto: `Vídeo no chat (${r.segundos}s, ${r.mb} MB) com ${r.prints} print(s). A legenda já está na mensagem.` }
       : { ok: false, texto: r.erro };
@@ -866,8 +888,8 @@ export class Hub {
    * Fecha a gravação, monta o mp4 e manda no chat com um ou dois prints.
    * A legenda é a frase do bot (ou do chefe) sobre o que aconteceu na tela.
    */
-  async pararGravacao(empresaId: string, legenda?: string) {
-    const fim = this.gravacoes.parar(empresaId, legenda);
+  async pararGravacao(empresaId: string, legenda?: string, onde: "pc" | "celular" = "pc") {
+    const fim = this.gravadorDe(onde).parar(empresaId, legenda);
     if (!fim.ok) return fim;
     if (!(await temFfmpeg())) return { ok: false as const, erro: "ffmpeg não está no Hub. Sem ele não dá para montar o mp4." };
     const mp4 = await codificarMp4(fim.frames, limitesDaGravacao().fps);
@@ -878,8 +900,11 @@ export class Hub {
     }
     const dono = fim.por === "chefe" ? "user" : fim.por;
     const video = this.saveFile(dono, `tela-${fim.empresaId}.mp4`, "video/mp4", mp4.data);
-    const prints = fim.chaves.slice(0, 2).map((jpeg, i) => this.saveFile(dono, `tela-${fim.empresaId}-${i + 1}.jpg`, "image/jpeg", jpeg));
-    const texto = fim.legenda || "Gravação da tela do PC";
+    const prints = fim.chaves.slice(0, 2).map((quadro, i) => {
+      const png = quadro[0] === 0x89 && quadro[1] === 0x50;
+      return this.saveFile(dono, `tela-${fim.empresaId}-${i + 1}.${png ? "png" : "jpg"}`, png ? "image/png" : "image/jpeg", quadro);
+    });
+    const texto = fim.legenda || (onde === "celular" ? "Gravação da tela do celular" : "Gravação da tela do PC");
     const conv = fim.conversationId || (fim.por !== "chefe" ? dmConversation(fim.por) : "");
     if (conv) {
       const sender = fim.por === "chefe"
@@ -890,7 +915,7 @@ export class Hub {
         gravacao: { segundos: fim.segundos, empresaId: fim.empresaId },
       });
     }
-    this.broadcastUi({ type: "pc.gravacao", empresaId: fim.empresaId, gravando: false });
+    this.broadcastUi({ type: "pc.gravacao", empresaId: fim.empresaId, gravando: false, onde });
     return {
       ok: true as const,
       segundos: fim.segundos,
@@ -899,6 +924,172 @@ export class Hub {
       mb: Math.round((mp4.data.length / (1024 * 1024)) * 10) / 10,
       prints: prints.length,
     };
+  }
+
+  private chaveCelular(empresaId: string) { return `celular:${empresaId}`; }
+
+  vinculoDoCelular(empresaId: string): VinculoCelular | null {
+    return this.db.getSetting<VinculoCelular>(this.chaveCelular(empresaId)) ?? null;
+  }
+
+  guardarCelular(empresaId: string, v: VinculoCelular) {
+    this.db.setSetting(this.chaveCelular(empresaId), v);
+    return v;
+  }
+
+  esquecerCelular(empresaId: string) {
+    this.db.setSetting(this.chaveCelular(empresaId), null);
+    this.travaCelular.soltar(empresaId, "chefe");
+  }
+
+  async descobrirCelulares() {
+    const [lista, texto, naRede] = await Promise.all([celular.listar(), celular.mdns(), celular.varrerRedeLocal()]);
+    const ja = new Set(lista.map((a) => a.serial));
+    const extras = naRede
+      .filter((h) => !ja.has(`${h}:5555`))
+      .map((h) => ({ serial: `${h}:5555`, modelo: "Android na rede (porta 5555)", estado: "na-rede", viaWifi: true }));
+    return { aparelhos: [...lista, ...extras], servicos: lerMdns(texto), adb: celular.temAdb() };
+  }
+
+  async parearCelular(empresaId: string, bruto: { host?: string; porta?: number; codigo?: string; texto?: string }) {
+    const lido = lerPareamento(bruto.texto || bruto.codigo || "");
+    const host = bruto.host || lido?.host;
+    const porta = Number(bruto.porta || lido?.porta);
+    const codigo = lido?.codigo || String(bruto.codigo ?? "").replace(/\s/g, "");
+    if (!host || !porta || !/^\d{6}$/.test(codigo)) return { ok: false as const, erro: "preciso do endereço, da porta e do código de 6 dígitos" };
+    const r = await celular.parear(host, porta, codigo);
+    if (!r.ok) return { ok: false as const, erro: r.msg || "não pareou" };
+    const md = lerMdns(await celular.mdns());
+    const alvo = md.find((s) => s.tipo === "connect" && (lido?.nome ? s.nome === lido.nome : s.host === host));
+    if (alvo) {
+      await celular.conectar(`${alvo.host}:${alvo.porta}`);
+      const serial = `${alvo.host}:${alvo.porta}`;
+      const modelo = (await celular.modeloDe(serial)) || alvo.nome;
+      const v = this.guardarCelular(empresaId, { nomeMdns: alvo.nome, modelo, serial, host: alvo.host, porta: alvo.porta });
+      return { ok: true as const, vinculo: v };
+    }
+    return { ok: true as const, vinculo: null, aviso: "pareou, mas ainda não achei o aparelho para conectar. Toque em Atualizar." };
+  }
+
+  async vincularCelular(empresaId: string, serial: string) {
+    const lista = await celular.listar();
+    const a = lista.find((x) => x.serial === serial);
+    if (!a || a.estado !== "device") return { ok: false as const, erro: "esse aparelho não está disponível" };
+    const modelo = a.modelo || (await celular.modeloDe(serial)) || serial;
+    const host = serial.includes(":") ? serial.split(":")[0] : undefined;
+    const porta = serial.includes(":") ? Number(serial.split(":")[1]) : undefined;
+    const v = this.guardarCelular(empresaId, { modelo, serial, host, porta: porta || undefined });
+    return { ok: true as const, vinculo: v };
+  }
+
+  async reconectarCelulares() {
+    const empresas = this.db.listEmpresas();
+    const salvos = empresas.map((e) => ({ id: e.id, v: this.vinculoDoCelular(e.id) })).filter((x) => x.v);
+    if (!salvos.length || !celular.temAdb()) return;
+    const online = new Set((await celular.listar()).filter((a) => a.estado === "device").map((a) => a.serial));
+    const faltam = salvos.filter((s) => s.v && !online.has(s.v.serial));
+    if (!faltam.length) return;
+    const servicos = lerMdns(await celular.mdns());
+    for (const s of faltam) {
+      const alvo = enderecoParaReconectar(s.v!, servicos);
+      if (!alvo) continue;
+      const serial = `${alvo.host}:${alvo.porta}`;
+      const c = await celular.conectar(serial);
+      if (!c.ok) continue;
+      this.guardarCelular(s.id, { ...s.v!, serial, host: alvo.host, porta: alvo.porta });
+    }
+  }
+
+  private async fonteDoCelular(empresaId: string, onFrame: (jpeg: Buffer) => boolean) {
+    const v = this.vinculoDoCelular(empresaId);
+    if (!v) return { erro: "esta empresa ainda não tem celular vinculado" };
+    let vivo = true;
+    const laco = async () => {
+      while (vivo) {
+        const png = await celular.tela(v.serial);
+        if (!png) { await new Promise((r) => setTimeout(r, 700)); continue; }
+        if (!onFrame(png)) { vivo = false; return; }
+        await new Promise((r) => setTimeout(r, 700));
+      }
+    };
+    void laco();
+    return { cortar: () => { vivo = false; } };
+  }
+
+  anotarCelular(botId: string, ferramenta: string, input: unknown) {
+    if (String(ferramenta).replace(/^.*_/, "") !== "celular") return null;
+    const emp = this.empresaDe(botId).id;
+    if (!emp) return null;
+    const acao = input && typeof input === "object" ? String((input as any).acao ?? "") : "";
+    const uso = this.usosCelular.registrarDireto(emp, {
+      botId, nome: this.botSender(botId).name, ferramenta: "celular",
+      resumo: resumoDoCelular(acao, acao === "digitar" ? "" : String((input as any)?.pacote ?? (input as any)?.tecla ?? "")),
+      quando: Date.now(),
+    });
+    if (uso) this.broadcastUi({ type: "celular.uso", empresaId: emp, uso });
+    return uso;
+  }
+
+  usoDoCelular(empresaId: string) {
+    return this.usosCelular.ver(empresaId);
+  }
+
+  assumirCelular(empresaId: string, assumir: boolean) {
+    if (assumir) return this.travaCelular.pegar(empresaId, "chefe", "você", true);
+    this.travaCelular.soltar(empresaId, "chefe");
+    return { ok: true as const };
+  }
+
+  private async atenderCelular(botId: string, msg: Extract<NodeToHub, { type: "celular" }>): Promise<{ ok: boolean; texto: string }> {
+    const emp = this.empresaDe(botId).id;
+    if (!emp) return { ok: false, texto: "Você não está numa empresa, então não tem celular." };
+    const v = this.vinculoDoCelular(emp);
+    if (!v) return { ok: false, texto: "O celular desta empresa ainda não foi vinculado. O chefe liga em Empresas → Celular da empresa." };
+    const acao = String(msg.acao || "estado");
+    if (acaoSensivel(acao, msg.texto, msg.pacote) && !msg.aprovado) {
+      return { ok: false, texto: "Essa ação no celular (pagamento, apagar ou enviar) precisa do OK do chefe. Peça com request_approval e tente de novo." };
+    }
+    if (acao !== "estado" && acao !== "print" && acao !== "arvore") {
+      const trava = this.travaCelular.pegar(emp, botId, this.botSender(botId).name, false);
+      if (!trava.ok) return { ok: false, texto: `${trava.nome} está no celular agora. Espere um instante e tente de novo.` };
+    }
+    if (acao === "estado") {
+      const lista = await celular.listar();
+      const on = lista.some((a) => a.serial === v.serial && a.estado === "device");
+      const t = this.travaCelular.ver(emp);
+      return { ok: true, texto: `${v.modelo} (${v.serial}) ${on ? "online" : "offline"}${t ? `. Quem está nele: ${t.nome}` : ""}` };
+    }
+    if (acao === "print") {
+      const png = await celular.tela(v.serial);
+      if (!png) return { ok: false, texto: "não consegui fotografar a tela do celular" };
+      const f = this.saveFile(botId, `celular-${emp}.png`, "image/png", png);
+      if (msg.conversationId) this.storeMessage(msg.conversationId, this.botSender(botId), "Tela do celular", { files: [{ id: f.id, name: f.name, url: f.url, mime: f.mime }] });
+      return { ok: true, texto: "Mandei a foto da tela no chat." };
+    }
+    if (acao === "arvore") {
+      const x = await celular.arvore(v.serial);
+      return x ? { ok: true, texto: x.slice(0, 8000) } : { ok: false, texto: "não consegui ler a árvore da tela" };
+    }
+    if (acao === "tocar") return { ok: await celular.tocar(v.serial, Number(msg.x), Number(msg.y)), texto: "toquei" };
+    if (acao === "deslizar") return { ok: await celular.deslizar(v.serial, Number(msg.x), Number(msg.y), Number(msg.x2), Number(msg.y2)), texto: "deslizei" };
+    if (acao === "digitar") return { ok: await celular.digitar(v.serial, String(msg.texto ?? "")), texto: "digitei" };
+    if (acao === "tecla") return { ok: await celular.tecla(v.serial, String(msg.tecla ?? "")), texto: "tecla enviada" };
+    if (acao === "abrir") {
+      if (!pacoteValido(String(msg.pacote ?? ""))) return { ok: false, texto: "pacote inválido" };
+      return { ok: await celular.abrirApp(v.serial, String(msg.pacote)), texto: `pedi para abrir ${msg.pacote}` };
+    }
+    return { ok: false, texto: "acao deve ser estado, print, arvore, tocar, deslizar, digitar, tecla ou abrir" };
+  }
+
+  abrirJanelaDoCelular(empresaId: string): { ok: boolean; erro?: string } {
+    const v = this.vinculoDoCelular(empresaId);
+    if (!v) return { ok: false, erro: "esta empresa não tem celular vinculado" };
+    const exe = path.join(raizDoProjeto(), "ferramentas", "scrcpy", process.platform === "win32" ? "scrcpy.exe" : "scrcpy");
+    if (!fs.existsSync(exe)) return { ok: false, erro: "não achei o scrcpy em ferramentas/scrcpy" };
+    const args = argumentosScrcpy({ serial: v.serial, titulo: `Celular — ${empresaId}`, audio: false });
+    const child = spawn(exe, args, { cwd: path.dirname(exe), detached: true, stdio: "ignore", windowsHide: false });
+    child.unref();
+    return { ok: true };
   }
 
   botSender(botId: string): Sender {
@@ -1038,7 +1229,14 @@ export class Hub {
         return;
       }
       case "gravar_tela": {
-        void this.atenderGravacao(botId, msg.acao, msg.conversationId, msg.legenda)
+        const onde = msg.onde === "celular" ? "celular" : "pc";
+        void this.atenderGravacao(botId, msg.acao, msg.conversationId, msg.legenda, onde)
+          .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
+        return;
+      }
+      case "celular": {
+        void this.atenderCelular(botId, msg)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
           .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: (e as Error).message }));
         return;
@@ -1167,6 +1365,7 @@ export class Hub {
         this.broadcastUi({ type: "tool", conversationId, messageId: ev.messageId, callId: ev.callId, tool: ev.tool, phase: "start", input: ev.input });
         this.db.audit(botId, "tool.start", { tool: ev.tool, input: ev.input, conversationId });
         this.anotarTela(botId, ev.tool, ev.input);
+        this.anotarCelular(botId, ev.tool, ev.input);
         return;
       }
       case "tool.done": {

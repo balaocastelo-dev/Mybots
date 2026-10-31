@@ -17,6 +17,50 @@ import { PrimeirosPassos, proximoDepoisDe, type HubParaPassos } from "../package
 
 const PROIBIDO = /Balão|Balao|Campinas|34\.397|exemplo\.com\.br|balaoconta|Castelo|E52521|E10600/i;
 
+function binarioAusente(erro: unknown): boolean {
+  return (erro as NodeJS.ErrnoException)?.code === "ENOENT";
+}
+
+/** Roda pdfinfo/pdftotext. Sem o binário (poppler) devolve undefined em vez de quebrar o teste. */
+function executarPoppler(cmd: string, args: string[]): string | undefined {
+  try {
+    return execFileSync(cmd, args, { encoding: "utf8" });
+  } catch (e) {
+    if (binarioAusente(e)) return undefined;
+    throw e;
+  }
+}
+
+/** A4 = 595,28 × 841,89 pt. O Chrome arredonda (ex.: 594,96 × 841,92) e o pdfinfo ainda chama de A4. */
+function caixaA4(x0: number, y0: number, x1: number, y1: number): boolean {
+  const w = Math.abs(x1 - x0);
+  const h = Math.abs(y1 - y0);
+  const menor = Math.min(w, h);
+  const maior = Math.max(w, h);
+  return Math.abs(menor - 595.28) <= 1.5 && Math.abs(maior - 841.89) <= 1.5;
+}
+
+/**
+ * Páginas e tamanho, lidos do próprio PDF quando não há pdfinfo.
+ * O Chrome deixa /Count e /MediaBox em claro. Orçamento, venda e NF
+ * têm de caber numa folha A4 — a mesma caixa que a apresentação usa.
+ */
+function medidasDoPdf(buf: Buffer): { paginas: number; a4: boolean } {
+  const s = buf.toString("latin1");
+  const dict = /\/Type\s*\/Pages\b([\s\S]{0,500}?)>>/.exec(s);
+  const count = dict ? /\/Count\s+(\d+)/.exec(dict[1]) : null;
+  const soltas = s.match(/\/Type\s*\/Page(?!s)\b/g);
+  const paginas = count ? Number(count[1]) : (soltas?.length ?? 0);
+  const boxes = [...s.matchAll(/\/MediaBox\s*\[\s*([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s*\]/g)];
+  const a4 = boxes.length > 0 && boxes.every((b) => caixaA4(Number(b[1]), Number(b[2]), Number(b[3]), Number(b[4])));
+  return { paginas, a4 };
+}
+
+function todasAsPaginasA4(info: string): boolean {
+  const linhas = info.match(/^Page(?:\s+\d+)? size:.*$/gm) ?? [];
+  return linhas.length > 0 && linhas.every((l) => /\(A4\)/.test(l));
+}
+
 const HERRERA: FichaApresentacao = {
   nome: "Herrera HOUSE IA",
   site: "herrerahouse.ia",
@@ -236,7 +280,7 @@ test("pular os dados da empresa não monta a folha; pular a imagem vai ao resumo
   assert.deepEqual(chamadas, ["imagem"]);
 });
 
-test("o PDF impresso tem uma página quando só há o nome e não traz a casa antiga", async () => {
+test("o PDF impresso tem uma página quando só há o nome e não traz a casa antiga", async (t) => {
   const htmlMagra = await renderizarFolha({ nome: "Ateliê Norte", quando: new Date("2026-10-31T15:00:00Z") });
   const htmlCheia = await renderizarFolha({
     ...HERRERA,
@@ -247,23 +291,56 @@ test("o PDF impresso tem uma página quando só há o nome e não traz a casa an
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mybots-pdf-"));
   const magra = await pdfDeHtml(htmlMagra);
   const cheia = await pdfDeHtml(htmlCheia);
-  fs.writeFileSync(path.join(dir, "magra.pdf"), magra);
-  fs.writeFileSync(path.join(dir, "cheia.pdf"), cheia);
-  const paginas = (arq: string) => execFileSync("pdfinfo", [arq], { encoding: "utf8" }).match(/Pages:\s+(\d+)/)?.[1];
-  const texto = (arq: string) => execFileSync("pdftotext", ["-layout", arq, "-"], { encoding: "utf8" });
-  assert.equal(paginas(path.join(dir, "magra.pdf")), "1");
-  const tMagra = texto(path.join(dir, "magra.pdf"));
-  assert.match(tMagra, /Ateliê Norte/);
-  assert.doesNotMatch(tMagra, /Quem somos|Serviços|A equipe|Contato|undefined/);
-  assert.doesNotMatch(tMagra, PROIBIDO);
-  const nCheia = Number(paginas(path.join(dir, "cheia.pdf")));
-  assert.ok(nCheia >= 2 && nCheia <= 3, `a folha cheia deveria ter 2 ou 3 páginas, tem ${nCheia}`);
-  const tCheia = texto(path.join(dir, "cheia.pdf"));
-  assert.match(tCheia, /Herrera HOUSE IA/);
-  assert.match(tCheia, /Atendimento/);
-  assert.match(tCheia, /herrerahouse\.ia/);
-  assert.doesNotMatch(tCheia, /chave de API/);
-  assert.doesNotMatch(tCheia, PROIBIDO);
+  const arqMagra = path.join(dir, "magra.pdf");
+  const arqCheia = path.join(dir, "cheia.pdf");
+  fs.writeFileSync(arqMagra, magra);
+  fs.writeFileSync(arqCheia, cheia);
+  const infoMagra = executarPoppler("pdfinfo", [arqMagra]);
+  const infoCheia = executarPoppler("pdfinfo", [arqCheia]);
+  const tMagra = executarPoppler("pdftotext", ["-layout", arqMagra, "-"]);
+  const tCheia = executarPoppler("pdftotext", ["-layout", arqCheia, "-"]);
+
+  // Com pdfinfo, a contagem e o rótulo A4 vêm dele. Sem o poppler, o mesmo
+  // critério sai do /Count e do MediaBox do arquivo.
+  if (infoMagra && infoCheia) {
+    const paginas = (info: string) => info.match(/Pages:\s+(\d+)/)?.[1];
+    assert.equal(paginas(infoMagra), "1");
+    assert.ok(todasAsPaginasA4(infoMagra), "a folha só com o nome tem de ser A4");
+    const nCheia = Number(paginas(infoCheia));
+    assert.ok(nCheia >= 2 && nCheia <= 3, `a folha cheia deveria ter 2 ou 3 páginas, tem ${nCheia}`);
+    assert.ok(todasAsPaginasA4(infoCheia), "a folha cheia tem de ser A4");
+  } else {
+    const aviso = "pdfinfo (poppler) não está no PATH — páginas e tamanho A4 lidos do próprio PDF. Instale o poppler para conferir com o pdfinfo.";
+    console.warn(aviso);
+    t.diagnostic(aviso);
+    const m = medidasDoPdf(magra);
+    const c = medidasDoPdf(cheia);
+    assert.equal(m.paginas, 1, "folha só com o nome deve ter 1 página");
+    assert.ok(m.a4, "folha só com o nome deve ser A4");
+    assert.ok(c.paginas >= 2 && c.paginas <= 3, `a folha cheia deveria ter 2 ou 3 páginas, tem ${c.paginas}`);
+    assert.ok(c.a4, "folha cheia deve ser A4");
+  }
+
+  const semTexto = tMagra === undefined || tCheia === undefined;
+  if (semTexto) {
+    const aviso = "pdftotext (poppler) não está no PATH — texto do PDF não conferido. Instale o poppler para essa verificação.";
+    console.warn(aviso);
+    t.diagnostic(aviso);
+  }
+  await t.test("o texto impresso é desta empresa e não traz a casa antiga", {
+    skip: semTexto ? "pdftotext (poppler) ausente" : false,
+  }, () => {
+    assert.ok(tMagra !== undefined && tCheia !== undefined);
+    assert.match(tMagra, /Ateliê Norte/);
+    assert.doesNotMatch(tMagra, /Quem somos|Serviços|A equipe|Contato|undefined/);
+    assert.doesNotMatch(tMagra, PROIBIDO);
+    assert.match(tCheia, /Herrera HOUSE IA/);
+    assert.match(tCheia, /Atendimento/);
+    assert.match(tCheia, /herrerahouse\.ia/);
+    assert.doesNotMatch(tCheia, /chave de API/);
+    assert.doesNotMatch(tCheia, PROIBIDO);
+  });
+
   assert.match(htmlDoRecap("Ateliê Norte", ["WhatsApp: pulado"]), /Primeiros passos/);
   assert.doesNotMatch(htmlDoRecap("Ateliê Norte", []), PROIBIDO);
 });

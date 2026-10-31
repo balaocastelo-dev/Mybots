@@ -13,10 +13,10 @@ import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { pollinationsImage } from "./media.js";
-import { raizDoProjeto } from "./config.js";
+import { htmlDoRecap, montarApresentacao, pdfDeHtml, type FichaApresentacao } from "./folha.js";
 
 export type PecaDemo = { tipo: string; titulo: string; texto: string; url?: string; nome?: string; erro?: string };
-type Dados = { nome: string; site?: string; resumo?: string; regras?: string };
+export type Dados = FichaApresentacao;
 type Salvar = (nome: string, mime: string, data: Buffer) => { url: string; name: string };
 
 const limpo = (s: string | undefined, n = 220) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -35,31 +35,30 @@ async function peçaImagem(d: Dados, salvar: Salvar): Promise<PecaDemo> {
   }
 }
 
-/** 2. PDF de uma página, pelo Chrome sem janela, com os dados da empresa. */
-async function peçaPdf(d: Dados, salvar: Salvar): Promise<PecaDemo> {
-  const base: PecaDemo = { tipo: "pdf", titulo: "Um PDF, com a sua cara", texto: `Esta é a folha de apresentação da ${d.nome}. É o mesmo caminho que gera orçamento e relatório.` };
-  const html = `<!doctype html><meta charset="utf-8"><style>
-    @page{size:A4;margin:0} body{margin:0;font:16px/1.6 "Segoe UI",system-ui,sans-serif;color:#15161B}
-    .capa{padding:56px 60px;background:#0A0A0B;color:#fff}
-    .capa h1{margin:0;font-size:40px;letter-spacing:-.5px}
-    .capa p{margin:10px 0 0;color:#E10600;letter-spacing:.3em;text-transform:uppercase;font-size:12px}
-    .corpo{padding:44px 60px}
-    h2{font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:#6B6B76;margin:28px 0 10px}
-    ul{margin:0;padding-left:20px} li{margin:6px 0}
-    .pe{margin-top:40px;padding-top:16px;border-top:2px solid #E10600;color:#6B6B76;font-size:12px}
-  </style><div class="capa"><h1>${esc(d.nome)}</h1><p>Ficha da casa · MyBots</p></div>
-  <div class="corpo"><h2>Quem é</h2><p>${esc(limpo(d.resumo, 600))}</p>
-  <h2>As regras da casa</h2><ul>${String(d.regras ?? "").split("\n").filter((l) => l.trim()).slice(0, 10).map((l) => `<li>${esc(l.replace(/^[-•]\s*/, ""))}</li>`).join("")}</ul>
-  <div class="pe">Gerado automaticamente a partir de ${esc(d.site || "informações da empresa")} · ${new Date().toLocaleDateString("pt-BR")}</div></div>`;
-  const saida = path.join(os.tmpdir(), `mybots-demo-${Date.now()}.pdf`);
+/** 2. Folha de apresentação: capa, dados da casa, equipe e contatos. 1 a 3 páginas. */
+async function peçaPdf(d: Dados, salvar: Salvar, imagem?: PecaDemo): Promise<PecaDemo> {
+  const base: PecaDemo = { tipo: "pdf", titulo: "Um PDF, com a sua cara", texto: `Esta é a folha de apresentação da ${d.nome}: a casa e o time. É o mesmo caminho que gera orçamento e relatório.` };
+  const arte = d.arte || (imagem?.url && (/^(data:|https?:|\/|[A-Za-z]:\\)/.test(imagem.url) || imagem.url.includes(":\\")) ? imagem.url : undefined);
   try {
-    await rodarPython(["--html", "-", "--saida", saida, "--modelo", "nenhum", "--titulo", d.nome], html);
-    const data = await readFile(saida);
-    await unlink(saida).catch(() => {});
+    const html = await montarApresentacao({ ...d, arte });
+    const data = await pdfDeHtml(html);
     const f = salvar(`${slug(d.nome)}-apresentacao.pdf`, "application/pdf", data);
     return { ...base, url: f.url, nome: f.name };
   } catch (e) {
     return { ...base, erro: `O PDF não saiu (${(e as Error).message}). Normalmente é o Python ou o Chrome que não foram encontrados.` };
+  }
+}
+
+/** Recibo do que foi ligado no fim do roteiro. Não é a folha da empresa. */
+async function peçaRecap(d: Dados, salvar: Salvar): Promise<PecaDemo> {
+  const base: PecaDemo = { tipo: "pdf", titulo: "O resumo", texto: `O que ficou ligado na ${d.nome}.` };
+  const linhas = String(d.regras ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  try {
+    const data = await pdfDeHtml(htmlDoRecap(d.nome, linhas));
+    const f = salvar(`${slug(d.nome)}-resumo.pdf`, "application/pdf", data);
+    return { ...base, url: f.url, nome: f.name };
+  } catch (e) {
+    return { ...base, erro: `O PDF não saiu (${(e as Error).message}).` };
   }
 }
 
@@ -110,14 +109,14 @@ async function peçaLink(d: Dados): Promise<PecaDemo> {
 export async function pecaDaDemo(passo: string, d: Dados, salvar: Salvar, imagem?: PecaDemo): Promise<PecaDemo> {
   switch (passo) {
     case "imagem": return peçaImagem(d, salvar);
-    case "pdf": return peçaPdf(d, salvar);
+    case "pdf": return peçaPdf(d, salvar, imagem);
+    case "recap": return peçaRecap(d, salvar);
     case "video": return peçaVideo(d, imagem, salvar);
     case "link": return peçaLink(d);
     default: return { tipo: "erro", titulo: "Passo desconhecido", texto: "", erro: `Não existe o passo "${passo}".` };
   }
 }
 
-function esc(s: string) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!)); }
 function slug(s: string) { return String(s ?? "empresa").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "empresa"; }
 
 function rodar(cmd: string, args: string[], entrada?: string): Promise<void> {
@@ -131,22 +130,3 @@ function rodar(cmd: string, args: string[], entrada?: string): Promise<void> {
   });
 }
 
-async function rodarPython(args: string[], entrada: string) {
-  const script = path.join(raizDoProjeto(), "scripts", "documento.py");
-  const tentativas = [process.env.MYBOTS_PYTHON, "python", "py", "python3"].filter(Boolean) as string[];
-  const falhas: string[] = [];
-  let real: Error | null = null;   // erro DO script, que vale mais que "não achei o exe"
-  for (const exe of tentativas) {
-    try { await rodar(exe, [script, ...args], entrada); return; }
-    catch (e) {
-      const err = e as Error & { code?: string };
-      falhas.push(exe + ": " + (err.code === "ENOENT" ? "não está no PATH" : err.message));
-      if (err.code !== "ENOENT") real = err;   // achou o Python, o que quebrou foi o script
-    }
-  }
-  // Guardar só o último erro dizia "spawn python3 ENOENT" mesmo quando o problema era
-  // outro — manda consertar o que não está quebrado. Agora a mensagem diz o que houve
-  // com CADA tentativa, e o erro do script ganha do "não encontrei".
-  if (real) throw real;
-  throw new Error("nenhum Python encontrado pelo Hub (" + falhas.join("; ") + "). Defina MYBOTS_PYTHON no .env com o caminho completo do python.exe.");
-}

@@ -37,10 +37,16 @@ MYBOTS_USER_NAME=$Nome
 "@ | Set-Content $envFile -Encoding ASCII
   Write-Host "Token dos nós gerado: $token  (está em .env — use o mesmo nos PCs dos bots)" -ForegroundColor Yellow
 } else { Write-Host ".env já existe; mantido." }
+# Caminho relativo ao próprio .cmd: vale em Desktop\MyBots-Base e em qualquer clone.
 @"
 @echo off
-cd /d "$root\packages\hub"
 title MyBots Hub
+cd /d "%~dp0packages\hub" || (
+  echo Nao encontrei o Hub em "%~dp0packages\hub".
+  echo Deixe o start-hub.cmd na raiz do projeto, ao lado da pasta packages.
+  pause
+  exit /b 1
+)
 node --import tsx src\index.ts
 pause
 "@ | Set-Content (Join-Path $root "start-hub.cmd") -Encoding Default

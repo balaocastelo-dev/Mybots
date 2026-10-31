@@ -871,7 +871,7 @@ async function main() {
     await ui.wait((e) => e.type === "status" && e.botId === "joao-videomaker" && e.busy === false, 10_000, "bot volta a Disponível");
   });
 
-  await test("bot excluído não ressuscita; pasta adotada nasce no padrão da casa (Claude, motor direto)", async () => {
+  await test("bot excluído não ressuscita; pasta adotada nasce no padrão da casa (motor direto)", async () => {
     const dir2 = path.join(tmp, "adocao");
     const morto = path.join(dir2, "fantasma-teste");
     const solto = path.join(dir2, "adotado-teste");
@@ -890,7 +890,7 @@ async function main() {
     const adotado = lista.find((b: any) => b.id === "adotado-teste");
     assert(adotado, "pasta solta não foi adotada");
     assert(adotado.engine === "direct", `adotado deveria nascer no motor direto, veio ${adotado.engine}`);
-    assert(adotado.provider.kind === "anthropic" && adotado.provider.model, `adotado fora do padrão da casa: ${JSON.stringify(adotado.provider)}`);
+    assert(adotado.provider.kind === "zai" && adotado.provider.model === "glm-4.5-flash", `adotado fora do padrão da casa: ${JSON.stringify(adotado.provider)}`);
   });
 
   await test("bot offline: mensagem fica salva e usuário é avisado", async () => {

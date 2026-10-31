@@ -13,6 +13,7 @@ import { Abertura, PrimeiraEmpresa, EscolhaIdioma } from "./abertura";
 import { TelaLegal } from "./legal";
 import { TelaCreditos } from "./creditos";
 import { PcDaEmpresa } from "./pc";
+import { PainelDoPc } from "./painelPc";
 import { CelularDaEmpresa } from "./celular";
 import { TelaDoMac } from "./mac";
 import { Fragment } from "react";
@@ -276,6 +277,7 @@ export function App() {
             onAbrirTroca={(conv) => { setVerTrabalhos(false); setVerTroca(conv); }}
             control={state.control}
             initialPanel={panel && panel.conv === selected ? panel : null}
+            empresaNome={target.kind === "bot" && target.bot.empresaId ? (empresas.find((e) => e.id === target.bot.empresaId)?.nome ?? "") : ""}
           />
         ) : (
           <div className="placeholder"><span className="logo-img big"><Ameba id="mybots" size={96} /></span><h2>MyBots</h2><p>Escolha um bot ou grupo na lista para conversar.</p></div>
@@ -929,9 +931,10 @@ type ConvProps = {
   onAbrirTroca: (conversationId: string) => void;
   control: ControlState;
   initialPanel?: { panel: "settings" | "routines"; n: number } | null;
+  empresaNome?: string;
 };
 
-function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, control, initialPanel }: ConvProps) {
+function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, control, initialPanel, empresaNome = "" }: ConvProps) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
   const [level, setLevel] = useState(0);
@@ -981,6 +984,12 @@ function Conversation({ target, conversationId, bots, messages, tools, approvals
     setShowRoutines(initialPanel.panel === "routines");
   }, [initialPanel?.n]);
   const [showSettings, setShowSettings] = useState(false);
+  const [pcAberto, setPcAberto] = useState(() => { try { return localStorage.getItem("mybots-pc-aberto") !== "0"; } catch { return true; } });
+  const alternarPc = () => setPcAberto((v) => {
+    const n = !v;
+    try { localStorage.setItem("mybots-pc-aberto", n ? "1" : "0"); } catch { /* o painel segue neste carregamento */ }
+    return n;
+  });
   const [attachments, setAttachments] = useState<Array<{ name: string; mime: string; dataBase64: string }>>([]);
   const stopRef = useRef<() => void>(() => {});
   const listRef = useRef<HTMLDivElement>(null);
@@ -1259,6 +1268,7 @@ function Conversation({ target, conversationId, bots, messages, tools, approvals
                   <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>
                 </button>
           )}
+          {bot && <button className={"icon-btn" + (pcAberto ? " on" : "")} title={pcAberto ? "Recolher a tela do PC" : "Tela do PC da empresa"} aria-pressed={pcAberto} onClick={alternarPc}>🖥️</button>}
           {bot && <button className={"icon-btn" + (showSettings ? " on" : "")} title="Configurar este bot" onClick={() => { setShowSettings(!showSettings); setShowRoutines(false); }}>⚙️</button>}
           {bot && <button className={"icon-btn" + (showRoutines ? " on" : "")} title="Rotinas agendadas" onClick={() => { setShowRoutines(!showRoutines); setShowSettings(false); }}>⏰{routines.length ? <sup>{routines.length}</sup> : null}</button>}
           {(busy || speaking || listening) && <button className="icon-btn parar-tudo" title="Parar tudo: a fala, o microfone e o que os bots estão fazendo (Esc)" onClick={() => stopEverything("⏹ no painel")}>⏹ Parar</button>}
@@ -1266,6 +1276,8 @@ function Conversation({ target, conversationId, bots, messages, tools, approvals
         </div>
       </header>
 
+      <div className="conversa-corpo">
+      <div className="conversa-miolo">
       {showRoutines && bot && <RoutinesPanel bot={bot} routines={routines} onClose={() => setShowRoutines(false)} />}
       {showSettings && bot && <BotSettingsPanel bot={bot} onClose={() => setShowSettings(false)} />}
 
@@ -1382,6 +1394,17 @@ function Conversation({ target, conversationId, bots, messages, tools, approvals
       </footer>
       {folha && <FolhaAbrirTroca trocas={folha} bots={bots} Avatar={Avatar} onEscolher={(t) => onAbrirTroca(t.conversationId)} onFechar={() => setFolha(null)} />}
       {arquivoAberto && <Visualizador f={arquivoAberto} onFechar={() => setArquivoAberto(null)} />}
+      </div>
+      {bot && pcAberto && (
+        <PainelDoPc
+          empresaId={bot.empresaId ?? null}
+          nome={empresaNome}
+          conversationId={conversationId}
+          onFechar={alternarPc}
+          onEvent={onEvent}
+        />
+      )}
+      </div>
     </>
   );
 }
@@ -1551,7 +1574,15 @@ function Arquivo({ f, onAbrir }: { f: ArquivoDoChat; onAbrir?: (f: ArquivoDoChat
       </div>
     );
   }
-  if (ehVideo(f)) return <div className="arq video"><video src={src} controls preload="metadata" /><div className="arq-pe"><span className="arq-nome">{f.name}</span></div></div>;
+  if (ehVideo(f)) return (
+    <div className="arq video">
+      <video src={src} controls preload="metadata" />
+      <div className="arq-pe">
+        <span className="arq-nome" title={f.name}>{f.name}</span>
+        <a className="btn fraco" href={src} download={f.name}>Baixar</a>
+      </div>
+    </div>
+  );
   if (ehAudio(f)) return <div className="arq audio"><audio src={src} controls preload="metadata" /><div className="arq-pe"><span className="arq-nome">{f.name}</span></div></div>;
   return <div className="arq outro"><a href={src} target="_blank" rel="noopener">📎 {f.name}</a></div>;
 }

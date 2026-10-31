@@ -46,7 +46,7 @@ export function TelaDoMac({ onFechar }: { onFechar: () => void }) {
           </form>
         ) : (
           <div className="pc-tela">
-            <iframe src={`/tela-vnc.html?destino=mac&senha=${encodeURIComponent(senha)}`} title="Tela do Mac"
+            <iframe src={`/tela-vnc.html?destino=mac&senha=${encodeURIComponent(senha)}${(() => { const k = new URLSearchParams(location.search).get("k"); return k ? `&k=${encodeURIComponent(k)}` : ""; })()}`} title="Tela do Mac"
               allow="clipboard-read; clipboard-write" />
           </div>
         )}

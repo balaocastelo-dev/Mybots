@@ -16,17 +16,17 @@ import { startScheduler } from "./scheduler.js";
 import { pecaDaDemo } from "./demo.js";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
-// A tela do Mac vai por VNC. So estes destinos passam pela ponte, para o proxy
-// nao virar um tunel para qualquer endereco da rede.
-const VNC_PERMITIDOS: Record<string, { host: string; porta: number }> = {
-  mac: { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900 },
-};
+import { alvoDaPonte, caminhoDaTela, idDaTela, idSeguro, portaDeEmpresaPermitida } from "./ponteVnc.js";
+import { videoExigeSenha } from "./gravacao.js";
+import { abrirWsDaTela, encaminharHttp } from "./ponteTela.js";
+// O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
+const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900 };
 import { PROVEDORES } from "@mybots/shared";
 import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA } from "./botManager.js";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
-import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, imagemPronta } from "./maquinas.js";
+import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, imagemPronta } from "./maquinas.js";
 import * as celular from "./celular.js";
 import { lerMaquina } from "./maquina.js";
 import { motivoDaQueda } from "./diagnostico.js";
@@ -48,9 +48,23 @@ export async function startServer(hub: Hub) {
   app.addContentTypeParser("*", { parseAs: "buffer" }, (_req, body, done) => done(null, body));
 
   // --- senha opcional da interface ---
+  // A tela (ponte VNC, proxy do PC e a página noVNC) passa pelo MESMO hook.
+  // Sem MYBOTS_UI_PASSWORD a interface inteira segue aberta, como o resto do painel.
+  const SENHA_COOKIE = "mybots_k";
+  const cookieDe = (req: any, nome: string): string => {
+    const raw = String(req.headers?.cookie ?? "");
+    for (const parte of raw.split(";")) {
+      const i = parte.indexOf("=");
+      if (i < 0) continue;
+      if (parte.slice(0, i).trim() !== nome) continue;
+      const v = parte.slice(i + 1).trim();
+      try { return decodeURIComponent(v); } catch { return v; }
+    }
+    return "";
+  };
   const uiAuthorized = (req: any) => {
     if (!config.uiPassword) return true;
-    const key = req.headers["x-mybots-key"] ?? (req.query as any)?.k;
+    const key = req.headers["x-mybots-key"] ?? (req.query as any)?.k ?? cookieDe(req, SENHA_COOKIE);
     return key === config.uiPassword;
   };
   const nodeAuthorized = (req: any): string | null => {
@@ -58,26 +72,123 @@ export async function startServer(hub: Hub) {
     const bot = String(req.headers["x-mybots-bot"] ?? "").trim();
     return botForToken(token) ?? (bot && tokenAllows(bot, token) ? bot : null);
   };
+  const rotaComSenha = (url: string) => {
+    const caminho = url.split("?")[0];
+    return caminho.startsWith("/api/") || caminho.startsWith("/ws/ui") || caminho.startsWith("/ws/vnc")
+      || caminho.startsWith("/pc/") || caminho === "/tela-vnc.html";
+  };
+  // A GUI do container entra por /pc/<empresa>/. O upstream é sempre 127.0.0.1
+  // na porta da nossa faixa — o caminho não escolhe host. HTTP passa neste hook
+  // (o WebSocket da mesma URL fica na rota, senão o Fastify recusa a rota duplicada).
+  const cacheTela = new Map<string, { em: number; porta: number | null }>();
+  const portaDaTela = async (id: string): Promise<number | null> => {
+    if (!idSeguro(id) || !hub.db.getEmpresa(id)) return null;
+    const c = cacheTela.get(id);
+    if (c && Date.now() - c.em < 2000) return c.porta;
+    const m = await estadoDaMaquina(id);
+    const porta = m.estado === "ligada" && portaDeEmpresaPermitida(m.portaTela) ? m.portaTela : null;
+    cacheTela.set(id, { em: Date.now(), porta });
+    return porta;
+  };
+  const proxyDaTela = async (req: any, reply: any) => {
+    const url = String(req.raw?.url || req.url || "");
+    const id = idDaTela(url);
+    const caminho = caminhoDaTela(url);
+    if (!id || !caminho) return reply.code(404).send({ error: "tela indisponível" });
+    const porta = await portaDaTela(id);
+    if (porta == null) return reply.code(503).send({ error: "o PC desta empresa está desligado" });
+    encaminharHttp(req, reply, porta, caminho);
+  };
   app.addHook("onRequest", async (req, reply) => {
     const open = req.url.startsWith("/api/files/") || req.url.startsWith("/api/upload") || req.url.startsWith("/api/import") || req.url.startsWith("/api/channels/incoming");
-    if ((req.url.startsWith("/api/") || req.url.startsWith("/ws/ui")) && !open && !uiAuthorized(req) && !nodeAuthorized(req)) {
+    if (!rotaComSenha(req.url) || open) return;
+    if (!(uiAuthorized(req) || nodeAuthorized(req))) {
       reply.code(401).send({ error: "senha da interface inválida" });
+      return;
     }
+    const apresentou = req.headers["x-mybots-key"] === config.uiPassword || (req.query as any)?.k === config.uiPassword;
+    if (config.uiPassword && apresentou) {
+      reply.header("set-cookie", `${SENHA_COOKIE}=${encodeURIComponent(config.uiPassword)}; HttpOnly; SameSite=Strict; Path=/`);
+    }
+    const caminho = req.url.split("?")[0];
+    const upgrade = String(req.headers.upgrade ?? "").toLowerCase() === "websocket";
+    if (!caminho.startsWith("/pc/") || upgrade) return;
+    const id = idDaTela(req.url);
+    if (id && caminho === `/pc/${id}`) {
+      reply.redirect(`/pc/${id}/`);
+      return;
+    }
+    await proxyDaTela(req, reply);
   });
 
   // --- WebSockets ---
   app.get("/ws/node", { websocket: true }, (socket) => hub.handleNodeConnection(socket as any));
   app.get("/ws/ui", { websocket: true }, (socket) => hub.handleUiConnection(socket as any));
-  // Ponte VNC: o navegador fala noVNC por este WebSocket e o Hub repassa, byte a
-  // byte, para a porta 5900 do destino. O noVNC cuida do protocolo e da senha.
+  // Ponte VNC: o navegador fala noVNC por este WebSocket e o Hub repassa os bytes.
+  // Destinos: "mac" (host fixo) ou "empresa:<id>" (127.0.0.1 na porta que o Hub
+  // publicou). Qualquer outro destino fecha. A senha da interface já passou no hook.
   app.get("/ws/vnc", { websocket: true }, (socket: any, req: any) => {
-    const alvo = VNC_PERMITIDOS[String(req.query?.destino ?? "mac")];
-    if (!alvo) { try { socket.close(); } catch { /* ja fechou */ } return; }
-    const tcp = net.connect(alvo.porta, alvo.host);
-    tcp.on("data", (d) => { try { socket.send(d); } catch { /* ws caiu */ } });
-    socket.on("message", (m: any) => { try { tcp.write(Buffer.isBuffer(m) ? m : Buffer.from(m)); } catch { /* tcp caiu */ } });
-    const fim = () => { try { tcp.destroy(); } catch { /* ok */ } try { socket.close(); } catch { /* ok */ } };
-    tcp.on("error", fim); tcp.on("close", fim); socket.on("close", fim); socket.on("error", fim);
+    const destino = String(req.query?.destino ?? "mac");
+    const fila: Buffer[] = [];
+    let tcp: net.Socket | null = null;
+    let morto = false;
+    const fim = () => {
+      if (morto) return;
+      morto = true;
+      try { tcp?.destroy(); } catch { /* ok */ }
+      try { socket.close(); } catch { /* ok */ }
+    };
+    socket.on("message", (m: any) => {
+      const b = Buffer.isBuffer(m) ? m : Buffer.from(m);
+      if (tcp) { try { tcp.write(b); } catch { /* tcp caiu */ } }
+      else fila.push(b);
+    });
+    socket.on("close", fim);
+    socket.on("error", fim);
+    const ligar = (alvo: { host: string; porta: number }) => {
+      if (morto) return;
+      tcp = net.connect({ port: alvo.porta, host: alvo.host });
+      for (const b of fila) { try { tcp.write(b); } catch { /* caiu */ } }
+      fila.length = 0;
+      tcp.on("data", (d) => { try { socket.send(d); } catch { /* ws caiu */ } });
+      tcp.on("error", fim);
+      tcp.on("close", fim);
+    };
+    void (async () => {
+      let porta: number | null = null;
+      if (destino.startsWith("empresa:")) porta = await portaDaTela(destino.slice("empresa:".length));
+      if (morto) return;
+      const alvo = alvoDaPonte(destino, { mac: MAC_VNC, portaDaEmpresa: () => porta });
+      if (!alvo) return fim();
+      ligar(alvo);
+    })();
+  });
+
+  // WebSocket da GUI (/pc/<empresa>/api/...). O HTTP da mesma URL sai no hook acima.
+  app.get("/pc/:id/*", { websocket: true }, (socket: any, req: any) => {
+    const fila: Buffer[] = [];
+    let enviar: ((b: Buffer) => void) | null = null;
+    let morto = false;
+    socket.on("message", (m: any) => {
+      if (morto) return;
+      const b = Buffer.isBuffer(m) ? m : Buffer.from(m);
+      if (enviar) enviar(b);
+      else fila.push(b);
+    });
+    socket.on("close", () => { morto = true; });
+    socket.on("error", () => { morto = true; });
+    void (async () => {
+      const url = String(req.raw?.url || req.url || "");
+      const id = idDaTela(url);
+      const caminho = caminhoDaTela(url);
+      if (morto) return;
+      if (!id || !caminho) { try { socket.close(); } catch { /* ok */ } return; }
+      const porta = await portaDaTela(id);
+      if (morto) return;
+      if (porta == null) { try { socket.close(); } catch { /* ok */ } return; }
+      const prot = String(req.headers["sec-websocket-protocol"] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      enviar = abrirWsDaTela(socket, porta, caminho, fila, prot);
+    })();
   });
 
   // --- API REST ---
@@ -403,10 +514,35 @@ export async function startServer(hub: Hub) {
     const m = await estadoDaMaquina(id);
     return { ...m, imagem: await imagemPronta() };
   });
+  app.get("/api/empresas/:id/maquina/uso", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    return hub.usoDoPc(id);
+  });
+  app.get("/api/empresas/:id/maquina/gravacao", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    return hub.estadoGravacao(id);
+  });
+  app.post("/api/empresas/:id/maquina/gravacao", async (req, reply) => {
+    const id = (req.params as any).id as string;
+    if (!hub.db.getEmpresa(id)) return reply.code(404).send({ error: "empresa não encontrada" });
+    const b = (req.body ?? {}) as { acao?: string; conversationId?: string; legenda?: string };
+    if (b.acao === "iniciar") {
+      return await hub.iniciarGravacao({ empresaId: id, por: "chefe", nome: "você", conversationId: b.conversationId });
+    }
+    if (b.acao === "parar") return await hub.pararGravacao(id, b.legenda);
+    return reply.code(400).send({ error: "acao deve ser iniciar ou parar" });
+  });
   app.post("/api/empresas/:id/maquina/ligar", async (req) => {
     const id = (req.params as any).id as string;
     const emp = hub.db.listEmpresas?.().find((e: any) => e.id === id);
     return await ligarMaquina(id, emp?.nome ?? "");
+  });
+  app.post("/api/empresas/:id/maquina/recriar", async (req) => {
+    const id = (req.params as any).id as string;
+    const emp = hub.db.getEmpresa(id);
+    return await recriarMaquina(id, emp?.nome ?? "");
   });
   app.post("/api/empresas/:id/maquina/desligar", async (req) => await desligarMaquina((req.params as any).id as string));
   app.delete("/api/empresas/:id/maquina", async (req) => await apagarMaquina((req.params as any).id as string));
@@ -799,7 +935,25 @@ export async function startServer(hub: Hub) {
   app.get("/api/files/:id/:name?", async (req, reply) => {
     const f = hub.db.getFile((req.params as any).id);
     if (!f || !fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo não encontrado" });
-    reply.header("content-type", f.mime).header("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    // Foto e PDF seguem abertos (o chat já embute). Vídeo pede a senha da interface.
+    if (videoExigeSenha(f.mime) && config.uiPassword && !uiAuthorized(req) && !nodeAuthorized(req)) {
+      return reply.code(401).send({ error: "senha da interface inválida" });
+    }
+    const stat = fs.statSync(f.path);
+    reply.header("accept-ranges", "bytes").header("content-type", f.mime);
+    reply.header("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    const faixa = /^bytes=(\d+)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    if (faixa && stat.size > 0) {
+      const ini = Number(faixa[1]);
+      const fim = faixa[2] ? Math.min(Number(faixa[2]), stat.size - 1) : Math.min(ini + 1024 * 1024 - 1, stat.size - 1);
+      if (!Number.isFinite(ini) || ini >= stat.size || ini > fim) {
+        reply.code(416).header("content-range", `bytes */${stat.size}`);
+        return reply.send();
+      }
+      reply.code(206).header("content-range", `bytes ${ini}-${fim}/${stat.size}`).header("content-length", String(fim - ini + 1));
+      return reply.send(fs.createReadStream(f.path, { start: ini, end: fim }));
+    }
+    reply.header("content-length", String(stat.size));
     return reply.send(fs.createReadStream(f.path));
   });
   /** Upload por um nó/bot (token do nó) ou pela interface: corpo binário + cabeçalhos X-File-Name / X-Conversation. */

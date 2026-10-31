@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { FAIXA_TELA_EMPRESA, idSeguro } from "./ponteVnc.js";
 
 /**
  * O PC DA EMPRESA
@@ -20,7 +21,7 @@ import { execFile } from "node:child_process";
  */
 
 const IMAGEM = "lscr.io/linuxserver/chromium:latest";
-const PORTA_BASE_TELA = 7901;   // noVNC
+const PORTA_BASE_TELA = FAIXA_TELA_EMPRESA.min;   // GUI do container (noVNC / Selkies)
 const PORTA_BASE_CDP = 9301;    // o navegador, para os bots
 const RAIZ = path.resolve(process.cwd(), "dados", "maquinas");
 const MAPA = path.join(RAIZ, "portas.json");
@@ -32,8 +33,15 @@ export type Maquina = {
   portaCdp: number;
   estado: "ligada" | "desligada" | "sem-docker" | "nao-criada";
   telaUrl?: string;
+  /** O container foi criado com a tela servida em /pc/<empresa>/, para o painel embutir. */
+  telaNoPainel?: boolean;
   erro?: string;
 };
+
+/** Caminho da tela DENTRO do container. O painel abre o mesmo caminho no Hub. */
+export function subpastaDa(empresaId: string) {
+  return `/pc/${empresaId}/`;
+}
 
 function docker(args: string[], msTeto = 60000): Promise<{ ok: boolean; saida: string }> {
   return new Promise((resolve) => {
@@ -109,7 +117,9 @@ function portasDe(empresaId: string): { portaTela: number; portaCdp: number } {
   try { mapa = JSON.parse(fs.readFileSync(MAPA, "utf8")); } catch { mapa = {}; }
   if (mapa[empresaId] === undefined) {
     const usados = new Set(Object.values(mapa));
-    let i = 0; while (usados.has(i)) i++;
+    const teto = FAIXA_TELA_EMPRESA.max - PORTA_BASE_TELA;
+    let i = 0; while (usados.has(i) && i <= teto) i++;
+    if (i > teto) throw new Error("não há porta livre na faixa da tela");
     mapa[empresaId] = i;
     fs.writeFileSync(MAPA, JSON.stringify(mapa, null, 2));
   }
@@ -120,12 +130,19 @@ function portasDe(empresaId: string): { portaTela: number; portaCdp: number } {
 export async function estadoDa(empresaId: string): Promise<Maquina> {
   const container = nomeDoContainer(empresaId);
   const { portaTela, portaCdp } = portasDe(empresaId);
-  const base: Maquina = { empresaId, container, portaTela, portaCdp, estado: "nao-criada" };
+  const base: Maquina = { empresaId, container, portaTela, portaCdp, estado: "nao-criada", telaNoPainel: false };
   if (!(await temDocker())) return { ...base, estado: "sem-docker", erro: "o Docker nao esta no ar nesta maquina" };
-  const r = await docker(["inspect", "-f", "{{.State.Running}}", container], 20000);
+  const r = await docker(["inspect", "-f", "{{.State.Running}}\n{{range .Config.Env}}{{println .}}{{end}}", container], 20000);
   if (!r.ok) return base;
-  const ligada = r.saida.trim() === "true";
-  return { ...base, estado: ligada ? "ligada" : "desligada", telaUrl: ligada ? `http://127.0.0.1:${portaTela}/` : undefined };
+  const [linha, ...resto] = r.saida.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const ligada = linha.trim() === "true";
+  const telaNoPainel = resto.some((l) => l.trim() === `SUBFOLDER=${subpastaDa(empresaId)}`);
+  return {
+    ...base,
+    estado: ligada ? "ligada" : "desligada",
+    telaNoPainel,
+    telaUrl: ligada ? `http://127.0.0.1:${portaTela}/` : undefined,
+  };
 }
 
 export async function ligar(empresaId: string, nomeEmpresa = ""): Promise<Maquina> {
@@ -153,6 +170,8 @@ export async function ligar(empresaId: string, nomeEmpresa = ""): Promise<Maquin
     "-v", `${volume}:/config`,
     "-e", "TZ=America/Sao_Paulo",
     "-e", `TITLE=${nomeEmpresa || empresaId}`,
+    // a GUI passa a viver em /pc/<empresa>/ para o Hub poder embutir com senha
+    ...(idSeguro(empresaId) ? ["-e", `SUBFOLDER=${subpastaDa(empresaId)}`] : []),
     // o 9222 ouvindo em 0.0.0.0 e preciso para o Hub alcancar de fora do container
     "-e", "CHROME_CLI=--remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 --remote-allow-origins=* --start-maximized",
     IMAGEM,
@@ -160,7 +179,13 @@ export async function ligar(empresaId: string, nomeEmpresa = ""): Promise<Maquin
   if (!r.ok) return { ...atual, erro: r.saida.slice(0, 400) };
   // o Chromium leva uns segundos para abrir; a ponte so vale depois dele
   setTimeout(() => void garantirPonte(atual.container, volume), 15000);
-  return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${atual.portaTela}/` };
+  return { ...atual, estado: "ligada", telaNoPainel: idSeguro(empresaId), telaUrl: `http://127.0.0.1:${atual.portaTela}/` };
+}
+
+/** Apaga o container e sobe de novo com a tela no painel. O volume (os logins) fica. */
+export async function recriar(empresaId: string, nomeEmpresa = ""): Promise<Maquina> {
+  await docker(["rm", "-f", nomeDoContainer(empresaId)], 60000);
+  return ligar(empresaId, nomeEmpresa);
 }
 
 export async function desligar(empresaId: string): Promise<Maquina> {

@@ -328,8 +328,9 @@ export function NewGerenteDialog({ bots, onClose, onCreated }: { bots: BotSummar
                 <div className="equipe">
                   {candidatos.map((b) => (
                     <button key={b.id} type="button" className={"equipe-item" + (equipe.includes(b.id) ? " on" : "")} aria-pressed={equipe.includes(b.id)} onClick={() => alterna(b.id)}>
-                      <span>{equipe.includes(b.id) ? "☑" : "☐"}</span>
-                      <b>{b.avatar || "·"} {b.name}</b>
+                      <span className="equipe-check">{equipe.includes(b.id) ? "☑" : "☐"}</span>
+                      <RetratoPreview id={b.id} avatar={b.avatar} size={28} />
+                      <b>{b.name}</b>
                       <small>{b.role}</small>
                     </button>
                   ))}
@@ -767,7 +768,7 @@ export function EmpresasDialog({ empresas, bots, onClose }: { empresas: Array<{ 
             <div className="emp-bots">
               {bots.map((b) => (
                 <div key={b.id} className="emp-bot">
-                  <b>{b.avatar || "·"} {b.name}</b>
+                  <span className="emp-bot-rosto"><RetratoPreview id={b.id} avatar={b.avatar} size={28} /></span><b>{b.name}</b>
                   <select value={b.empresaId ?? ""} onChange={(ev) => void mover(b.id, ev.target.value, !!b.ponte)}>
                     <option value="">sistema (todas)</option>
                     {lista.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}

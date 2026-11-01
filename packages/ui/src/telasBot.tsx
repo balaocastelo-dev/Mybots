@@ -255,6 +255,8 @@ function PcAmpliado({ nome, url, pronta, onFechar }: {
   );
 }
 
+type CelularListado = { serial: string; modelo?: string; estado?: string };
+
 function ParearAndroid({ botId }: { botId: string }) {
   const [ip, setIp] = useState("");
   const [porta, setPorta] = useState("");
@@ -262,6 +264,44 @@ function ParearAndroid({ botId }: { botId: string }) {
   const [portaConexao, setPortaConexao] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [lista, setLista] = useState<CelularListado[]>([]);
+  const [usando, setUsando] = useState("");
+
+  useEffect(() => {
+    let vivo = true;
+    const ler = async () => {
+      try {
+        const r = await fetch(comChave("/api/celulares"));
+        if (!vivo || !r.ok) return;
+        const d = await r.json() as { lista?: CelularListado[] };
+        setLista((d.lista ?? []).filter((c) => (c.estado ?? "device") === "device"));
+      } catch { /* hub offline */ }
+    };
+    void ler();
+    const id = window.setInterval(() => void ler(), 5000);
+    return () => { vivo = false; window.clearInterval(id); };
+  }, []);
+
+  const usar = async (serial: string) => {
+    setErro("");
+    setUsando(serial);
+    try {
+      const r = await fetch(comChave(`/api/bots/${encodeURIComponent(botId)}/android/usar`), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ serial }),
+      });
+      const d = await r.json().catch(() => ({} as { ok?: boolean; erro?: string }));
+      if (!r.ok || d.ok === false) {
+        setErro(d.erro || "Não consegui vincular este aparelho ao bot.");
+        return;
+      }
+    } catch {
+      setErro("O Hub não respondeu.");
+    } finally {
+      setUsando("");
+    }
+  };
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
@@ -316,26 +356,47 @@ function ParearAndroid({ botId }: { botId: string }) {
   };
 
   return (
-    <form className="form android-parear" onSubmit={(e) => void enviar(e)}>
-      <div className="row">
-        <label>IP
-          <input value={ip} onChange={(e) => setIp(e.target.value)} placeholder="192.168.0.10" autoComplete="off" />
-        </label>
-        <label>Porta de pareamento
-          <input value={porta} onChange={(e) => setPorta(e.target.value)} inputMode="numeric" placeholder="37123" autoComplete="off" />
-        </label>
-      </div>
-      <div className="row">
-        <label>Código
-          <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="código de 6 dígitos" autoComplete="off" />
-        </label>
-        <label>Porta de conexão
-          <input value={portaConexao} onChange={(e) => setPortaConexao(e.target.value)} inputMode="numeric" placeholder="opcional" autoComplete="off" />
-        </label>
-      </div>
-      <p className="android-dica">No Android 11 ou mais novo a porta de pareamento é diferente da porta de conexão. A de conexão é opcional.</p>
-      {erro && <p className="android-erro" role="alert">{erro}</p>}
-      <button className="btn primary" type="submit" disabled={enviando}>{enviando ? "Pareando…" : "Parear"}</button>
-    </form>
+    <div className="android-parear-bloco">
+      {lista.length > 0 && (
+        <div className="android-ja-conectados">
+          <p className="android-dica">Aparelhos já no adb — um clique vincula a este bot:</p>
+          <ul className="android-lista-adb">
+            {lista.map((c) => (
+              <li key={c.serial}>
+                <span>{c.modelo || "Android"} · {c.serial}</span>
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={usando === c.serial}
+                  onClick={() => void usar(c.serial)}
+                >{usando === c.serial ? "Vinculando…" : "Usar neste bot"}</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <form className="form android-parear" onSubmit={(e) => void enviar(e)}>
+        <p className="android-dica">Ou pareie um aparelho novo (Android 11+):</p>
+        <div className="row">
+          <label>IP
+            <input value={ip} onChange={(e) => setIp(e.target.value)} placeholder="192.168.0.10" autoComplete="off" />
+          </label>
+          <label>Porta de pareamento
+            <input value={porta} onChange={(e) => setPorta(e.target.value)} inputMode="numeric" placeholder="37123" autoComplete="off" />
+          </label>
+        </div>
+        <div className="row">
+          <label>Código
+            <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="código de 6 dígitos" autoComplete="off" />
+          </label>
+          <label>Porta de conexão
+            <input value={portaConexao} onChange={(e) => setPortaConexao(e.target.value)} inputMode="numeric" placeholder="opcional" autoComplete="off" />
+          </label>
+        </div>
+        <p className="android-dica">No Android 11 ou mais novo a porta de pareamento é diferente da porta de conexão. A de conexão é opcional.</p>
+        {erro && <p className="android-erro" role="alert">{erro}</p>}
+        <button className="btn primary" type="submit" disabled={enviando}>{enviando ? "Pareando…" : "Parear"}</button>
+      </form>
+    </div>
   );
 }

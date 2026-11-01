@@ -394,3 +394,36 @@ test("o Hub publica o contrato e a tela em /android/<botId>/", { timeout: 40_000
     matar();
   }
 });
+
+
+test("usarConectado grava aparelho ja listado no adb", async () => {
+  const gravados: any[] = [];
+  const adb = async (args: string[]) => {
+    if (args[0] === "devices") {
+      return { ok: true, saida: "List of devices attached\n192.168.15.5:5555 device product:mondrian model:23013PC75G\n", codigo: 0 };
+    }
+    return { ok: true, saida: "", codigo: 0 };
+  };
+  const p = new PareamentoAndroid({
+    adb,
+    ler: () => null,
+    gravar: (_id, c) => { gravados.push(c); },
+  });
+  const r = await p.usarConectado("salada", "192.168.15.5:5555");
+  assert.equal(r.ok, true);
+  assert.equal(gravados[0].serial, "192.168.15.5:5555");
+  assert.equal(gravados[0].ip, "192.168.15.5");
+  assert.equal(gravados[0].portaConexao, 5555);
+  assert.equal(gravados[0].modo, "aparelho");
+});
+
+test("usarConectado recusa serial ausente do adb", async () => {
+  const p = new PareamentoAndroid({
+    adb: async () => ({ ok: true, saida: "List of devices attached\n", codigo: 0 }),
+    ler: () => null,
+    gravar: () => {},
+  });
+  const r = await p.usarConectado("salada", "192.168.0.9:5555");
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.match(r.erro, /não está conectado/i);
+});

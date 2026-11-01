@@ -191,6 +191,47 @@ export class PareamentoAndroid {
     await this.reconectar(botId);
     return { conectado: await this.esta(c.serial), cadastrado: true };
   }
+/**
+   * Aparelho que ja aparece no adb devices (Wi-Fi ou USB). Nao pede o codigo
+   * de 6 digitos de novo — so grava o serial neste bot.
+   */
+  async usarConectado(botId: string, serialBruto: string): Promise<ResultadoParear> {
+    const serial = String(serialBruto ?? "").trim();
+    if (!serial || serial.length > 80 || /\s/.test(serial)) {
+      return { ok: false, erro: "informe o serial do aparelho (ex.: 192.168.0.10:5555)" };
+    }
+    const r = await this.deps.adb(["devices", "-l"], 8000);
+    const achou = aparelhosDe(r.saida).find((a) => a.serial === serial && a.estado === "device");
+    if (!achou) return { ok: false, erro: "esse aparelho não está conectado no adb agora" };
+    let ip = serial;
+    let portaConexao = 5555;
+    const m = serial.match(/^(\d{1,3}(?:\.\d{1,3}){3}):(\d+)$/);
+    if (m) {
+      ip = m[1];
+      portaConexao = Number(m[2]);
+      if (!ipDeAparelho(ip)) return { ok: false, erro: "só aceito IP da rede local" };
+      const porta = portaValida(portaConexao);
+      if (!porta.ok) return porta;
+      portaConexao = porta.porta;
+    } else if (!/^([a-zA-Z0-9._:-]{4,80})$/.test(serial)) {
+      return { ok: false, erro: "serial USB inválido" };
+    } else {
+      ip = "127.0.0.1";
+      portaConexao = 5555;
+    }
+    this.deps.gravar(botId, {
+      modo: "aparelho",
+      ip,
+      portaConexao,
+      serial,
+      pareadoEm: this.agora(),
+    });
+    this.tentou.delete(botId);
+    await this.abrirWhatsapp(serial);
+    return { ok: true };
+  }
+
+
 }
 
 export { URL_WHATSAPP };

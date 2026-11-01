@@ -107,7 +107,7 @@ export class TelasAndroid {
   private encerrarSessao(estado: Estado) {
     try { estado.sessao?.fechar(); } catch { /* ok */ }
     estado.sessao = null;
-    estado.abrindo = null;
+    // Nao zera abrindo aqui: o iframe remonta e, se limpar no meio, sobe 2 scrcpy e a tela fecha.
   }
 
   private async garantirSessao(botId: string, estado: Estado) {
@@ -126,7 +126,7 @@ export class TelasAndroid {
     estado.abrindo = (async () => {
       this.avisar(estado, `Conectando em ${cadastro.serial}…`);
       await this.deps.adb(["connect", `${cadastro.ip}:${cadastro.portaConexao}`], 15000);
-      void this.deps.abrirWhatsapp(cadastro.serial);
+      // WhatsApp Web so sobe apos o primeiro frame — em paralelo derrubava o handshake do scrcpy.
       const sessao = await abrirSessao({
         adbBin: bin,
         adb: this.deps.adb,
@@ -137,6 +137,7 @@ export class TelasAndroid {
           estado.largura = m.largura;
           estado.altura = m.altura;
           this.enviar(estado, JSON.stringify({ tipo: "meta", ...m }));
+          void this.deps.abrirWhatsapp(cadastro.serial);
         },
         onConfig: (m) => this.enviar(estado, JSON.stringify({ tipo: "config", codec: m.codec, description: m.description })),
         onQuadro: (q) => {
@@ -146,9 +147,14 @@ export class TelasAndroid {
           this.enviar(estado, pacote);
         },
       });
+      if (!estado.clientes.size) {
+        try { sessao.fechar(); } catch { /* ok */ }
+        return;
+      }
       estado.sessao = sessao;
     })().catch((e) => {
       this.avisar(estado, (e as Error).message || "não abri a tela");
+      estado.sessao = null;
     }).finally(() => { estado.abrindo = null; });
     return estado.abrindo;
   }

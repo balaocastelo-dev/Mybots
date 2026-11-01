@@ -178,6 +178,10 @@ export function rotaPublicaOnline(url: string): boolean {
   if (caminho === "/api/health") return true;
   if (caminho === "/api/login" || caminho === "/api/logout" || caminho === "/api/me") return true;
   if (caminho === "/api/channels/incoming") return true;
+  // Telas remotas do bot: NUNCA tratar .js/.css/.png sob /pc/ ou /android/
+  // como assets publicos da UI. Se o onRequest sair cedo, o proxy da Selkies
+  // nao roda e a aba Meu PC fica branca.
+  if (caminho.startsWith("/pc/") || caminho.startsWith("/android/")) return false;
   // static assets of the UI
   if (caminho === "/" || caminho === "/index.html") return true;
   if (caminho.startsWith("/assets/") || caminho.startsWith("/amebas/") || caminho.startsWith("/icon") || caminho.endsWith(".svg") || caminho.endsWith(".png") || caminho.endsWith(".webmanifest") || caminho.endsWith(".css") || caminho.endsWith(".js") || caminho.endsWith(".map") || caminho.endsWith(".woff2")) return true;

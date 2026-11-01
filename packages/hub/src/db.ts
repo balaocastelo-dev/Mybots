@@ -195,6 +195,23 @@ export class Db {
       atualizada_em INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_colab_tarefas_para ON colab_tarefas(para, status, criada_em);`);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS fatos (
+        id TEXT PRIMARY KEY,
+        bot_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        learned_at INTEGER NOT NULL,
+        empresa_id TEXT NOT NULL DEFAULT '',
+        promovido INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_fatos_bot ON fatos(bot_id, tipo, learned_at);
+      CREATE TABLE IF NOT EXISTS resumos_bot (
+        bot_id TEXT PRIMARY KEY,
+        texto TEXT NOT NULL,
+        atualizado_em INTEGER NOT NULL
+      );
+    `);
   }
 
   close() { this.db.close(); }
@@ -836,6 +853,107 @@ export class Db {
       tags: JSON.parse(r.tags || "[]"), bots: r.bots ? JSON.parse(r.bots) : undefined,
       origem: r.origem ?? undefined, empresaId: r.empresa_id ?? undefined, usos: r.usos ?? 0, criadoEm: r.criado_em, atualizadoEm: r.atualizado_em,
     };
+  }
+
+  // ---- fatos estruturados por bot (+ equipe) ----
+  inserirFato(f: { id: string; botId: string; text: string; tipo: "perfil" | "diario"; learnedAt: number; empresaId: string; promovido?: boolean }) {
+    this.db.prepare(`INSERT INTO fatos (id, bot_id, text, tipo, learned_at, empresa_id, promovido) VALUES (?,?,?,?,?,?,?)`)
+      .run(f.id, f.botId, f.text, f.tipo, f.learnedAt, f.empresaId || "", f.promovido ? 1 : 0);
+  }
+
+  listarFatos(botId: string, tipo?: "perfil" | "diario"): Array<{ id: string; botId: string; text: string; tipo: "perfil" | "diario"; learnedAt: number; empresaId: string; promovido: boolean }> {
+    const rows = tipo
+      ? this.db.prepare(`SELECT * FROM fatos WHERE bot_id=? AND tipo=? ORDER BY learned_at DESC`).all(botId, tipo)
+      : this.db.prepare(`SELECT * FROM fatos WHERE bot_id=? ORDER BY learned_at DESC`).all(botId);
+    return (rows as any[]).map((r) => ({
+      id: r.id, botId: r.bot_id, text: r.text, tipo: r.tipo, learnedAt: r.learned_at, empresaId: r.empresa_id || "", promovido: !!r.promovido,
+    }));
+  }
+
+  listarFatosEquipe(empresaId: string) {
+    return (this.db.prepare(`SELECT * FROM fatos WHERE promovido=1 AND empresa_id=? ORDER BY learned_at DESC`).all(empresaId || "") as any[]).map((r) => ({
+      id: r.id, botId: r.bot_id, text: r.text, tipo: r.tipo as "perfil" | "diario", learnedAt: r.learned_at, empresaId: r.empresa_id || "", promovido: true,
+    }));
+  }
+
+  getFato(id: string) {
+    const r = this.db.prepare(`SELECT * FROM fatos WHERE id=?`).get(id) as any;
+    if (!r) return undefined;
+    return { id: r.id, botId: r.bot_id, text: r.text, tipo: r.tipo as "perfil" | "diario", learnedAt: r.learned_at, empresaId: r.empresa_id || "", promovido: !!r.promovido };
+  }
+
+  atualizarFato(id: string, patch: { text?: string; tipo?: "perfil" | "diario" }) {
+    const cur = this.getFato(id);
+    if (!cur) return false;
+    this.db.prepare(`UPDATE fatos SET text=?, tipo=? WHERE id=?`).run(patch.text ?? cur.text, patch.tipo ?? cur.tipo, id);
+    return true;
+  }
+
+  apagarFato(id: string) {
+    this.db.prepare(`DELETE FROM fatos WHERE id=?`).run(id);
+  }
+
+  promoverFatoEquipe(id: string, empresaId: string) {
+    const cur = this.getFato(id);
+    if (!cur) return false;
+    this.db.prepare(`UPDATE fatos SET promovido=1, empresa_id=? WHERE id=?`).run(empresaId || cur.empresaId, id);
+    return true;
+  }
+
+  buscarFatosDiario(botId: string, query: string, limit = 6) {
+    const termos = (query || "").toLowerCase().split(/\s+/).filter((t) => t.length > 2).slice(0, 8);
+    const todos = this.listarFatos(botId, "diario");
+    if (!termos.length) return todos.slice(0, limit);
+    const scored = todos.map((f) => {
+      const t = f.text.toLowerCase();
+      let s = 0;
+      for (const w of termos) if (t.includes(w)) s += 1;
+      return { f, s };
+    }).filter((x) => x.s > 0).sort((a, b) => b.s - a.s || b.f.learnedAt - a.f.learnedAt);
+    return scored.slice(0, limit).map((x) => x.f);
+  }
+
+  lerResumoBot(botId: string): string | null {
+    const r = this.db.prepare(`SELECT texto FROM resumos_bot WHERE bot_id=?`).get(botId) as any;
+    return r?.texto ?? null;
+  }
+
+  regenerarResumoBot(botId: string, _empresaId = "") {
+    const perfil = this.listarFatos(botId, "perfil").slice(0, 12);
+    const diario = this.listarFatos(botId, "diario").slice(0, 8);
+    const linhas = [
+      ...perfil.map((f) => `- [perfil] ${f.text}`),
+      ...diario.map((f) => `- [diario ${new Date(f.learnedAt).toLocaleDateString("pt-BR")}] ${f.text}`),
+    ];
+    const texto = linhas.length
+      ? `Resumo rolante do bot ${botId}:\n${linhas.join("\n")}`.slice(0, 2500)
+      : `Resumo rolante do bot ${botId}: (sem fatos ainda)`;
+    this.db.prepare(`INSERT INTO resumos_bot (bot_id, texto, atualizado_em) VALUES (?,?,?)
+      ON CONFLICT(bot_id) DO UPDATE SET texto=excluded.texto, atualizado_em=excluded.atualizado_em`)
+      .run(botId, texto, Date.now());
+    return texto;
+  }
+
+  blocoFatosParaPrompt(botId: string, empresaId: string): string {
+    const perfil = this.listarFatos(botId, "perfil").slice(0, 20);
+    const resumo = this.lerResumoBot(botId);
+    const equipe = this.listarFatosEquipe(empresaId).slice(0, 12);
+    const partes: string[] = ["## Memória estruturada deste bot"];
+    if (perfil.length) {
+      partes.push("Fatos de perfil (sempre no contexto):");
+      for (const f of perfil) partes.push(`  - ${f.text}  [id: ${f.id}]`);
+    } else {
+      partes.push("Ainda sem fatos de perfil. Use remember para guardar.");
+    }
+    if (resumo) {
+      partes.push("", "Resumo rolante:", resumo);
+    }
+    if (equipe.length) {
+      partes.push("", "## Memória da equipe (fatos promovidos)");
+      for (const f of equipe) partes.push(`  - ${f.text}  [id: ${f.id}]`);
+    }
+    partes.push("", "Diário: busque com recall(consulta) ou remember(texto). Para promover ao time: use o painel (Promover para equipe).");
+    return partes.join("\n");
   }
 
   remember(botId: string, key: string, value: string, empresaId = "") {

@@ -13,6 +13,7 @@ import { tetoDoProvedor, tetoSaidaDoProvedor, emTokens, ferramentasQueCabem } fr
 import { Aquecedor, preaquecer } from "../aquecer.js";
 import { CacheResposta, emitirEmPedacos } from "../cacheResposta.js";
 import { ehGerenteBot, numCtxDe, promptGerenteNoOllama } from "../promptEnxuto.js";
+import { montarPromptChamada } from "../promptChamada.js";
 import { podeCachear, promptCurto, rotaRapida } from "../roteamento.js";
 /** avisa uma vez por provedor, no log, quando o prompt precisou ser reduzido */
 const avisados = new Set<string>();
@@ -55,6 +56,7 @@ export class DirectEngine implements Engine {
     setInterval(() => atualizarCatalogo(cfg.workspace), 10 * 60_000).unref();
     hub.on("hello.ok", (m: any) => { if (typeof m?.knowledge === "string") this.knowledge = m.knowledge; });
     // a base comum mudou enquanto eu já estava de pé: recebo a herança nova sem precisar reiniciar
+    hub.on("chamada", (m: any) => { try { this.setCallMode(!!m?.ativa); } catch {} });
     hub.on("knowledge", (m: any) => { if (typeof m?.knowledge === "string") this.knowledge = m.knowledge; });
     hub.on("control", (m: Extract<HubToNode, { type: "control" }>) => {
       this.controlOverride = m.override;
@@ -172,7 +174,15 @@ export class DirectEngine implements Engine {
     ].join("\n");
   }
 
+  private callModeAtivo = false;
+  setCallMode(ativa: boolean) { this.callModeAtivo = !!ativa; }
+
   private systemPrompt(conversationId: string): string {
+    if (this.callModeAtivo) {
+      const pChamada = path.resolve(path.dirname(this.cfg.personaFile), "prompt-chamada.md");
+      const fromFile = fs.existsSync(pChamada) ? fs.readFileSync(pChamada, "utf8") : "";
+      return (fromFile.trim() || montarPromptChamada(this.cfg.bot.name, this.cfg.bot.role || "")) + "\n";
+    }
     const persona = readPersona(this.cfg);
     // No Ollama o Gerente não carrega o manual inteiro: o prefill fica caro
     // e a janela (num_ctx) acompanha este texto, não 32 mil tokens vazios.

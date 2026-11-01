@@ -208,8 +208,9 @@ export const TOOL_DEFS: ToolDef[] = [
   { name: "cancel_task", description: "Cancela uma tarefa que você delegou e que ainda não terminou.", parameters: { type: "object", properties: { taskId: { type: "string" }, id: { type: "string" }, motivo: { type: "string" } }, required: [] } },
   { name: "set_status", description: "Atualiza o status curto mostrado na lista de contatos (ex.: 'Lendo o o ERP').", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
   { name: "notify_user", description: "Notifica o chefe sobre algo (terminou, precisa de atenção) sem esperar resposta.", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
-  { name: "remember", description: "Guarda um fato na memória compartilhada da equipe.", parameters: { type: "object", properties: { key: { type: "string" }, value: { type: "string" } }, required: ["key", "value"] } },
-  { name: "recall", description: "Lê a memória compartilhada. 'prefixo*' lista várias chaves.", parameters: { type: "object", properties: { key: { type: "string" } }, required: ["key"] } },
+  { name: "remember", description: "Guarda um fato curto (perfil ou diário) na memória estruturada deste bot e, se houver chave, também na memória da equipe.", parameters: { type: "object", properties: { text: { type: "string" }, key: { type: "string" }, value: { type: "string" }, tipo: { type: "string", description: "perfil ou diario" } }, required: [] } },
+  { name: "forget", description: "Esquece um fato pelo id (ou texto).", parameters: { type: "object", properties: { id: { type: "string" }, key: { type: "string" } }, required: [] } },
+  { name: "recall", description: "Lê memória: chave clássica, prefixo*, ou busca nos fatos de diário/perfil.", parameters: { type: "object", properties: { key: { type: "string" }, text: { type: "string" } }, required: [] } },
   { name: "send_file", description: "Envia um arquivo do workspace para o chefe no chat (imagem, planilha, PDF, vídeo curto; até 40 MB).", parameters: { type: "object", properties: { path: { type: "string" }, caption: { type: "string" } }, required: ["path"] } },
   { name: "screenshot", description: "Tira uma foto da tela deste PC e manda para o chefe no chat.", parameters: { type: "object", properties: { caption: { type: "string" } } } },
   { name: "schedule", description: "Cria uma rotina para você mesmo: no horário (cron de 5 campos: min hora dia mês dia-semana, fuso do Hub) você recebe o prompt para executar. Ex.: '0 8 * * 1' = segundas 8h.", parameters: { type: "object", properties: { name: { type: "string" }, cron: { type: "string" }, prompt: { type: "string" } }, required: ["name", "cron", "prompt"] } },
@@ -422,9 +423,18 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
       }
       case "set_status": ctx.setStatus(String(args.text ?? "").slice(0, 80)); return { output: "ok", ok: true };
       case "notify_user": ctx.hub.send({ type: "notify", text: String(args.text ?? "") }); return { output: "ok", ok: true };
-      case "remember": ctx.hub.send({ type: "remember", key: String(args.key ?? ""), value: String(args.value ?? "") }); return { output: "guardado", ok: true };
+      case "remember": {
+        const text = String(args.text ?? args.value ?? "").trim();
+        const key = String(args.key ?? "").trim();
+        ctx.hub.send({ type: "remember", key: key || text.slice(0, 40), value: text || String(args.value ?? ""), text, tipo: String(args.tipo ?? "diario") });
+        return { output: "guardado", ok: true };
+      }
+      case "forget": {
+        const r = await ctx.hub.call((callId) => ({ type: "forget", callId, id: String(args.id ?? ""), key: String(args.key ?? args.text ?? "") }), 15_000);
+        return { output: r.data == null ? "ok" : String(r.data), ok: r.ok };
+      }
       case "recall": {
-        const r = await ctx.hub.call((callId) => ({ type: "recall", callId, key: String(args.key ?? "") }), 15_000);
+        const r = await ctx.hub.call((callId) => ({ type: "recall", callId, key: String(args.key ?? args.text ?? "") }), 15_000);
         return { output: r.data == null ? "(nada guardado)" : typeof r.data === "string" ? r.data : JSON.stringify(r.data, null, 2), ok: r.ok };
       }
       case "send_file": return await sendFile(String(args.path ?? ""), args.caption ? String(args.caption) : undefined, ctx);

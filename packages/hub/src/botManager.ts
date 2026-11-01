@@ -112,7 +112,7 @@ export class BotManager {
     // Todo bot nasce no Claude, motor direto: e o que o dono pediu como padrao.
     // So sai disso quem escolher outra coisa no formulario, de proposito.
     const engine = input.engine === "opencode" ? "opencode" : "direct";
-    const kind = input.provider?.kind ?? "anthropic";
+    const kind = input.provider?.kind ?? (typeof PADRAO_DA_CASA.provider === "string" ? PADRAO_DA_CASA.provider : (PADRAO_DA_CASA as any).provider?.kind) ?? "zai";
     const preset = PROVIDERS.find((p) => p.kind === kind);
     if (kind === "opencode" && engine !== "opencode") return { error: "Os modelos grátis do OpenCode só rodam com o engine opencode." };
     // A chave da casa (no .env do Hub) ja chega a todo no pelo ambiente do processo,

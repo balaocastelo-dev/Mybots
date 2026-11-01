@@ -56,7 +56,8 @@ export type NodeToHub =
   /** cuidar da equipe pelo caminho certo: o Hub é quem manda em bot, não o PowerShell */
   | { type: "manage_bot"; callId: string; acao: "excluir" | "parar" | "ligar" | "reiniciar"; bot: string; apagarArquivos?: boolean }
   | { type: "criar_bot"; callId: string; nome: string; funcao?: string; persona?: string }
-  | { type: "remember"; key: string; value: string }
+  | { type: "remember"; key: string; value: string; text?: string; tipo?: string; callId?: string }
+  | { type: "forget"; callId: string; id?: string; key?: string }
   | { type: "recall"; callId: string; key: string }
   | { type: "search_knowledge"; callId: string; query: string; limit?: number; /** ler um verbete inteiro, em pedaços de ~4000 chars */ id?: string; parte?: number }
   | { type: "whatsapp_send"; callId: string; acao?: "estado" | "enviar" | "foto" | "documento"; para?: string; texto?: string;
@@ -96,6 +97,7 @@ export type HubToNode =
   /** nível global do Hub que sobrescreve o do nó (null = usa o do nó) */
   | { type: "control"; override: ControlMode | null }
   /** base comum mudou: o Hub reenvia o bloco de herança para quem já está conectado */
+  | { type: "chamada"; ativa: boolean }
   | { type: "knowledge"; knowledge: string }
   | { type: "result"; callId: string; ok: boolean; data: unknown }
   /** o histórico daquela conversa mudou (rebobinar/editar/apagar): o nó troca o que tinha pelo que vem aqui */

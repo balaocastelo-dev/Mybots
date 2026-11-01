@@ -311,6 +311,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const stopAll = () => { wantListenRef.current = false; stopRef.current(); stopSpeaking(); };
 
   const iniciarChamada = () => {
+    try { const bid = bot?.id; if (bid) void api(`/bots/${bid}/chamada`, { method: "POST", body: JSON.stringify({ ativa: true }) }); } catch {}
+
     if (!speechSupported(voice)) { alert("Este navegador não deixa usar o microfone aqui."); return; }
     inicioChamada.current = Date.now();
     setAgoraChamada(0); setMudo(false); setEmChamada(true); emChamadaRef.current = true;
@@ -337,6 +339,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   };
 
   const encerrarChamada = async () => {
+    try { const bid = bot?.id; if (bid) void api(`/bots/${bid}/chamada`, { method: "POST", body: JSON.stringify({ ativa: false }) }); } catch {}
+
     const seg = Math.max(1, Math.round((Date.now() - inicioChamada.current) / 1000));
     setEmChamada(false); emChamadaRef.current = false;
     escutaRef.current?.parar(); escutaRef.current = null;

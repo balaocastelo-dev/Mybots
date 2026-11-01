@@ -106,6 +106,7 @@ export class Hub {
     anotar: (conversationId, texto) => { this.marcador(conversationId, texto, { sala: true }); },
   });
   private uis = new Set<WebSocket>();
+  private chamadaAtiva = new Set<string>();
   private streams = new Map<string, { conversationId: string; botId: string; text: string; createdAt: number; tools: ToolRecord[]; /** o que já foi mandado para a voz (chamada de voz: ele fala enquanto escreve) */ falado?: string; /** o que a interface já está mostrando, já sem pensamento */ mostrado?: string }>();
 
   /** Garante a linha da mensagem do bot (texto vai chegando por partes; ferramentas chegam antes do texto). */
@@ -677,6 +678,8 @@ export class Hub {
       ...partes,
       "",
       ...memoria,
+      "",
+      botId ? this.db.blocoFatosParaPrompt(botId, botId ? (this.empresaDe(botId).id ?? "") : "") : "",
       "",
       "Aprendeu algo que serve para a equipe? Grave com learn_knowledge: no mesmo instante TODO bot passa a enxergar, inclusive os que nascerem depois.",
     ].filter(Boolean).join("\n");
@@ -1394,10 +1397,34 @@ export class Hub {
           .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
-      case "remember":
-        this.db.remember(botId, msg.key, msg.value, this.empresaDe(botId).id ?? "");
-        this.db.audit(botId, "memory.set", { key: msg.key });
+      case "remember": {
+        const emp = this.empresaDe(botId).id ?? "";
+        const key = String(msg.key ?? "").trim();
+        const value = String(msg.value ?? msg.text ?? "").trim();
+        if (key) this.db.remember(botId, key, value || key, emp);
+        const text = value || key;
+        if (text) {
+          const tipo = msg.tipo === "perfil" ? "perfil" : "diario";
+          this.db.inserirFato({ id: newId("fato"), botId, text, tipo, learnedAt: Date.now(), empresaId: emp, promovido: false });
+          this.db.regenerarResumoBot(botId, emp);
+        }
+        this.db.audit(botId, "memory.set", { key: key || undefined, text: text.slice(0, 80) });
         return;
+      }
+      case "forget": {
+        const id = String(msg.id ?? msg.key ?? "").trim();
+        if (id) {
+          const f = this.db.getFato(id);
+          if (f && f.botId === botId) this.db.apagarFato(id);
+          else if (msg.key) {
+            const todos = this.db.listarFatos(botId);
+            const hit = todos.find((x) => x.text === msg.key || x.id === msg.key);
+            if (hit) this.db.apagarFato(hit.id);
+          }
+          this.db.regenerarResumoBot(botId, this.empresaDe(botId).id ?? "");
+        }
+        return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: "esquecido" });
+      }
       case "search_knowledge": {
         const data = msg.id ? this.lerSaberTexto(botId, msg.id, msg.parte) : this.buscarSaberTexto(botId, msg.query, msg.limit);
         return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data });
@@ -1525,7 +1552,15 @@ export class Hub {
         return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data });
       }
       case "recall":
-        return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: (() => { const e = this.empresaDe(botId).id ?? ""; return msg.key.endsWith("*") ? this.db.recallPrefix(msg.key.slice(0, -1), e) : this.db.recall(msg.key, e); })() });
+        return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: (() => {
+          const e = this.empresaDe(botId).id ?? "";
+          const key = String(msg.key ?? "");
+          if (key.endsWith("*")) return this.db.recallPrefix(key.slice(0, -1), e);
+          const clássico = this.db.recall(key, e);
+          const fatos = this.db.buscarFatosDiario(botId, key, 6);
+          const perfil = this.db.listarFatos(botId, "perfil").filter((f) => f.text.toLowerCase().includes(key.toLowerCase())).slice(0, 4);
+          return { chave: clássico, diario: fatos, perfil, resumo: this.db.lerResumoBot(botId) };
+        })() });
       case "notify":
         this.broadcastUi({ type: "notify", botId, text: msg.text });
         this.storeMessage(dmConversation(botId), this.botSender(botId), msg.text, { notify: true });
@@ -1990,7 +2025,13 @@ export class Hub {
   }
 
   /** Dispara a rotina agora (pelo scheduler ou pelo botão "Rodar agora"). */
-  fireRoutine(r: Routine, how: "agendada" | "manual") {
+  setChamadaAtiva(botId: string, ativa: boolean) {
+    if (ativa) this.chamadaAtiva.add(botId); else this.chamadaAtiva.delete(botId);
+    this.sendNode(botId, { type: "chamada", ativa });
+  }
+  emChamada(botId: string) { return this.chamadaAtiva.has(botId); }
+
+    fireRoutine(r: Routine, how: "agendada" | "manual") {
     // Acabaram de mandar parar esse bot: deixar a rotina entrar agora é o bot
     // "voltando a falar sozinho" dois segundos depois do ⏹.
     if (how === "agendada" && this.paradoAgora(r.botId)) {

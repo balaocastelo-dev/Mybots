@@ -49,6 +49,7 @@ export class OpenCodeEngine implements Engine {
     this.base = `http://127.0.0.1:${cfg.opencode.port}`;
     if (cfg.opencode.password) this.authHeader = { authorization: "Basic " + Buffer.from(`opencode:${cfg.opencode.password}`).toString("base64") };
     this.agent = cfg.opencode.agent ?? cfg.bot.id;
+    hub.on("chamada", (_m: any) => { /* call-mode is DirectEngine-only */ });
     hub.on("hello.ok", (m: any) => { if (typeof m?.knowledge === "string") this.knowledge = m.knowledge; });
     hub.on("knowledge", (m: any) => { if (typeof m?.knowledge === "string") { this.knowledge = m.knowledge; try { this.writeOpenCodeConfig(); } catch {} } });
     hub.on("control", (m: Extract<HubToNode, { type: "control" }>) => {

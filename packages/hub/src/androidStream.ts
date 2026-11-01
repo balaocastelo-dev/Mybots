@@ -9,6 +9,7 @@ import type { CadastroAndroid } from "./androidBot.js";
 import type { AdbFn } from "./androidBot.js";
 import { htmlDaTela } from "./androidPlayer.js";
 import { abrirSessao, type SessaoAndroid } from "./androidSessao.js";
+import { humanoNoControle } from "./pcs.js";
 import { mensagemRolar, mensagemTecla, mensagemTexto, mensagemToque, mensagemVoltar } from "./androidScrcpy.js";
 
 export const FAIXA_TELA_ANDROID = { min: 8201, max: 8400 };
@@ -177,6 +178,8 @@ export class TelasAndroid {
     const py = Number.isFinite(y) ? (y <= 1 && y >= 0 ? y * h : y) : h / 2;
     const sessao = estado.sessao;
     if (!sessao) return;
+    // Só assistir: ignora toque/tecla do navegador. Assumir controle libera.
+    if (!humanoNoControle(botId)) return;
     if (tipo === "toque") {
       const acao = m.acao === "up" ? 1 : m.acao === "move" ? 2 : 0;
       sessao.controle(mensagemToque(acao, px, py, w, h));

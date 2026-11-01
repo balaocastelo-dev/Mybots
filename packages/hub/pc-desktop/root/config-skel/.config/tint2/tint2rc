@@ -1,0 +1,40 @@
+#---- Generated for MyBots ----
+panel_monitor = all
+panel_position = bottom center horizontal
+panel_size = 100% 34
+panel_margin = 0 0
+panel_padding = 6 2 4
+panel_background_id = 1
+panel_items = LTSC
+font_shadow = 0
+launcher_icon_size = 22
+launcher_padding = 4 2 4
+launcher_item_app = /config/Desktop/navegador.desktop
+launcher_item_app = /config/Desktop/arquivos.desktop
+launcher_item_app = /config/Desktop/terminal.desktop
+task_width = 120
+task_height = 26
+task_centered = 1
+task_font = sans 9
+task_font_color = #f0f0f0 100
+task_background_id = 2
+systray_padding = 2 0 2
+systray_icon_size = 18
+clock_format = %H:%M
+clock_font = sans 9
+clock_font_color = #f0f0f0 100
+clock_padding = 4 0
+time1_format = %H:%M
+
+# Background 1: panel
+rounded = 0
+border_width = 0
+background_color = #121628 95
+border_color = #121628 0
+
+# Background 2: task
+rounded = 4
+border_width = 0
+background_color = #2a3355 80
+border_color = #2a3355 0
+background_color_hover = #3a4570 90

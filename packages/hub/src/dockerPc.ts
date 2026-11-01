@@ -10,7 +10,9 @@ import { portaCdpPermitida } from "./gravacao.js";
 import { FAIXA_TELA_EMPRESA, portaDeEmpresaPermitida } from "./ponteVnc.js";
 
 /** Tag fixa, a mesma testada com o Selkies 2.1 (desktop na raiz da porta 3000). */
-export const IMAGEM_PC = "lscr.io/linuxserver/chromium:1aca5d17-ls61";
+/** Build local: packages/hub/pc-desktop (openbox+tint2+ícones). Base = IMAGEM_PC_BASE. */
+export const IMAGEM_PC_BASE = "lscr.io/linuxserver/chromium:1aca5d17-ls61";
+export const IMAGEM_PC = "mybots/pc-desktop:1aca5d17";
 export const MARCA_RAIZ = "MYBOTS_TELA=raiz";
 export const PORTA_BASE_TELA = FAIXA_TELA_EMPRESA.min;
 export const PORTA_BASE_CDP = 9301;

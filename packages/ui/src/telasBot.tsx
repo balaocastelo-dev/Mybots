@@ -8,8 +8,9 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 
  * caixa: sem faixa em volta da imagem. No painel estreito os dois empilham;
  * no largo ficam lado a lado, na mesma altura.
  *
- * O clique na miniatura do PC não entra na tela — abre ela grande. Lá o
- * mouse e o teclado vão para o iframe. Fecha no X, no fundo ou no Esc.
+ * Por padrão é SÓ ASSISTIR: o chefe vê PC e celular sem clicar. Em
+ * ASSUMIR CONTROLE o mouse/teclado entram na tela e a IA pausa PC/celular
+ * até DEVOLVER PARA A IA. A lupa do PC ainda abre a tela grande.
  */
 
 const RAZAO_PC: [number, number] = [16, 10];
@@ -155,6 +156,37 @@ export function TelasDoBot({ botId, nome, mostrarPareamento = false, modo = "amb
   const rotaPc = useRota(pcUrl);
   const rotaAndroid = useRota(androidUrl);
   const status = useStatusAndroid(botId);
+  const [controleHumano, setControleHumano] = useState(false);
+  const [controleBusy, setControleBusy] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    const ler = async () => {
+      try {
+        const r = await fetch(comChave(`/api/bots/${encodeURIComponent(botId)}/controle-humano`));
+        if (!vivo || !r.ok) return;
+        const d = await r.json() as { controleHumano?: boolean };
+        setControleHumano(!!d.controleHumano);
+      } catch { /* hub offline */ }
+    };
+    void ler();
+    const id = window.setInterval(() => void ler(), 5000);
+    return () => { vivo = false; window.clearInterval(id); };
+  }, [botId]);
+
+  const definirControle = async (ativo: boolean) => {
+    setControleBusy(true);
+    try {
+      const r = await fetch(comChave(`/api/bots/${encodeURIComponent(botId)}/controle-humano`), {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ativo }),
+      });
+      if (r.ok) setControleHumano(ativo);
+    } catch { /* ignore */ }
+    finally { setControleBusy(false); }
+  };
+
 
   useEffect(() => {
     const el = fitRef.current;
@@ -188,27 +220,47 @@ export function TelasDoBot({ botId, nome, mostrarPareamento = false, modo = "amb
             style={{ width: par.w, height: par.h }}
           >
             {modo !== "celular" && (
-            <div className={"quadro quadro-pc" + (modo === "pc" ? " sozinho" : "")}>
+            <div className={"quadro quadro-pc" + (modo === "pc" ? " sozinho" : "") + (controleHumano ? " controlando" : " assistindo")}>
               {rotaPc === "pronta" && !ampliado
-                ? <iframe src={pcUrl} title={`Tela do PC de ${nome || botId}`} tabIndex={-1} />
+                ? <iframe src={pcUrl} title={`Tela do PC de ${nome || botId}`} tabIndex={controleHumano ? 0 : -1} style={controleHumano ? { pointerEvents: "auto" } : undefined} />
                 : <div className="quadro-estado">{ampliado && rotaPc === "pronta" ? "Aberto em tela grande" : textoDaRotaPc(rotaPc)}</div>}
+              {!controleHumano && (
               <button
                 className="quadro-abre"
                 type="button"
-                title="Abrir a tela do PC"
-                aria-label={`Abrir a tela do PC de ${nome || botId}`}
+                title="Só assistir — clique em Assumir controle para operar"
+                aria-label={`Ampliar a tela do PC de ${nome || botId}`}
                 onClick={() => setAmpliado(true)}
               />
+              )}
             </div>
             )}
             {modo !== "pc" && (
-            <div className={"quadro quadro-android" + (modo === "celular" ? " sozinho" : "")} aria-label={`Android de ${nome || botId}`}>
+            <div className={"quadro quadro-android" + (modo === "celular" ? " sozinho" : "") + (controleHumano ? " controlando" : " assistindo")} aria-label={`Android de ${nome || botId}`}>
               {androidPronto
-                ? <iframe src={androidUrl} title={`Android de ${nome || botId}`} allow="clipboard-read; clipboard-write" />
+                ? <iframe src={androidUrl} title={`Android de ${nome || botId}`} allow="clipboard-read; clipboard-write" style={controleHumano ? { pointerEvents: "auto" } : { pointerEvents: "none" }} />
                 : <div className="quadro-estado">{avisoAndroid}</div>}
+              {!controleHumano && androidPronto && (
+                <div className="quadro-bloqueio" aria-hidden="true" title="Só assistir — Assumir controle para tocar" />
+              )}
             </div>
             )}
           </div>
+        )}
+      </div>
+
+      <div className={"telas-controle" + (controleHumano ? " humano" : " ia")} role="group" aria-label="Modo da tela">
+        <span className={"telas-controle-badge" + (controleHumano ? " humano" : "")}>
+          {controleHumano ? "Você no controle" : "Só assistir"}
+        </span>
+        {controleHumano ? (
+          <button type="button" className="btn telas-controle-btn" disabled={controleBusy} onClick={() => void definirControle(false)}>
+            Devolver para a IA
+          </button>
+        ) : (
+          <button type="button" className="btn primary telas-controle-btn" disabled={controleBusy} onClick={() => void definirControle(true)}>
+            Assumir controle
+          </button>
         )}
       </div>
 

@@ -20,7 +20,7 @@ import { alvoDaPonte, caminhoDaTela, caminhoNoContainer, idDaTela, idSeguro, por
 import { videoExigeSenha } from "./gravacao.js";
 import { abrirWsDaTela, encaminharHttp, quadroWs, type QuadroWs } from "./ponteTela.js";
 import { idDoAndroid, listarProvedoresAndroid, resolverAlvoAndroid, tratadorAndroid } from "./android.js";
-import { acordarPc, acordarPcsSempreLigados, acessoAberto, atualizarEmpresaDoPc, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, abrirTela, fecharTela, iniciarVarreduraOciosa, lerRegistro, ligarPc, listarMaquinas, marcarSempreLigado, pararPc, registrarPc, type BotParaPc } from "./pcs.js";
+import { acordarPc, acordarPcsSempreLigados, acessoAberto, definirControleHumano, humanoNoControle, atualizarEmpresaDoPc, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, abrirTela, fecharTela, iniciarVarreduraOciosa, lerRegistro, ligarPc, listarMaquinas, marcarSempreLigado, pararPc, registrarPc, type BotParaPc } from "./pcs.js";
 // O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
 const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900 };
 import { PROVEDORES } from "@mybots/shared";
@@ -613,6 +613,29 @@ export async function startServer(hub: Hub) {
     const serial = String(((req.body ?? {}) as any).serial ?? "");
     return android.usar(id, serial);
   });
+  
+  app.get("/api/bots/:id/controle-humano", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    const token = String(req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
+    const botHdr = String(req.headers["x-mybots-bot"] ?? "").trim();
+    const viaUi = uiAuthorized(req);
+    const viaBot = !!(token && botHdr && botHdr === id && typeof botForToken === "function" ? botForToken(token) === id : token && botHdr === id);
+    // Loopback do node: aceita se o token bate com o bot da rota.
+    const viaNode = viaBot || (viaUi);
+    if (!viaUi && !(token && botHdr === id)) return reply.code(401).send({ error: "nao autorizado" });
+    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc não registrado" });
+    return { botId: id, controleHumano: humanoNoControle(id) };
+  });
+  app.put("/api/bots/:id/controle-humano", async (req, reply) => {
+    if (!uiAuthorized(req)) return reply.code(401).send({ error: "nao autorizado" });
+    const id = String((req.params as any).id ?? "");
+    const ativo = (req.body as { ativo?: unknown } | null)?.ativo;
+    if (!idSeguro(id) || !lerRegistro(id)) return reply.code(404).send({ error: "pc não registrado" });
+    if (typeof ativo !== "boolean") return reply.code(400).send({ error: "ativo deve ser true ou false" });
+    definirControleHumano(id, ativo);
+    return { botId: id, controleHumano: ativo };
+  });
+
   app.get("/api/bots/:id/android/status", async (req, reply) => {
     const id = String((req.params as any).id ?? "");
     if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });

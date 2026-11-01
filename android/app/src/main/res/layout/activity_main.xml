@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fundo"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/barra"
+        android:minHeight="48dp"
+        app:menu="@menu/main"
+        app:title="@string/app_name"
+        app:titleTextColor="@color/texto" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <info.balao.mybots.AtualizarSePuxarNoTopo
+            android:id="@+id/atualizar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <WebView
+                android:id="@+id/webview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </info.balao.mybots.AtualizarSePuxarNoTopo>
+
+        <LinearLayout
+            android:id="@+id/erro"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/fundo"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/erro_titulo"
+                android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                android:textColor="@color/texto" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/erro_mensagem"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="@color/texto_secundario" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tentar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/tentar_novamente" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

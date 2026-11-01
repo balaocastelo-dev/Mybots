@@ -78,6 +78,8 @@ Edite a personalidade em `bots/<bot>/persona.md`. Exemplos de configuração em 
 
 **Atalho de app:** `.\scripts\create-shortcut.ps1` cria "MyBots" na Área de Trabalho, abrindo a interface numa janela própria do Chrome/Edge.
 
+**Celular:** a pasta `android/` é a casca que abre `https://www.balao.info/mybots`. Como instalar o APK está em [android/README.md](android/README.md).
+
 ## Voz
 
 | Função | Padrão | Alternativas (variáveis no `.env` do Hub) |

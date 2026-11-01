@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MyBots</string>
+    <string name="recarregar">Recarregar</string>
+    <string name="erro_titulo">Sem conexão</string>
+    <string name="erro_mensagem">Não foi possível abrir o MyBots. Confira a internet e tente de novo.</string>
+    <string name="tentar_novamente">Tentar novamente</string>
+    <string name="download_iniciado">Download iniciado. O arquivo vai para a pasta Downloads.</string>
+    <string name="download_falhou">Não foi possível baixar o arquivo.</string>
+    <string name="sem_permissao_arquivo">Permita o armazenamento para salvar o download.</string>
+    <string name="sem_app">Nenhum aplicativo deste celular abre este link.</string>
+    <string name="sem_seletor">Não há aplicativo para escolher o arquivo.</string>
+    <string name="baixando">Baixando…</string>
+</resources>

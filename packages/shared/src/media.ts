@@ -12,7 +12,7 @@ export type Attachment = {
   size?: number;
   /** quadro extraído deste vídeo (id do anexo original) */
   derivedFrom?: string;
-  /** transcrição do áudio (vídeos/áudios), quando o STT do Hub está configurado */
+  /** transcrição do áudio (vídeos/áudios) ou texto extraído de PDF/DOCX/txt no Hub */
   transcript?: string;
   /** segundo do vídeo de onde o quadro foi tirado */
   atSecond?: number;

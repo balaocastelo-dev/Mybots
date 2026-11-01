@@ -1,0 +1,50 @@
+{
+  "porBot": {
+    "meubling-vendas": [
+      "balao-informatica",
+      "firecrawl",
+      "playwright"
+    ],
+    "meubling-assistencia": [
+      "balao-informatica"
+    ],
+    "meubling-jarvis": [
+      "balao-informatica"
+    ],
+    "herrera-captacao": [
+      "firecrawl",
+      "playwright"
+    ]
+  },
+  "servidores": {
+    "balao-informatica": {
+      "type": "local",
+      "command": [
+        "C:\\Users\\user\\Documents\\03-Dev-Repos\\MCP-Servers\\python-venvs\\balao-mcp\\Scripts\\python.exe",
+        "C:\\Users\\user\\Documents\\03-Dev-Repos\\MCP-Servers\\balao-mcp-server.py"
+      ],
+      "environment": {
+        "FASTMCP_HOME": "C:\\Users\\user\\Documents\\03-Dev-Repos\\MCP-Servers\\.fastmcp-cache",
+        "FASTMCP_DISABLE_TELEMETRY": "1",
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "enabled": true
+    },
+    "firecrawl": {
+      "type": "remote",
+      "url": "https://mcp.firecrawl.dev/v2/mcp",
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "C:\\Windows\\System32\\cmd.exe",
+        "/c",
+        "npx",
+        "--yes",
+        "@playwright/mcp@latest"
+      ],
+      "enabled": true
+    }
+  }
+}

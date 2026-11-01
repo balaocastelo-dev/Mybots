@@ -28,7 +28,7 @@ export const isAudioMime = (m: string) => /^audio\//i.test(m);
  * só para ilustrar uma resposta. A placa continua existindo, mas como último recurso.
  */
 export type MediaProvider = "pollinations" | "cloudflare" | "comfy" | "gemini" | "openai";
-export const MEDIA_PROVIDERS: MediaProvider[] = ["pollinations", "cloudflare", "comfy", "gemini", "openai"];
+export const MEDIA_PROVIDERS: MediaProvider[] = ["cloudflare", "pollinations", "comfy", "gemini", "openai"];
 export const MEDIA_PROVIDER_LABELS: Record<MediaProvider, string> = {
   pollinations: "Pollinations (FLUX, grátis, sem chave)",
   cloudflare: "Cloudflare Workers AI (FLUX schnell, grátis com conta)",

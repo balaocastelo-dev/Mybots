@@ -226,11 +226,12 @@ export async function pollinationsImage(prompt: string, aspect?: string): Promis
 export async function cloudflareImage(prompt: string, aspect?: string): Promise<{ data: Buffer; mime: string; note?: string } | null> {
   const { cloudflareAccount: acc, cloudflareToken: tok, cloudflareModel: model } = mediaSettings;
   if (!acc || !tok) return null;
-  const { w, h } = sizeFor(aspect);
+  // FLUX schnell na Workers AI não aceita width/height (erro 400); o aspect vai só no prompt.
+  const promptFinal = aspect && aspect !== "1:1" ? `${prompt} (aspect ${aspect})` : prompt;
   const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(acc)}/ai/run/${model}`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${tok}` },
-    body: JSON.stringify({ prompt, steps: 4, width: w, height: h }),
+    body: JSON.stringify({ prompt: promptFinal, steps: 4 }),
     signal: AbortSignal.timeout(120_000),
   });
   const mime = (r.headers.get("content-type") ?? "").split(";")[0];

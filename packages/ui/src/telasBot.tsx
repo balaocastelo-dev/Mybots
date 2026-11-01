@@ -13,9 +13,13 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 
  */
 
 const RAZAO_PC: [number, number] = [16, 9];
-const RAZAO_FONE: [number, number] = [9, 19.5];
+/** Proporção do telefone: um pouco menos "fino" para caber legível no painel. */
+const RAZAO_FONE: [number, number] = [9, 18.5];
 const FOLGA = 8;
 const EMPILHA_ABAIXO = 520;
+/** Largura confortável do aparelho no painel Celular (px). */
+const FONE_LARGURA_MIN = 300;
+const FONE_LARGURA_MAX = 480;
 
 type EstadoRota = "lendo" | "pronta" | "ausente";
 type StatusAndroid =
@@ -75,6 +79,30 @@ function useStatusAndroid(botId: string): StatusAndroid {
     return () => { vivo = false; window.clearInterval(id); };
   }, [botId]);
   return status;
+}
+
+function medirUma(largura: number, altura: number, razao: [number, number], lim?: { min?: number; max?: number; priorizarLargura?: boolean }) {
+  const [rw, rh] = razao;
+  // No modo celular priorizamos largura legível: não encolhemos abaixo do mínimo
+  // só porque a altura do painel é baixa (o .telas-fit pode rolar).
+  if (lim?.priorizarLargura) {
+    let w = Math.floor(largura);
+    if (lim.max) w = Math.min(w, lim.max);
+    if (lim.min) w = Math.max(w, Math.min(lim.min, largura));
+    w = Math.max(0, w);
+    return { w, h: Math.max(0, Math.floor(w * rh / rw)) };
+  }
+  let w = Math.floor(Math.min(largura, altura > 0 ? altura * rw / rh : largura));
+  if (lim?.max) w = Math.min(w, lim.max);
+  if (lim?.min) w = Math.max(w, Math.min(lim.min, largura));
+  w = Math.max(0, w);
+  const h = Math.max(0, Math.floor(w * rh / rw));
+  if (h > altura && altura > 0) {
+    const h2 = altura;
+    const w2 = Math.floor(h2 * rw / rh);
+    return { w: Math.max(0, w2), h: h2 };
+  }
+  return { w, h };
 }
 
 function medirPar(largura: number, altura: number, empilhado: boolean) {
@@ -142,12 +170,17 @@ export function TelasDoBot({ botId, nome, mostrarPareamento = false, modo = "amb
     return () => ro.disconnect();
   }, [modo]);
 
-  const par = caixa.w > 0 && caixa.h > 0 ? medirPar(caixa.w, caixa.h, caixa.empilhado) : null;
+  const par = (() => {
+    if (!(caixa.w > 0 && caixa.h > 0)) return null;
+    if (modo === "celular") return medirUma(caixa.w, caixa.h, RAZAO_FONE, { min: FONE_LARGURA_MIN, max: FONE_LARGURA_MAX, priorizarLargura: true });
+    if (modo === "pc") return medirUma(caixa.w, caixa.h, RAZAO_PC);
+    return medirPar(caixa.w, caixa.h, caixa.empilhado);
+  })();
   const androidPronto = status.tipo === "ok" && status.cadastrado && status.conectado && rotaAndroid === "pronta";
   const avisoAndroid = textoDoAndroid(status, rotaAndroid);
 
   return (
-    <div className="telas-bot">
+    <div className={"telas-bot" + (modo === "celular" ? " modo-celular" : modo === "pc" ? " modo-pc" : "")}>
       <div className="telas-fit" ref={fitRef}>
         {par && (
           <div
@@ -363,7 +396,10 @@ function ParearAndroid({ botId }: { botId: string }) {
           <ul className="android-lista-adb">
             {lista.map((c) => (
               <li key={c.serial}>
-                <span>{c.modelo || "Android"} · {c.serial}</span>
+                <div className="android-lista-info">
+                  <b>{c.modelo || "Android"}</b>
+                  <span className="android-lista-serial">{c.serial}</span>
+                </div>
                 <button
                   className="btn primary"
                   type="button"

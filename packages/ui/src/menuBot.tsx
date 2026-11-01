@@ -41,7 +41,7 @@ export function ImportDialog({ file, bots, onClose, onSend }: {
           <>
             <label>Qual bot deve ler?</label>
             <select value={botId} onChange={(e) => setBotId(e.target.value)}>
-              {bots.map((b) => <option key={b.id} value={b.id} disabled={!b.online}>{b.avatar || "·"} {b.name}{b.online ? "" : " (offline)"}</option>)}
+              {bots.map((b) => <option key={b.id} value={b.id} disabled={!b.online}>{b.name}{b.online ? "" : " (offline)"}</option>)}
             </select>
             <label>O que ele faz com isso?</label>
             <div className="import-acoes">

@@ -20,7 +20,7 @@ import { alvoDaPonte, caminhoDaTela, caminhoNoContainer, idDaTela, idSeguro, por
 import { videoExigeSenha } from "./gravacao.js";
 import { abrirWsDaTela, encaminharHttp, quadroWs, type QuadroWs } from "./ponteTela.js";
 import { idDoAndroid, listarProvedoresAndroid, resolverAlvoAndroid, tratadorAndroid } from "./android.js";
-import { acordarPc, acessoAberto, atualizarEmpresaDoPc, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, abrirTela, fecharTela, iniciarVarreduraOciosa, lerRegistro, ligarPc, listarMaquinas, pararPc, registrarPc, type BotParaPc } from "./pcs.js";
+import { acordarPc, acordarPcsSempreLigados, acessoAberto, atualizarEmpresaDoPc, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, abrirTela, fecharTela, iniciarVarreduraOciosa, lerRegistro, ligarPc, listarMaquinas, marcarSempreLigado, pararPc, registrarPc, type BotParaPc } from "./pcs.js";
 // O Mac continua num host fixo (variável do Hub, nunca o que o navegador pedir).
 const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900 };
 import { PROVEDORES } from "@mybots/shared";
@@ -559,8 +559,16 @@ export async function startServer(hub: Hub) {
     } as any);
     if ("error" in r) return { ok: false, msg: r.error };
     if (empresaId) hub.db.setEmpresaDoBot(r.id, r.name, empresaId, false);
-    try { registrarPc({ botId: r.id, empresaId: empresaId ?? null, nome: r.name }); }
-    catch (e) { console.error(`[pc] não registrei o PC de ${r.id}: ${(e as Error).message}`); }
+    try {
+      registrarPc({ botId: r.id, empresaId: empresaId ?? null, nome: r.name });
+      marcarSempreLigado(r.id, true);
+      definirAcessoPc(r.id, true);
+      void ligarPc(r.id).then((est) => {
+        if (est?.estado === "ligada") console.log(`[pc] ${r.id}: PC ligado ao nascer`);
+        else console.warn(`[pc] ${r.id}: não ligou ao nascer: ${est?.erro ?? est?.estado}`);
+      }).catch((e) => console.error(`[pc] ${r.id}: ligar ao nascer: ${(e as Error).message}`));
+    }
+    catch (e) { console.error(`[pc] não registrei/liguei o PC de ${r.id}: ${(e as Error).message}`); }
     const dono = manager.get(gerenteId);
     if (dono) manager.update(gerenteId, { manages: [...(dono.manages ?? []), r.id] } as any);
     manager.start(r.id);
@@ -1151,8 +1159,16 @@ export async function startServer(hub: Hub) {
       { id: r.id, name: r.name, role: r.role, avatar: r.avatar, color: r.color, voice: r.voice },
       { engine: r.engine, provider: r.provider?.kind, model: r.provider?.model },
     );
-    try { registrarPc({ botId: r.id, empresaId: empresa, nome: r.name }); }
-    catch (e) { console.error(`[pc] não registrei o PC de ${r.id}: ${(e as Error).message}`); }
+    try {
+      registrarPc({ botId: r.id, empresaId: empresa, nome: r.name });
+      marcarSempreLigado(r.id, true);
+      definirAcessoPc(r.id, true);
+      void ligarPc(r.id).then((est) => {
+        if (est?.estado === "ligada") console.log(`[pc] ${r.id}: PC ligado ao nascer`);
+        else console.warn(`[pc] ${r.id}: não ligou ao nascer: ${est?.erro ?? est?.estado}`);
+      }).catch((e) => console.error(`[pc] ${r.id}: ligar ao nascer: ${(e as Error).message}`));
+    }
+    catch (e) { console.error(`[pc] não registrei/liguei o PC de ${r.id}: ${(e as Error).message}`); }
     hub.broadcastKnowledge();
     hub.botUpdate(r.id);
     return r;
@@ -1483,6 +1499,7 @@ export async function startServer(hub: Hub) {
   await app.listen({ host: config.host, port: config.port });
   startScheduler(hub);
   manager.startAll();
+  void acordarPcsSempreLigados().catch((e) => console.error(`[pc] reacordar sempreLigados: ${(e as Error).message}`));
   const shutdown = () => { void manager.stopAll().finally(() => process.exit(0)); };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);

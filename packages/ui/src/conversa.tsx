@@ -47,6 +47,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const [listening, setListening] = useState(false);
   const [level, setLevel] = useState(0);
   const [speaking, setSpeaking] = useState(isSpeaking());
+  const [falandoMsgId, setFalandoMsgId] = useState<string | null>(null);
+  const falandoMsgRef = useRef<string | null>(null);
   const [showRoutines, setShowRoutines] = useState(false);
   const [showTarefas, setShowTarefas] = useState(abaInicial === "tarefas");
   const convVista = useRef(conversationId);
@@ -149,15 +151,17 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     const t = setTimeout(aoFim, 90);
     return () => { cancelAnimationFrame(q); clearTimeout(t); };
   }, [messages, approvals.length, questions.length]);
-  useEffect(() => onSpeaking(setSpeaking), []);
+  useEffect(() => onSpeaking((v) => { setSpeaking(v); if (!v) { falandoMsgRef.current = null; setFalandoMsgId(null); } }), []);
 
-  // resposta final do bot → fala; ao terminar, volta a escutar se o modo conversa estiver ativo
+  // resposta final do bot → fala automaticamente (mensagem nova, não histórico); mensagem nova corta a anterior
   useEffect(() => onEvent((m) => {
     if (m.type !== "message" || m.message.conversationId !== conversationId || m.message.sender.kind !== "bot" || m.message.meta?.streaming !== false || !m.message.text) return;
     const b = bots.find((x) => x.id === m.message.sender.id);
     if (emChamadaRef.current) return;   // em chamada ele já falou enquanto escrevia (speech.delta)
+    falandoMsgRef.current = m.message.id;
+    setFalandoMsgId(m.message.id);
     (async () => {
-      if (ttsRef.current) await speak(m.message.text, m.message.sender.id, voice, b?.voice);
+      await speak(m.message.text, m.message.sender.id, voice, b?.voice, true);
       if (wantListenRef.current && handsFreeRef.current && !listeningRef.current) startListening();
     })();
   }), [conversationId, bots, voice]);
@@ -455,28 +459,19 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       <>
 
       {emChamada && bot && (
-        <div className={"barra-chamada" + (speaking ? " falando" : "") + (listening ? " ouvindo" : "")}>
-          <Avatar bot={bot} size={68} falando={speaking} />
+        <div className={"tela-chamada barra-chamada" + (speaking ? " falando" : "") + (listening ? " ouvindo" : "") + (busy && !speaking && !listening ? " pensando" : "")}>
+          <div className="ameba-chamada"><Avatar bot={bot} size={200} falando={speaking} /></div>
           <div className="quem">
             <b>{bot.name}</b>
-            <small>{mudo ? "microfone desligado" : speaking ? "falando — pode interromper" : busy ? (statusText || "pensando") + "…" : listening ? "pode falar" : "abrindo o microfone…"}</small>
-          </div>
-          <div className="onda" aria-hidden>
-            {ondas.map((h, i) => <i key={i} style={{ height: `${Math.min(100, 12 + h * 240)}%` }} />)}
+            <small>{mudo ? "Mudo" : speaking ? "Falando" : busy ? (statusText || "Pensando") : listening ? "Ouvindo" : "Abrindo o microfone…"}</small>
           </div>
           <span className="relogio num">{Math.floor(agoraChamada / 60)}:{String(agoraChamada % 60).padStart(2, "0")}</span>
-          <button className="bola" title={tts ? "Desligar a voz dele" : "Ligar a voz dele"} onClick={() => setTts(!tts)}>{tts ? "🔊" : "🔇"}</button>
-          <button className={"bola" + (mudo ? " off" : "")} title={mudo ? "Ligar meu microfone" : "Desligar meu microfone"} onClick={() => setMudo(!mudo)}>{mudo ? "🎙️" : "🎤"}</button>
-          {micros.length > 1 && (
-            <select className="escolhe-mic" value={micEscolhido} title="De qual microfone eu escuto (vale a partir da próxima chamada)"
-              onChange={(e) => { escolherMicrofone(e.target.value); setMicEscolhido(e.target.value); }}>
-              <option value="">Microfone padrão</option>
-              {micros.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
-            </select>
-          )}
-          <button className="bola encerrar" title="Desligar" onClick={() => void encerrarChamada()}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1-.29-.7c0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .27-.11.52-.29.7l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.27 11.27 0 0 0-2.67-1.85.998.998 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" transform="rotate(135 12 12)"/></svg>
-          </button>
+          <div className="acoes-chamada">
+            <button className={"bola" + (mudo ? " off" : "")} title={mudo ? "Ligar microfone" : "Desligar microfone"} onClick={() => setMudo(!mudo)}>{mudo ? "🔇" : "🎤"}</button>
+            <button className="bola encerrar" title="Desligar" onClick={() => void encerrarChamada()}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1-.29-.7c0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .27-.11.52-.29.7l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.27 11.27 0 0 0-2.67-1.85.998.998 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" transform="rotate(135 12 12)"/></svg>
+            </button>
+          </div>
         </div>
       )}
 
@@ -515,7 +510,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
             const r = await api(`/messages/${m.id}/edit`, { method: "POST", body: JSON.stringify({ text: texto }) });
             if (!r.ok) avisar("não consegui editar o pedido");
           }}
-          onSpeak={m.sender.kind === "bot" ? () => { if (isSpeaking()) stopSpeaking(); else void speak(m.text, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true); } : undefined} />{trocas[m.id]?.length ? <ChipTrocas trocas={trocas[m.id]} bots={bots} Avatar={Avatar} onAbrir={(ts) => ts.length === 1 ? onAbrirTroca(ts[0].conversationId) : setFolha(ts)} /> : null}</Fragment>)}
+          onSpeak={m.sender.kind === "bot" ? () => { if (isSpeaking() && falandoMsgRef.current === m.id) { stopSpeaking(); falandoMsgRef.current = null; setFalandoMsgId(null); } else { falandoMsgRef.current = m.id; setFalandoMsgId(m.id); void speak(m.text, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true); } } : undefined}
+          speaking={falandoMsgId === m.id && speaking} />{trocas[m.id]?.length ? <ChipTrocas trocas={trocas[m.id]} bots={bots} Avatar={Avatar} onAbrir={(ts) => ts.length === 1 ? onAbrirTroca(ts[0].conversationId) : setFolha(ts)} /> : null}</Fragment>)}
       </div>
 
       {busy && !approvals.length && !questions.length && (

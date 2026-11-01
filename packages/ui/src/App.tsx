@@ -155,7 +155,6 @@ export function App() {
   const [newGerente, setNewGerente] = useState(false);
   const [menu, setMenu] = useState<{ bot: BotSummary; x: number; y: number } | null>(null);
   const painel = usePainelPrefs();
-  const [mostrarEscondidos, setMostrarEscondidos] = useState(false);
   const [verTroca, setVerTroca] = useState<string | null>(null);
   const [verQuadro, setVerQuadro] = useState(tela === "quadro");
   const [verGrafo, setVerGrafo] = useState(tela === "grafo");
@@ -173,10 +172,10 @@ export function App() {
     const f = filter.trim().toLowerCase();
     return [...equipe]
       .filter((b) => !f || b.name.toLowerCase().includes(f) || b.role.toLowerCase().includes(f))
-      .filter((b) => mostrarEscondidos || !painel.prefs[b.id]?.escondido)
+      .filter((b) => true /* escondidos entram na lista flat; recurso de esconder permanece no menu */)
       // Perfil unico: todos os bots na mesma lista
       .sort((a, b) => nomeNaTela(a, painel.prefs).localeCompare(nomeNaTela(b, painel.prefs), "pt"));
-  }, [equipe, filter, painel.prefs, mostrarEscondidos]);
+  }, [equipe, filter, painel.prefs]);
 
   /** Fixados viram a grade. Na lista, cada empresa põe o gerente na frente. */
   const empresasVisiveis = empresas.length ? empresas : (exemplo ? [EMPRESA_EXEMPLO] : empresas);
@@ -345,16 +344,6 @@ export function App() {
               </li>
             );
           })}
-          <li className="section">Colaboração</li>
-          <li className={"colab-atalho" + (verQuadro ? " active" : "")} data-colab="atalho-quadro" onClick={() => { setVerQuadro(true); setVerGrafo(false); setVerTroca(null); if (window.innerWidth < 768) setSidebarOpen(false); }}>
-            <span className="bot-name">Quadro do Gerente</span>
-          </li>
-          <li className={"colab-atalho" + (verGrafo ? " active" : "")} data-colab="atalho-grafo" onClick={() => { setVerGrafo(true); setVerQuadro(false); setVerTroca(null); if (window.innerWidth < 768) setSidebarOpen(false); }}>
-            <span className="bot-name">Quem fala com quem</span>
-          </li>
-          {Object.values(painel.prefs).some((p) => p.escondido) && (
-            <li className="section"><button className="link" onClick={() => setMostrarEscondidos(!mostrarEscondidos)}>{mostrarEscondidos ? "ocultar escondidos" : "escondidos"}</button></li>
-          )}
           {listaPronta.fixados.length > 0 && (
             <li className="grade-wrap">
               <ul className="grade-fixados">

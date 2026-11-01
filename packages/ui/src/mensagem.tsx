@@ -21,7 +21,7 @@ export function Thought({ text }: { text: string }) {
   );
 }
 
-export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, onAbrirTela, onMenu, editando, onSalvarEdicao, onCancelarEdicao }: { m: StoredMessage; tools?: ToolInfo[]; answer?: string; showName: boolean; onSpeak?: () => void; onAbrirArquivo?: (f: ArquivoDoChat, todos?: ArquivoDoChat[]) => void; onAbrirTela?: () => void; onMenu?: (m: StoredMessage, x: number, y: number) => void; editando?: boolean; onSalvarEdicao?: (texto: string) => void; onCancelarEdicao?: () => void }) {
+export function Message({ m, tools, answer, showName, onSpeak, speaking, onAbrirArquivo, onAbrirTela, onMenu, editando, onSalvarEdicao, onCancelarEdicao }: { m: StoredMessage; tools?: ToolInfo[]; answer?: string; showName: boolean; onSpeak?: () => void; speaking?: boolean; onAbrirArquivo?: (f: ArquivoDoChat, todos?: ArquivoDoChat[]) => void; onAbrirTela?: () => void; onMenu?: (m: StoredMessage, x: number, y: number) => void; editando?: boolean; onSalvarEdicao?: (texto: string) => void; onCancelarEdicao?: () => void }) {
   if (m.sender.kind === "system" && !m.sender.id.startsWith("routine:")) return <div className={"sys" + (m.meta?.error ? " err" : "")}>{m.text}</div>;
   const mine = m.sender.kind === "user" && m.sender.id === "user";
   const files = (m.meta?.files as Array<{ id: string; name: string; url: string; mime: string }> | undefined) ?? [];
@@ -42,7 +42,7 @@ export function Message({ m, tools, answer, showName, onSpeak, onAbrirArquivo, o
             ? <PilhaArquivos files={files} onAbrir={onAbrirArquivo} onAbrirTela={onAbrirTela} tela={!!m.meta?.tela} />
             : files.map((f) => <Arquivo key={f.id} f={f} tela={!!m.meta?.tela} onAbrir={onAbrirArquivo} onAbrirTela={onAbrirTela} />)}
           {answer && <div className="answered">Você respondeu: <b>{answer}</b></div>}
-          {onSpeak && m.text ? <button className="speak-btn" title="Ler a mensagem inteira em voz alta" onClick={onSpeak}>🔊</button> : null}
+          {onSpeak && m.text ? <button className={"speak-btn" + (speaking ? " falando" : "")} title={speaking ? "Parar de ler" : "Ler a mensagem inteira em voz alta"} onClick={onSpeak}>{speaking ? "⏹" : "🔊"}</button> : null}
           {onMenu && (
             <button className="msg-menu-btn" title="Opções desta mensagem"
               onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); onMenu(m, r.left, r.bottom); }}>⋯</button>

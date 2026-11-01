@@ -47,6 +47,8 @@ export type RegistroPc = {
   criadoEm: number;
   /** A tela do painel. Ausente no registro antigo = liberado. */
   acessoLiberado?: boolean;
+  /** PC do bot fica ligado: sem desligar por ociosidade; Hub sobe de novo e reacorda. */
+  sempreLigado?: boolean;
   android: { rota: string };
 };
 
@@ -226,6 +228,7 @@ export function registrarPc(p: { botId: string; empresaId: string | null; nome?:
     volume,
     criadoEm: Date.now(),
     acessoLiberado: true,
+    sempreLigado: true,
     android: { rota: rotaAndroid(p.botId) },
   };
   mapa[p.botId] = reg;
@@ -370,7 +373,7 @@ function argumentosDeSubida(reg: RegistroPc): string[] {
   const args = [
     "run", "-d", "--pull=never",
     "--name", reg.container,
-    "--restart", "no",
+    "--restart", "unless-stopped",
     "--memory", pol.memoria,
     "--memory-swap", pol.memoria,
     "--cpus", pol.cpus,
@@ -460,6 +463,10 @@ export async function varrerOciosos(op?: { agora?: number; ocupado?: (botId: str
   const pol = politicaDoPc();
   const parados: string[] = [];
   for (const reg of listarRegistros()) {
+    if (reg.sempreLigado) {
+      tocarPc(reg.botId, agora);
+      continue;
+    }
     if (op?.ocupado?.(reg.botId)) {
       tocarPc(reg.botId, agora);
       continue;
@@ -482,6 +489,33 @@ export async function varrerOciosos(op?: { agora?: number; ocupado?: (botId: str
     console.log(`[pc] ${reg.botId}: container ${reg.container} parado por ociosidade (${pol.ociosoMin} min sem tela e sem tarefa)`);
   }
   return parados;
+}
+
+/** Após o Hub subir: liga de novo todo PC marcado sempreLigado. */
+export async function acordarPcsSempreLigados(): Promise<string[]> {
+  const ligados: string[] = [];
+  for (const reg of listarRegistros()) {
+    if (!reg.sempreLigado) continue;
+    try {
+      const est = await acordarPc(reg.botId);
+      if (est?.estado === "ligada") ligados.push(reg.botId);
+      else console.warn(`[pc] ${reg.botId}: sempreLigado mas não ligou: ${est?.erro ?? est?.estado}`);
+    } catch (e) {
+      console.error(`[pc] ${reg.botId}: falha ao acordar sempreLigado: ${(e as Error).message}`);
+    }
+  }
+  if (ligados.length) console.log(`[pc] reacordados após Hub: ${ligados.join(", ")}`);
+  return ligados;
+}
+
+export function marcarSempreLigado(botId: string, ligado = true): RegistroPc | null {
+  const mapa = lerMapa();
+  const atual = mapa[botId];
+  if (!atual) return null;
+  atual.sempreLigado = ligado;
+  if (ligado) atual.acessoLiberado = true;
+  gravarMapa(mapa);
+  return atual;
 }
 
 export function iniciarVarreduraOciosa(op: { ocupado: (botId: string) => boolean; aoParar?: (ids: string[]) => void; intervaloMs?: number }) {

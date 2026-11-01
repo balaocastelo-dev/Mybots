@@ -244,7 +244,6 @@ export function Avatar({ bot, size = 88, falando = false, cutucadas = 0, forceAn
       {animFinal === "chave-nova" && (<><i className="brilho" /><i className="brilho" /><i className="brilho" /><i className="brilho" /><i className="brilho" /></>)}
       <img src={url} alt="" />
       {((bot as any).gerente || (bot as any).manages?.length) ? <span className="coroa-cabeca" aria-hidden>👑</span> : null}
-      <span className={"presence " + (animFinal === "dormindo" ? "off" : bot.online ? (bot.busy ? "busy" : "on") : "off")} />
     </div>
   );
 }

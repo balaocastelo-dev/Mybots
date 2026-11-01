@@ -256,6 +256,54 @@ function ParearAndroid({ botId }: { botId: string }) {
   const [portaConexao, setPortaConexao] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [serial, setSerial] = useState("");
+  const [erroAdotar, setErroAdotar] = useState("");
+  const [okAdotar, setOkAdotar] = useState("");
+  const [adotando, setAdotando] = useState(false);
+  const [aparelhos, setAparelhos] = useState<{ serial: string }[]>([]);
+
+  useEffect(() => {
+    let vivo = true;
+    const ler = async () => {
+      try {
+        const r = await fetch(comChave(`/api/bots/${encodeURIComponent(botId)}/android/aparelhos`));
+        if (!vivo || !r.ok) return;
+        const d = await r.json() as { aparelhos?: { serial?: string }[] };
+        setAparelhos((d.aparelhos ?? []).filter((a) => typeof a.serial === "string" && a.serial.includes(":")) as { serial: string }[]);
+      } catch { /* a lista é atalho; o campo de serial continua */ }
+    };
+    void ler();
+    return () => { vivo = false; };
+  }, [botId]);
+
+  const adotar = async (valor: string) => {
+    const alvo = valor.trim();
+    setErroAdotar("");
+    setOkAdotar("");
+    if (!/^\d{1,3}(\.\d{1,3}){3}:\d+$/.test(alvo)) {
+      setErroAdotar("Informe o serial IP:porta, como 192.168.15.5:5555.");
+      return;
+    }
+    setAdotando(true);
+    try {
+      const r = await fetch(comChave(`/api/bots/${encodeURIComponent(botId)}/android/adotar`), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ serial: alvo }),
+      });
+      const d = await r.json().catch(() => ({} as { ok?: boolean; erro?: string }));
+      if (!r.ok || d.ok === false) {
+        setErroAdotar(d.erro || "Não vinculei. O adb precisa mostrar esse serial como device.");
+        return;
+      }
+      setOkAdotar(`Vinculado a este bot: ${alvo}`);
+      setSerial("");
+    } catch {
+      setErroAdotar("O Hub não respondeu.");
+    } finally {
+      setAdotando(false);
+    }
+  };
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
@@ -310,6 +358,7 @@ function ParearAndroid({ botId }: { botId: string }) {
   };
 
   return (
+    <>
     <form className="form android-parear" onSubmit={(e) => void enviar(e)}>
       <div className="row">
         <label>IP
@@ -328,8 +377,28 @@ function ParearAndroid({ botId }: { botId: string }) {
         </label>
       </div>
       <p className="android-dica">No Android 11 ou mais novo a porta de pareamento é diferente da porta de conexão. A de conexão é opcional.</p>
-      {erro && <p className="android-erro" role="alert">{erro}</p>}
+      {erro ? <p className="android-erro" role="alert">{erro}</p> : null}
       <button className="btn primary" type="submit" disabled={enviando}>{enviando ? "Pareando…" : "Parear"}</button>
     </form>
+    <form className="form android-parear android-adotar" onSubmit={(e) => { e.preventDefault(); void adotar(serial); }}>
+      <p className="android-dica">Se o aparelho já está em <code>adb devices</code>, vincule o serial sem código. Só entra quando o estado é device.</p>
+      {aparelhos.length ? (
+        <ul className="android-aparelhos">
+          {aparelhos.map((a) => (
+            <li key={a.serial}>
+              <span>{a.serial}</span>
+              <button className="btn" type="button" disabled={adotando} onClick={() => void adotar(a.serial)}>Usar este</button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <label>Serial já conectado
+        <input value={serial} onChange={(e) => setSerial(e.target.value)} placeholder="192.168.15.5:5555" autoComplete="off" spellCheck={false} />
+      </label>
+      {erroAdotar ? <p className="android-erro" role="alert">{erroAdotar}</p> : null}
+      {okAdotar ? <p className="android-dica" role="status">{okAdotar}</p> : null}
+      <button className="btn" type="submit" disabled={adotando}>{adotando ? "Vinculando…" : "Vincular este aparelho"}</button>
+    </form>
+    </>
   );
 }

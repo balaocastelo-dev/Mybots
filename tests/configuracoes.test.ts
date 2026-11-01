@@ -10,7 +10,7 @@ import {
   type Transporte,
 } from "../packages/ui/src/configuracoes/maquinas.ts";
 import { criarItem, listarItens, resetarCofreParaTeste } from "../packages/ui/src/configuracoes/cofre.ts";
-import { lerStatusPareamento, parearCelular, resetarPareamentoParaTeste, validarPareamento } from "../packages/ui/src/configuracoes/pareamento.ts";
+import { adotarCelular, lerStatusPareamento, parearCelular, resetarPareamentoParaTeste, validarPareamento, validarSerialConectado } from "../packages/ui/src/configuracoes/pareamento.ts";
 
 function json(status: number, corpo: unknown): Response {
   return new Response(JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } });
@@ -163,7 +163,10 @@ test("cofre de exemplo não reenvia a senha quando o Hub não responde", async (
 test("pareamento recusa 8787 e 8791 e não guarda o código", async () => {
   resetarPareamentoParaTeste();
   assert.match(validarPareamento({ ip: "192.168.15.20", porta: 8787, codigo: "123456" }) ?? "", /porta/i);
+  assert.match(validarPareamento({ ip: "192.168.15.20", porta: 8790, codigo: "123456" }) ?? "", /porta/i);
   assert.match(validarPareamento({ ip: "192.168.15.20", porta: 37123, codigo: "123456", portaConexao: 8791 }) ?? "", /porta/i);
+  assert.match(validarSerialConectado("192.168.15.5:8790") ?? "", /porta/i);
+  assert.equal(validarSerialConectado("192.168.15.5:5555"), null);
   assert.equal(validarPareamento({ ip: "8.8.8.8", porta: 37123, codigo: "123456" }), "Use o IP da rede local.");
   assert.equal(validarPareamento({ ip: "192.168.15.20", porta: 37123, codigo: "123456", portaConexao: 42111 }), null);
 
@@ -184,6 +187,20 @@ test("pareamento recusa 8787 e 8791 e não guarda o código", async () => {
     const status = await lerStatusPareamento("bia", transporte);
     assert.equal(status.cadastrado, true);
     assert.equal(JSON.stringify(status).includes("123456"), false);
+
+    const corposAdotar: string[] = [];
+    const transporteAdotar: Transporte = async (path, init) => {
+      corposAdotar.push(path + " " + String(init?.body ?? ""));
+      if (String(init?.body ?? "").includes("5555")) return json(200, { ok: true });
+      return json(200, { ok: false, erro: "o adb não mostra esse serial como device" });
+    };
+    const recusado = await adotarCelular("marketeiro-vendedor", "192.168.15.5:8787", transporteAdotar);
+    assert.equal(recusado.ok, false);
+    assert.equal(corposAdotar.length, 0);
+    const vinculado = await adotarCelular("marketeiro-vendedor", "192.168.15.5:5555", transporteAdotar);
+    assert.equal(vinculado.ok, true);
+    assert.equal(corposAdotar[0].includes("/bots/marketeiro-vendedor/android/adotar"), true);
+    assert.equal(corposAdotar[0].includes("192.168.15.5:5555"), true);
   });
 });
 

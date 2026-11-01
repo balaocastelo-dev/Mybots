@@ -25,6 +25,14 @@ Resposta: `{ "ok": true }` ou `{ "ok": false, "erro": "..." }`.
 - id inválido: HTTP 400, `{ "ok": false, "erro": "id inválido" }`
 - as portas **8787** e **8791** são recusadas
 
+`POST /api/bots/<botId>/android/adotar`
+
+Corpo JSON: `{ "serial": "192.168.15.5:5555" }`.
+
+Para o aparelho que já está em `adb devices` como `device` (o `adb connect` tcpip, porta 5555). Não pede código e não chama `adb pair` nem `adb connect`. Se o serial não aparecer como `device`, a resposta é `{ "ok": false, "erro": "..." }`. As portas 8787, 8790 e 8791 são recusadas.
+
+`GET /api/bots/<botId>/android/aparelhos` lista os seriais tcpip que o adb deste PC já mostra como `device`, para o painel oferecer o botão ao lado do pareamento.
+
 `GET /api/bots/<botId>/android/status`
 
 Resposta: `{ "conectado": true|false, "cadastrado": true|false }`.

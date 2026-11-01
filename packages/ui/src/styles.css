@@ -2088,6 +2088,9 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   color: var(--muted);
 }
 .android-parear { flex: none; }
+.android-adotar { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.android-aparelhos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.android-aparelhos li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: var(--fonte-num); font-size: 13px; }
 .android-dica { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .android-erro { margin: 0; color: var(--danger, #d4453c); font-size: 13px; }
 .pc-ampliado-fundo {

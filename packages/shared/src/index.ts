@@ -75,7 +75,7 @@ export type NodeToHub =
   | { type: "gravar_tela"; callId: string; acao: "iniciar" | "parar" | "estado"; conversationId?: string; legenda?: string; onde?: "pc" | "celular" }
   /** preenche login ou cartão no navegador. A resposta é só "ok" ou "erro: …" — o valor não volta. */
   | { type: "fill_credential"; callId: string; site: string; campo: string }
-  /** o celular da empresa do bot, via ADB no Hub. aprovado = o chefe já liberou uma ação sensível */
+  /** o celular do bot, via ADB no Hub. O serial é o cadastro Android do bot; o vínculo da empresa só entra se o bot não tiver o dele. aprovado = o chefe já liberou uma ação sensível */
   | { type: "celular"; callId: string; acao: string; conversationId?: string; x?: number; y?: number; x2?: number; y2?: number; texto?: string; tecla?: string; pacote?: string; aprovado?: boolean };
 
 /** Hub → Nó */

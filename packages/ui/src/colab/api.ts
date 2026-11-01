@@ -102,3 +102,10 @@ export async function pedirTarefa(id: string): Promise<Tarefa | null> {
   const lista = normalizarTarefas(Array.isArray(r.json) ? r.json : { tarefas: [r.json] });
   return lista[0] ?? null;
 }
+
+export async function pedirDecisao(tarefaId: string, resposta: string): Promise<void> {
+  await api("/colab/tarefas/" + encodeURIComponent(tarefaId) + "/decidir", {
+    method: "POST",
+    body: JSON.stringify({ resposta }),
+  });
+}

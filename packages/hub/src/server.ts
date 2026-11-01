@@ -482,6 +482,58 @@ export async function startServer(hub: Hub) {
     return { ok: true, id, botId, regra: regra.slice(0, 500) };
   });
 
+  app.get("/api/bots/:id/planos", async (req, reply) => {
+    const botId = String((req.params as any).id || "");
+    if (!botId) return reply.code(400).send({ error: "bot id obrigatorio" });
+    return hub.planos.listar(botId);
+  });
+  app.get("/api/planos/:id", async (req, reply) => {
+    const id = String((req.params as any).id || "");
+    const plano = hub.planos.obter(id);
+    if (!plano) return reply.code(404).send({ error: "plano nao encontrado" });
+    return plano;
+  });
+  app.get("/api/colab/tarefas/:id/plano", async (req, reply) => {
+    const id = String((req.params as any).id || "");
+    const plano = hub.planos.porTarefa(id);
+    if (!plano) return reply.code(404).send({ error: "plano nao encontrado" });
+    return plano;
+  });
+  app.post("/api/planos/:id/decidir", async (req, reply) => {
+    const id = String((req.params as any).id || "");
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const resposta = String(b.resposta ?? b.answer ?? b.texto ?? "").trim();
+    const r = hub.planos.decidir({
+      planoId: id,
+      passoId: b.passoId ? String(b.passoId) : undefined,
+      resposta,
+    });
+    if (!r.ok) return reply.code(400).send({ error: r.erro });
+    hub.emitirUi({ type: "notify", botId: r.plano.botId, text: "Decisao registrada no plano" });
+    return { ok: true, plano: r.plano };
+  });
+  app.post("/api/colab/tarefas/:id/decidir", async (req, reply) => {
+    const id = String((req.params as any).id || "");
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const resposta = String(b.resposta ?? b.answer ?? b.texto ?? "pode seguir").trim();
+    const r = hub.planos.decidir({
+      tarefaId: id,
+      passoId: b.passoId ? String(b.passoId) : undefined,
+      resposta,
+    });
+    if (!r.ok) {
+      // fallback: so retoma a tarefa waiting mesmo sem plano
+      const t = hub.tarefas.obter(id);
+      if (t?.status === "waiting") {
+        const tr = hub.tarefas.transicionar(id, "running", { resumo: "Chefe decidiu: " + resposta.slice(0, 200) });
+        if (tr.ok) return { ok: true, tarefa: tr.tarefa };
+      }
+      return reply.code(400).send({ error: r.erro });
+    }
+    hub.emitirUi({ type: "notify", botId: r.plano.botId, text: "Decisao registrada no quadro" });
+    return { ok: true, plano: r.plano };
+  });
+
   app.post("/api/conversations/:id/marcador", async (req, reply) => {
     const texto = String((req.body as any)?.texto ?? "").trim();
     if (!texto) return reply.code(400).send({ error: "texto obrigatório" });

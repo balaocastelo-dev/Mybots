@@ -40,6 +40,7 @@ import {
 import { argumentosScrcpy } from "./scrcpy.js";
 import { spawn } from "node:child_process";
 import { ehHumano, FilaDeTarefas } from "./colab/fila.js";
+import { ServicoPlanos } from "./planos.js";
 import { notificarParada, registrarAoParar } from "./colab/parar.js";
 
 type NodeConn = {
@@ -217,6 +218,7 @@ export class Hub {
 
   /** Fila de tarefas delegadas entre bots. Persistente. */
   readonly tarefas: FilaDeTarefas;
+  planos: ServicoPlanos;
   private relogioTarefas: NodeJS.Timeout | null = null;
   private soltarParar: (() => void) | null = null;
 
@@ -299,6 +301,7 @@ export class Hub {
         return this.sendNode(p.botId, { type: "message", conversationId: p.conversationId, messageId: m.id, from: sender, text: p.texto });
       },
     });
+    this.planos = new ServicoPlanos(this.db, this.tarefas);
     this.tarefas.vencerPrazos();
     this.relogioTarefas = setInterval(() => {
       this.tarefas.vencerPrazos();
@@ -683,6 +686,7 @@ export class Hub {
       "",
       "Aprendeu algo que serve para a equipe? Grave com learn_knowledge: no mesmo instante TODO bot passa a enxergar, inclusive os que nascerem depois.",
       "Quando o chefe CORRIGIR voce (nao e assim / da proxima vez / sempre faca X / nunca faca Y), chame aprender_regra com a regra em UMA frase clara. Essas regras entram no seu prompt e voce OBEDECE sempre.",
+        "Objetivo grande: use planejar(objetivo, passos). Em passo que precisa do chefe, use aguardar_decisao. O quadro mostra Esperando OK.",
     ].filter(Boolean).join("\n");
   }
 
@@ -1426,6 +1430,45 @@ export class Hub {
           this.sendNode(botId, { type: "knowledge", knowledge });
         } catch { /* ok */ }
         return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: { id, regra, ok: true } });
+      }
+      case "planejar": {
+        const objetivo = String(msg.objetivo ?? msg.goal ?? "").trim();
+        const r = this.planos.criar({
+          botId,
+          conversationId: typeof msg.conversationId === "string" ? msg.conversationId : null,
+          objetivo,
+          passos: msg.passos ?? msg.steps ?? [],
+        });
+        if (!r.ok) return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: r.erro });
+        this.broadcastUi({ type: "notify", botId, text: "Plano criado no quadro" });
+        return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: JSON.stringify({ id: r.plano.id, tarefaId: r.plano.tarefaId, passos: r.plano.passos.map(x => ({ id: x.id, ordem: x.ordem, titulo: x.titulo, precisaDecisao: x.precisaDecisao })) }) });
+      }
+      case "atualizar_passo": {
+        const planoId = String(msg.planoId ?? msg.plano ?? "").trim();
+        const status = String(msg.status ?? "").trim() as any;
+        const r = this.planos.atualizarPasso({
+          planoId,
+          passoId: msg.passoId ? String(msg.passoId) : undefined,
+          ordem: msg.ordem != null ? Number(msg.ordem) : undefined,
+          status,
+        });
+        if (!r.ok) return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: r.erro });
+        return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: JSON.stringify({ id: r.plano.id, status: r.plano.status, passos: r.plano.passos.map(x => ({ id: x.id, ordem: x.ordem, status: x.status, titulo: x.titulo })) }) });
+      }
+      case "aguardar_decisao": {
+        const planoId = String(msg.planoId ?? msg.plano ?? "").trim();
+        const pergunta = String(msg.pergunta ?? msg.question ?? "").trim();
+        const opcoes = Array.isArray(msg.opcoes) ? msg.opcoes.map(String) : (Array.isArray(msg.options) ? msg.options.map(String) : []);
+        const r = this.planos.pedirDecisao({
+          planoId,
+          passoId: msg.passoId ? String(msg.passoId) : undefined,
+          ordem: msg.ordem != null ? Number(msg.ordem) : undefined,
+          pergunta,
+          opcoes,
+        });
+        if (!r.ok) return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: r.erro });
+        this.broadcastUi({ type: "notify", botId, text: "Esperando sua OK no quadro" });
+        return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: JSON.stringify({ planoId: r.plano.id, pergunta: r.pergunta, opcoes: r.opcoes, status: r.plano.status, useAskUser: true }) });
       }
       case "forget": {
         const id = String(msg.id ?? msg.key ?? "").trim();

@@ -37,6 +37,7 @@ export type ConvProps = {
     aviso?: string;
     nome: (id: string) => string;
     cancelar: (id: string) => void;
+    decidir?: (id: string, resposta: string) => void;
     simular?: () => void;
   };
 };
@@ -466,6 +467,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           fonte={colab.fonte}
           aviso={colab.aviso}
           onCancelar={colab.cancelar}
+          onDecidir={colab.decidir}
           onSimular={colab.simular}
           abertaInicial={tarefaInicial}
           bots={bots}

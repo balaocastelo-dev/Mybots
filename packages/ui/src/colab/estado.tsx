@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { HubToUi } from "@mybots/shared";
-import { carregarColab, pedirCancelamento, pedirTarefa } from "./api";
+import { carregarColab, pedirCancelamento, pedirDecisao, pedirTarefa } from "./api";
 import { ajudandoDasTarefas, aplicarEvento, conservarTarefas, fundirTarefa, marcarCancelada, simularAndamento } from "./normalizar";
 import type { PacoteColab } from "./tipos";
 
@@ -64,7 +64,18 @@ export function useColab(onEvent: Ouvir, exemplo: boolean) {
     });
   };
 
+  const decidir = async (id: string, resposta: string) => {
+    try {
+      await pedirDecisao(id, resposta);
+      const novo = await carregarColab(false);
+      setPacote(novo);
+    } catch (e) {
+      console.warn(e);
+      void carregarColab(false).then(setPacote);
+    }
+  };
+
   const simular = () => setPacote((p) => (p && p.fonte === "exemplo" ? simularAndamento(p) : p));
 
-  return { pacote, cancelar, simular };
+  return { pacote, cancelar, decidir, simular };
 }

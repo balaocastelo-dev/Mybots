@@ -66,7 +66,7 @@ export function App() {
     try { localStorage.setItem("mybots-pc-aberto", "0"); } catch { /* a demonstração segue com a tela do PC como estava */ }
   }
   const { state, send, loadHistory, onEvent, removeToast, clearImport, setImport } = useHub();
-  const { pacote, cancelar, simular } = useColab(onEvent, exemplo);
+  const { pacote, cancelar, decidir, simular } = useColab(onEvent, exemplo);
   const equipe = state.bots.length ? state.bots : (exemplo ? BOTS_EXEMPLO : state.bots);
   definirTonsDaEquipe(equipe.map((b) => b.id)); // cada bot com a sua cor, sem dois parecidos
   const [selected, setSelected] = useState<string | null>(null); // conversationId
@@ -421,8 +421,8 @@ export function App() {
           <TrocaEntreBots conversationId={verTroca} bots={equipe} Avatar={Avatar} onFechar={() => setVerTroca(null)} />
         ) : verQuadro ? (
           <QuadroKanban
-            titulo="Quadro do Gerente"
-            subtitulo="Tarefas delegadas na empresa"
+            titulo="Quadro de tarefas"
+            subtitulo="Planos e tarefas dos bots"
             onFechar={() => setVerQuadro(false)}
             tarefas={tarefasFiltradas}
             nome={nomeDe}
@@ -430,6 +430,7 @@ export function App() {
             fonte={pacote?.fonte}
             aviso={pacote?.aviso}
             onCancelar={(id) => void cancelar(id)}
+            onDecidir={(id, resposta) => void decidir(id, resposta)}
             onSimular={pacote?.fonte === "exemplo" ? simular : undefined}
             filtro={filtroBot}
             onFiltro={setFiltroBot}
@@ -453,6 +454,7 @@ export function App() {
               aviso: pacote.aviso,
               nome: nomeDe,
               cancelar: (id) => void cancelar(id),
+                decidir: (id, resposta) => void decidir(id, resposta),
               simular: pacote.fonte === "exemplo" ? simular : undefined,
             } : undefined}
             messages={state.messages[selected] ?? []}

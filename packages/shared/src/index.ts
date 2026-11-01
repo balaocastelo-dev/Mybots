@@ -58,6 +58,9 @@ export type NodeToHub =
   | { type: "criar_bot"; callId: string; nome: string; funcao?: string; persona?: string }
   | { type: "remember"; key: string; value: string; text?: string; tipo?: string; callId?: string }
   | { type: "aprender_regra"; callId: string; regra: string; text?: string; value?: string }
+  | { type: "planejar"; callId: string; objetivo: string; passos?: unknown; steps?: unknown; conversationId?: string; goal?: string }
+  | { type: "atualizar_passo"; callId: string; planoId: string; plano?: string; passoId?: string; ordem?: number; status: string }
+  | { type: "aguardar_decisao"; callId: string; planoId: string; plano?: string; passoId?: string; ordem?: number; pergunta?: string; question?: string; opcoes?: string[]; options?: string[] }
   | { type: "forget"; callId: string; id?: string; key?: string }
   | { type: "recall"; callId: string; key: string }
   | { type: "search_knowledge"; callId: string; query: string; limit?: number; /** ler um verbete inteiro, em pedaços de ~4000 chars */ id?: string; parte?: number }

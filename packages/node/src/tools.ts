@@ -203,6 +203,9 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   { name: "ask_bot", description: "Pergunta algo a outro Bot da equipe e espera a resposta dele.", parameters: { type: "object", properties: { bot: { type: "string", description: "id ou nome do Bot" }, question: { type: "string" }, profundidade: { type: "number", description: "quantas delegações já estão empilhadas; acima de 3 o Hub recusa" } }, required: ["bot", "question"] } },
   { name: "send_to_bot", description: "Manda uma mensagem a outro Bot sem esperar resposta. prioridade true acorda o colega agora; sem prioridade o texto fica para o próximo turno dele, marcado como vindo de você e não do chefe.", parameters: { type: "object", properties: { bot: { type: "string" }, text: { type: "string" }, prioridade: { type: "boolean" }, profundidade: { type: "number" }, contexto: { type: "string" } }, required: ["bot", "text"] } },
+  { name: "planejar", description: "Quebra um objetivo grande em passos no Quadro de tarefas. Use quando o chefe pedir um plano ou um trabalho com varias etapas. Marque precisaDecisao nos passos que exigem OK dele.", parameters: { type: "object", properties: { objetivo: { type: "string" }, passos: { type: "array", items: { type: "object", properties: { titulo: { type: "string" }, precisaDecisao: { type: "boolean" } }, required: ["titulo"] } }, steps: { type: "array", items: { type: "string" } } }, required: ["objetivo", "passos"] } },
+  { name: "atualizar_passo", description: "Atualiza o status de um passo do plano (em_andamento, feito, cancelado, pendente).", parameters: { type: "object", properties: { planoId: { type: "string" }, passoId: { type: "string" }, ordem: { type: "number" }, status: { type: "string", description: "pendente | em_andamento | feito | cancelado" } }, required: ["planoId", "status"] } },
+  { name: "aguardar_decisao", description: "Pausa o plano e pede OK do chefe num passo. O quadro vai para Esperando OK. Depois chame ask_user com a mesma pergunta para ele responder no chat.", parameters: { type: "object", properties: { planoId: { type: "string" }, passoId: { type: "string" }, ordem: { type: "number" }, pergunta: { type: "string" }, opcoes: { type: "array", items: { type: "string" } } }, required: ["planoId", "pergunta"] } },
   { name: "delegate_task", description: "Entrega uma tarefa a outro Bot (objetivo, contexto, critério de pronto, prazo opcional) e segue o seu trabalho. O resultado volta depois e acorda você. Não aprova nada: pagar, enviar, apagar ou publicar continua no pedido de aprovação do chefe.", parameters: { type: "object", properties: { para: { type: "string", description: "id do Bot que vai fazer" }, paraBotId: { type: "string", description: "o mesmo que para" }, objetivo: { type: "string" }, contexto: { type: "string" }, criterioSucesso: { type: "string" }, prazo: { type: "string", description: "epoch em milissegundos ou data ISO 8601" }, formatoEntrega: { type: "string" }, profundidade: { type: "number", description: "profundidade já acumulada; o Hub soma 1. Acima de 3 é recusado." } }, required: ["objetivo", "contexto", "criterioSucesso"] } },
   { name: "check_task", description: "Consulta uma tarefa delegada pelo id.", parameters: { type: "object", properties: { taskId: { type: "string" }, id: { type: "string" } }, required: [] } },
   { name: "cancel_task", description: "Cancela uma tarefa que você delegou e que ainda não terminou.", parameters: { type: "object", properties: { taskId: { type: "string" }, id: { type: "string" }, motivo: { type: "string" } }, required: [] } },
@@ -397,6 +400,67 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
           prioridade: args.prioridade === true, profundidade: Number(args.profundidade) || 0, contexto: args.contexto ? String(args.contexto) : undefined,
         }), 15_000);
         return { output: String(r.data), ok: r.ok };
+      }
+      case "planejar": {
+        ctx.setStatus("Montando plano no quadro");
+        const passos = args.passos ?? args.steps ?? [];
+        const r = await ctx.hub.call((callId) => ({
+          type: "planejar",
+          callId,
+          objetivo: String(args.objetivo ?? args.goal ?? ""),
+          passos,
+          conversationId: ctx.conversationId,
+        }), 30_000);
+        if (!r.ok) return { output: String(r.data ?? "falha ao criar plano"), ok: false };
+        return { output: typeof r.data === "string" ? r.data : JSON.stringify(r.data), ok: true };
+      }
+      case "atualizar_passo": {
+        ctx.setStatus("Atualizando passo do plano");
+        const r = await ctx.hub.call((callId) => ({
+          type: "atualizar_passo",
+          callId,
+          planoId: String(args.planoId ?? args.plano ?? ""),
+          passoId: args.passoId ? String(args.passoId) : undefined,
+          ordem: args.ordem != null ? Number(args.ordem) : undefined,
+          status: String(args.status ?? ""),
+        }), 15_000);
+        if (!r.ok) return { output: String(r.data ?? "falha ao atualizar passo"), ok: false };
+        return { output: typeof r.data === "string" ? r.data : JSON.stringify(r.data), ok: true };
+      }
+      case "aguardar_decisao": {
+        ctx.setStatus("Esperando OK do chefe");
+        const pergunta = String(args.pergunta ?? args.question ?? "");
+        const opcoes = Array.isArray(args.opcoes) ? args.opcoes.map(String) : (Array.isArray(args.options) ? args.options.map(String) : []);
+        const planoId = String(args.planoId ?? args.plano ?? "");
+        const marcado = await ctx.hub.call((callId) => ({
+          type: "aguardar_decisao",
+          callId,
+          planoId,
+          passoId: args.passoId ? String(args.passoId) : undefined,
+          ordem: args.ordem != null ? Number(args.ordem) : undefined,
+          pergunta,
+          opcoes,
+        }), 15_000);
+        if (!marcado.ok) return { output: String(marcado.data ?? "falha ao pedir decisao"), ok: false };
+        if (ctx.mode === "deus") {
+          try {
+            await fetch(urlHttpDoHub(ctx.cfg) + "/api/planos/" + encodeURIComponent(planoId) + "/decidir", {
+              method: "POST",
+              headers: { "content-type": "application/json", authorization: "Bearer " + (ctx.cfg.token || "dev"), "x-mybots-bot": ctx.cfg.bot.id },
+              body: JSON.stringify({ resposta: "pode seguir", passoId: args.passoId }),
+            });
+          } catch { /* ok */ }
+          return { output: "[MODO DEUS] Decisao automatica: pode seguir. " + String(marcado.data ?? ""), ok: true };
+        }
+        const resposta = await ctx.ask(pergunta || "Pode seguir este passo?", opcoes);
+        try {
+          await fetch(urlHttpDoHub(ctx.cfg) + "/api/planos/" + encodeURIComponent(planoId) + "/decidir", {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: "Bearer " + (ctx.cfg.token || "dev"), "x-mybots-bot": ctx.cfg.bot.id },
+            body: JSON.stringify({ resposta, passoId: args.passoId }),
+          });
+        } catch { /* ok */ }
+        return { output: "Chefe respondeu: " + resposta, ok: true };
       }
       case "delegate_task": {
         const para = String(args.para ?? args.paraBotId ?? args.bot ?? "").trim();

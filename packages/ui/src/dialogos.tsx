@@ -124,8 +124,7 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
     <div className="form">
       {identidade && (
         <>
-          <div className="row">
-            <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
+          <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
             <div className="ameba-picker">
               <div className="ameba-picker-topo">
                 <RetratoPreview id={value.id ?? value.name ?? "novo"} avatar={value.avatar} size={64} />
@@ -150,7 +149,6 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
                   );
                 })}
               </div>
-            </div>
           </div>
           <label>Função<input value={value.role} onChange={(e) => set({ role: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(value.name, e.target.value, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Marketing e redes sociais" /></label>
           {isNew && (
@@ -306,7 +304,7 @@ export function NewGerenteDialog({ bots, onClose, onCreated }: { bots: BotSummar
 
 export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva = "todas", onCriou }: { onClose: () => void; onCreated: (id: string) => void; empresas?: Array<{ id: string; nome: string }>; empresaAtiva?: string; onCriou?: () => void }) {
   const { providers, voices } = usePresets();
-  const [where, setWhere] = useState<"hub" | "other">("hub");
+  const where = "hub" as const;
   /* empresa/ponte removidos da UI: o Hub escolhe a empresa padrao em silencio */
   const [etapa, setEtapa] = useState<1 | 2>(1);
   const [v, setV] = useState<any>({ name: "", role: "", avatar: amebaV2StoragePath(sortearAmebaV2("novo-bot")), voice: "", especialidadeId: null, especialidadeDesligada: false, ...PADRAO_DA_CASA, persona: personaTemplate("", "") });
@@ -357,10 +355,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>Novo bot</h3>
         <p className="passos-wizard">Passo {etapa} de 2 — {etapa === 1 ? "Identidade" : "Modelo e controle"}</p>
-        <div className="seg" role="group" aria-label="Onde o bot roda">
-          <button type="button" className={where === "hub" ? "on" : ""} aria-pressed={where === "hub"} onClick={() => setWhere("hub")}>Roda neste PC (o Hub cuida dele)</button>
-          <button type="button" className={where === "other" ? "on" : ""} aria-pressed={where === "other"} onClick={() => setWhere("other")}>Roda em outro PC</button>
-        </div>
+        {/* sempre neste PC / Hub — opcao outro PC ocultada */}
         {/* empresa e ponte: removidos — perfil unico */}
 
         <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew etapa={etapa === 1 ? "identidade" : "modelo"} especialidades={especialidades} deteccao={deteccao} onEspecialidade={(id, desligada) => setV((prev: any) => ({ ...prev, especialidadeId: id, especialidadeDesligada: desligada }))} />

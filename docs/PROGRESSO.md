@@ -1,5 +1,13 @@
 # Progresso
 
+## 2026-11-01 — Celular do bot pelo cadastro Android
+
+- Na main as empresas continuam (tabelas, painel, vínculo `celular:<empresaId>`). A ferramenta `celular` agora resolve o serial por `ServicoAndroid.cadastro(botId)` e só usa o vínculo da empresa se o bot não tiver o dele.
+- `POST /api/bots/<id>/android/adotar` grava um serial já em `adb devices` como `device` (ex.: `192.168.15.5:5555`) sem código. Não chama `adb pair` nem `adb connect`. O pareamento com código segue igual. Portas 8787, 8790 e 8791 são recusadas.
+- Painel: na aba Celular do bot e em Configurações → Parear, o formulário "Vincular este aparelho" fica ao lado do pareamento.
+- Arquivos: `packages/hub/src/androidBot.ts`, `androidServico.ts`, `celularDoBot.ts`, `hub.ts`, `server.ts`, `packages/ui/src/telasBot.tsx`, `configuracoes/Computadores.tsx`, `configuracoes/pareamento.ts`, `packages/node/src/tools.ts`, `engines/direct.ts`, `docs/ANDROID.md`, `tests/androidBot.test.ts`, `tests/configuracoes.test.ts`.
+- Teste: `tests/androidBot.test.ts` e `tests/configuracoes.test.ts` passaram. `npm test` para em `tests/pcs.test.ts`, que já vinha assim na main: PC novo nasce `sempreLigado` e a varredura não desliga a `bia`.
+
 ## 2026-10-31 — Tokens e ajustes de UI (specs + análise)
 
 - Balcão/Bancada voltam a mandar na cor: acento claro `#E10600`, perigo `#d4453c` (o Parar deixa de parecer botão primário roxo). Tipografia Karla + Bricolage. Avatares 42 / 80 / 144 e balão de 24px metade para fora.

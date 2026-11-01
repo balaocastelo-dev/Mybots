@@ -35,6 +35,7 @@ import {
   TravaDosCelulares, acaoSensivel, enderecoParaReconectar, lerMdns, lerPareamento, pacoteValido, resumoDoCelular,
   type VinculoCelular,
 } from "./celularEmpresa.js";
+import { escolherAlvoDoCelular } from "./celularDoBot.js";
 import { argumentosScrcpy } from "./scrcpy.js";
 import { spawn } from "node:child_process";
 import { ehHumano, FilaDeTarefas } from "./colab/fila.js";
@@ -78,6 +79,8 @@ export class Hub {
   managesOf: (botId: string) => string[] | undefined = () => undefined;
   /** é o Gerente Geral da empresa? (preenchido pelo server com o BotManager) */
   ehGerente: (botId: string) => boolean = () => false;
+  /** Cadastro Android deste bot (ServicoAndroid.cadastro). O server liga isto. */
+  androidDoBot: (botId: string) => { serial: string } | null = () => null;
   /** reinicia um bot hospedado aqui (preenchido pelo server); false = não é gerenciado por este PC */
   restartBot: (botId: string) => boolean = () => false;
   /** cuidar da equipe (ligar, parar, reiniciar, excluir). Ligado ao BotManager pelo server. */
@@ -1222,9 +1225,13 @@ export class Hub {
 
   private async atenderCelular(botId: string, msg: Extract<NodeToHub, { type: "celular" }>): Promise<{ ok: boolean; texto: string }> {
     const emp = this.empresaDe(botId).id;
-    if (!emp) return { ok: false, texto: "Você não está numa empresa, então não tem celular." };
-    const v = this.vinculoDoCelular(emp);
-    if (!v) return { ok: false, texto: "O celular desta empresa ainda não foi vinculado. O chefe liga em Empresas → Celular da empresa." };
+    const alvo = escolherAlvoDoCelular({
+      botId,
+      cadastro: this.androidDoBot(botId),
+      empresaId: emp,
+      vinculo: emp ? this.vinculoDoCelular(emp) : null,
+    });
+    if (!alvo) return { ok: false, texto: "Este bot ainda não tem celular. Na aba Celular do painel, vincule o aparelho que o adb já mostra como device, ou pareie com o código de 6 dígitos." };
     const acao = String(msg.acao || "estado");
     if (acaoSensivel(acao, msg.texto, msg.pacote)) {
       if (!msg.aprovado) return { ok: false, texto: "Essa ação no celular (pagamento, apagar ou enviar) precisa do OK do chefe. Peça com request_approval e tente de novo." };
@@ -1232,33 +1239,34 @@ export class Hub {
       if (!gate.ok) return { ok: false, texto: gate.texto };
     }
     if (acao !== "estado" && acao !== "print" && acao !== "arvore") {
-      const trava = this.travaCelular.pegar(emp, botId, this.botSender(botId).name, false);
+      const trava = this.travaCelular.pegar(alvo.trava, botId, this.botSender(botId).name, false);
       if (!trava.ok) return { ok: false, texto: `${trava.nome} está no celular agora. Espere um instante e tente de novo.` };
     }
     if (acao === "estado") {
       const lista = await celular.listar();
-      const on = lista.some((a) => a.serial === v.serial && a.estado === "device");
-      const t = this.travaCelular.ver(emp);
-      return { ok: true, texto: `${v.modelo} (${v.serial}) ${on ? "online" : "offline"}${t ? `. Quem está nele: ${t.nome}` : ""}` };
+      const on = lista.some((a) => a.serial === alvo.serial && a.estado === "device");
+      const t = this.travaCelular.ver(alvo.trava);
+      const deQuem = alvo.origem === "bot" ? "deste bot" : "da empresa";
+      return { ok: true, texto: `${alvo.modelo} (${alvo.serial}, ${deQuem}) ${on ? "online" : "offline"}${t ? `. Quem está nele: ${t.nome}` : ""}` };
     }
     if (acao === "print") {
-      const png = await celular.tela(v.serial);
+      const png = await celular.tela(alvo.serial);
       if (!png) return { ok: false, texto: "não consegui fotografar a tela do celular" };
-      const f = this.saveFile(botId, `celular-${emp}.png`, "image/png", png);
+      const f = this.saveFile(botId, `celular-${emp || botId}.png`, "image/png", png);
       if (msg.conversationId) this.storeMessage(msg.conversationId, this.botSender(botId), "Tela do celular", { files: [{ id: f.id, name: f.name, url: f.url, mime: f.mime }] });
       return { ok: true, texto: "Mandei a foto da tela no chat." };
     }
     if (acao === "arvore") {
-      const x = await celular.arvore(v.serial);
+      const x = await celular.arvore(alvo.serial);
       return x ? { ok: true, texto: x.slice(0, 8000) } : { ok: false, texto: "não consegui ler a árvore da tela" };
     }
-    if (acao === "tocar") return { ok: await celular.tocar(v.serial, Number(msg.x), Number(msg.y)), texto: "toquei" };
-    if (acao === "deslizar") return { ok: await celular.deslizar(v.serial, Number(msg.x), Number(msg.y), Number(msg.x2), Number(msg.y2)), texto: "deslizei" };
-    if (acao === "digitar") return { ok: await celular.digitar(v.serial, String(msg.texto ?? "")), texto: "digitei" };
-    if (acao === "tecla") return { ok: await celular.tecla(v.serial, String(msg.tecla ?? "")), texto: "tecla enviada" };
+    if (acao === "tocar") return { ok: await celular.tocar(alvo.serial, Number(msg.x), Number(msg.y)), texto: "toquei" };
+    if (acao === "deslizar") return { ok: await celular.deslizar(alvo.serial, Number(msg.x), Number(msg.y), Number(msg.x2), Number(msg.y2)), texto: "deslizei" };
+    if (acao === "digitar") return { ok: await celular.digitar(alvo.serial, String(msg.texto ?? "")), texto: "digitei" };
+    if (acao === "tecla") return { ok: await celular.tecla(alvo.serial, String(msg.tecla ?? "")), texto: "tecla enviada" };
     if (acao === "abrir") {
       if (!pacoteValido(String(msg.pacote ?? ""))) return { ok: false, texto: "pacote inválido" };
-      return { ok: await celular.abrirApp(v.serial, String(msg.pacote)), texto: `pedi para abrir ${msg.pacote}` };
+      return { ok: await celular.abrirApp(alvo.serial, String(msg.pacote)), texto: `pedi para abrir ${msg.pacote}` };
     }
     return { ok: false, texto: "acao deve ser estado, print, arvore, tocar, deslizar, digitar, tecla ou abrir" };
   }

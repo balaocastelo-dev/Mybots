@@ -6,7 +6,7 @@
 import { lerMdns } from "./celularEmpresa.js";
 import { argumentosAcordar, argumentosWhatsapp, URL_WHATSAPP } from "./androidScrcpy.js";
 
-export const PORTAS_PROIBIDAS = new Set([8787, 8791]);
+export const PORTAS_PROIBIDAS = new Set([8787, 8790, 8791]);
 
 export type CadastroAndroid = {
   modo: "aparelho" | "redroid" | "emulador";
@@ -70,6 +70,19 @@ export function validarPareamento(body: PedidoParear):
   const conexao = portaValida(Number(brutoConexao));
   if (!conexao.ok) return conexao;
   return { ok: true, ip, porta: porta.porta, codigo, portaConexao: conexao.porta };
+}
+
+/** Serial que o `adb connect` já deixou em `adb devices`, no formato IP:porta. */
+export function serialTcpip(bruto: string):
+  | { ok: true; ip: string; porta: number; serial: string }
+  | { ok: false; erro: string } {
+  const s = String(bruto ?? "").trim();
+  const m = s.match(/^(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})$/);
+  if (!m) return { ok: false, erro: "o serial precisa ser IP:porta, como 192.168.15.5:5555" };
+  if (!ipDeAparelho(m[1])) return { ok: false, erro: "use o IP do aparelho na rede local" };
+  const porta = portaValida(Number(m[2]));
+  if (!porta.ok) return porta;
+  return { ok: true, ip: m[1], porta: porta.porta, serial: `${m[1]}:${porta.porta}` };
 }
 
 export function semSegredo(saida: string, codigo: string): string {
@@ -152,6 +165,40 @@ export class PareamentoAndroid {
     this.tentou.delete(botId);
     await this.abrirWhatsapp(serial);
     return { ok: true };
+  }
+
+  /**
+   * Grava um serial que o adb deste PC já mostra como `device`.
+   * Não chama `adb pair` nem `adb connect`: a sessão tcpip que já existe continua.
+   */
+  async adotar(botId: string, serialBruto: string): Promise<ResultadoParear> {
+    const pedido = serialTcpip(serialBruto);
+    if (!pedido.ok) return pedido;
+    const r = await this.deps.adb(["devices", "-l"], 8000);
+    const achou = aparelhosDe(r.saida).find((a) => a.serial === pedido.serial);
+    if (!achou || achou.estado !== "device") {
+      return {
+        ok: false,
+        erro: achou
+          ? `o aparelho ${pedido.serial} está ${achou.estado}, não device`
+          : `o adb não mostra ${pedido.serial} como device. Conecte com adb connect e tente de novo.`,
+      };
+    }
+    this.deps.gravar(botId, {
+      modo: "aparelho",
+      ip: pedido.ip,
+      portaConexao: pedido.porta,
+      serial: pedido.serial,
+      pareadoEm: this.agora(),
+    });
+    this.tentou.delete(botId);
+    return { ok: true };
+  }
+
+  /** Aparelhos tcpip que `adb devices` já lista como device. Não conecta em ninguém. */
+  async aparelhosConectados(): Promise<{ serial: string; estado: string }[]> {
+    const r = await this.deps.adb(["devices", "-l"], 8000);
+    return aparelhosDe(r.saida).filter((a) => a.estado === "device" && serialTcpip(a.serial).ok);
   }
 
   /** Acorda a tela e abre o Chrome no WhatsApp Web. Falha do Chrome não desfaz o pareamento. */

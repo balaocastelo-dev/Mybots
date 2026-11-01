@@ -1517,7 +1517,7 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
 .cel-moldura {
   border: 10px solid #15151A; border-radius: 26px; overflow: hidden;
   background: #000; box-shadow: 0 18px 50px rgba(0,0,0,.6);
-  aspect-ratio: 9 / 19.5; position: relative;
+  aspect-ratio: 9 / 18.5; position: relative;
 }
 .cel-moldura img { width: 100%; height: 100%; object-fit: contain; display: block; cursor: pointer; user-select: none; }
 .cel-vazia { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--muted); font-size: 12.5px; }
@@ -2069,7 +2069,7 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   min-width: 0;
 }
 .quadro-pc { aspect-ratio: 16 / 9; border-radius: 8px; box-shadow: 0 0 0 1px #2a2a2e; }
-.quadro-android { aspect-ratio: 9 / 19.5; border-radius: 18px; box-shadow: 0 0 0 3px #1a1a1e; }
+.quadro-android { aspect-ratio: 9 / 18.5; border-radius: 18px; box-shadow: 0 0 0 3px #1a1a1e; }
 .telas-par.empilhado .quadro { width: 100%; height: auto; }
 .quadro iframe,
 .quadro-estado {
@@ -2618,7 +2618,7 @@ main.chat > .colab-quadro,
   padding: 16px 12px; text-align: center;
 }
 .cel-emp-vazio .cel-moldura {
-  width: min(160px, 42%); aspect-ratio: 9 / 19.5;
+  width: min(160px, 42%); aspect-ratio: 9 / 18.5;
   border: 2px dashed var(--line); border-radius: 22px;
   background: color-mix(in srgb, var(--panel-2) 80%, transparent);
 }
@@ -3280,3 +3280,85 @@ main.chat > .colab-quadro,
 .plano-passos li { margin: 6px 0; display: grid; gap: 2px; }
 .plano-passos .colab-selo { justify-self: start; }
 .kanban-decidir { margin: 6px 8px 8px; }
+
+/* Celular UI/UX — moldura mais larga e legível (2026-11-01) */
+.telas-bot.modo-celular {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+.telas-bot.modo-celular .telas-fit {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 0 12px;
+}
+.telas-bot.modo-celular .telas-par {
+  max-width: 100%;
+}
+.telas-bot.modo-celular .quadro-android.sozinho {
+  border-radius: 28px;
+  box-shadow:
+    0 0 0 3px #111218,
+    0 0 0 6px #2a3142,
+    0 18px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  background: #000;
+  min-width: 280px;
+}
+.telas-bot.modo-celular .quadro-android.sozinho iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000;
+}
+.telas-bot.modo-celular .android-status {
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-2, #1a1f2b) 88%, transparent);
+  align-self: center;
+}
+.android-lista-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.android-lista-info b { font-size: 13px; line-height: 1.2; }
+.android-lista-serial {
+  font-size: 11px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.android-lista-adb li {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+.android-lista-adb li .btn {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 14px;
+}
+.android-parear-bloco {
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel-2, #121722) 70%, transparent);
+}
+.android-ja-conectados { display: flex; flex-direction: column; gap: 8px; }
+.telas-par.empilhado .quadro.sozinho { min-height: min(62vh, 640px); }

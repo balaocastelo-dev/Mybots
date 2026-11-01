@@ -272,6 +272,15 @@ export function PainelDoPc({
   const larguraRef = useRef(largura);
   larguraRef.current = largura;
 
+  // Aba Celular precisa de painel mais largo para a moldura do aparelho ficar legível.
+  useEffect(() => {
+    if (aba !== "celular") return;
+    if (larguraRef.current >= 380) return;
+    const w = 400;
+    setLargura(w);
+    larguraRef.current = w;
+    try { localStorage.setItem("mybots-pc-largura", String(w)); } catch { /* ok */ }
+  }, [aba]);
   const aoPuxar = (e: ReactPointerEvent) => {
     e.preventDefault();
     const inicioX = e.clientX;

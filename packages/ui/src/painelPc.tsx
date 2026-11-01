@@ -312,7 +312,7 @@ export function PainelDoPc({
         ))}
       </div>
       {(aba === "pc" || aba === "celular") && (
-        <TelasDoBot botId={botId} nome={nome} mostrarPareamento={aba === "celular"} />
+        <TelasDoBot botId={botId} nome={nome} aba={aba} />
       )}
       {aba === "mac" && <TelaDoMac embutido />}
       {aba === "trabalhos" && <Trabalhos bots={bots} botInicial={botId} embutido onAbrirBot={onAbrirBot} />}

@@ -61,6 +61,10 @@ export type NodeToHub =
   | { type: "search_knowledge"; callId: string; query: string; limit?: number; /** ler um verbete inteiro, em pedaços de ~4000 chars */ id?: string; parte?: number }
   | { type: "whatsapp_send"; callId: string; acao?: "estado" | "enviar" | "foto" | "documento"; para?: string; texto?: string;
       arquivo?: { base64: string; nome: string; mime: string; legenda?: string } }
+  /** WhatsApp ligado neste bot (QR no painel Celular). Não é a conta da empresa. */
+  | { type: "whatsapp_bot"; callId: string; acao: "estado" | "enviar" | "ler"; para?: string; texto?: string; limite?: number }
+  /** Pede uma ligação que ainda não existe. Gmail e WhatsApp no nascimento; o resto só na hora. */
+  | { type: "pedir_conexao"; callId: string; ferramenta: string; motivo: string }
   | { type: "uso"; modelo: string; entrada?: number; saida?: number; cacheLido?: number; cacheGravado?: number }
   | { type: "learn_knowledge"; callId: string; titulo: string; resumo: string; conteudo: string; tipo?: SaberTipo; tags?: string[] }
   | { type: "notify"; text: string }
@@ -215,6 +219,7 @@ export type HubToUi =
   | { type: "knowledge"; total: number }
   | { type: "creditos"; empresaId: string; saldoCentavos: number }
   | { type: "whatsapp"; estado: { empresaId: string; estado: "desligado" | "qr" | "conectando" | "conectado"; qr?: string; numero?: string; desde?: number; erro?: string } }
+  | { type: "whatsapp.bot"; estado: { botId: string; estado: "desligado" | "qr" | "conectando" | "conectado"; qr?: string; numero?: string; desde?: number; erro?: string } }
   | { type: "import.request"; file: { name: string; mime: string; dataBase64: string } }
   | { type: "message"; message: StoredMessage }
   | { type: "message.delta"; conversationId: string; messageId: string; text: string; /** o filtro mudou de ideia: este texto substitui o que já estava na bolha */ replace?: boolean }

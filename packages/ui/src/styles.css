@@ -2046,6 +2046,7 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   min-width: 0;
 }
 .quadro-pc { aspect-ratio: 16 / 9; border-radius: 8px; box-shadow: 0 0 0 1px #2a2a2e; }
+.quadro.solo { width: 100%; height: auto; flex: none; }
 .quadro-android { aspect-ratio: 9 / 19.5; border-radius: 18px; box-shadow: 0 0 0 3px #1a1a1e; }
 .telas-par.empilhado .quadro { width: 100%; height: auto; }
 .quadro iframe,
@@ -2079,6 +2080,47 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   cursor: zoom-in;
 }
 .quadro-abre:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.fone-whats {
+  width: min(280px, 100%);
+  margin: 0 auto;
+  padding: 12px 12px 14px;
+  border-radius: 22px;
+  background: var(--panel, #fff);
+  color: var(--text);
+  box-shadow: 0 0 0 3px #1a1a1e;
+}
+.fone-aviso { margin: 0 0 8px; color: var(--muted); font-size: 12px; text-align: center; }
+.whats-cartao {
+  position: static;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.whats-cartao.reserva {
+  width: auto;
+  margin: 8px 12px 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.whats-cartao img {
+  width: min(100%, 210px);
+  height: auto;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px;
+}
+.whats-cartao p { margin: 0; }
+.whats-cartao .botoes { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.whats-cartao .btn { font-size: 12px; padding: 4px 8px; }
+.whats-erro { color: var(--danger, #d4453c); }
 .android-status {
   display: flex;
   align-items: center;

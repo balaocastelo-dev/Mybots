@@ -1,21 +1,18 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { CartaoWhats } from "./whatsBot";
 
 /**
  * As duas telas do bot, no painel da direita.
  *
  * O PC abre em /pc/<botId>/ e o Android (ws-scrcpy) em /android/<botId>/.
- * Cada quadro guarda a proporção da tela remota e ocupa exatamente essa
- * caixa: sem faixa em volta da imagem. No painel estreito os dois empilham;
- * no largo ficam lado a lado, na mesma altura.
+ * A aba escolhe qual tela ocupa o painel. O QR do WhatsApp deste bot fica
+ * no Celular; na aba da tela do PC ele só aparece se ainda houver QR.
  *
  * O clique na miniatura do PC não entra na tela — abre ela grande. Lá o
  * mouse e o teclado vão para o iframe. Fecha no X, no fundo ou no Esc.
  */
 
 const RAZAO_PC: [number, number] = [16, 9];
-const RAZAO_FONE: [number, number] = [9, 19.5];
-const FOLGA = 8;
-const EMPILHA_ABAIXO = 520;
 
 type EstadoRota = "lendo" | "pronta" | "ausente";
 type StatusAndroid =
@@ -77,19 +74,6 @@ function useStatusAndroid(botId: string): StatusAndroid {
   return status;
 }
 
-function medirPar(largura: number, altura: number, empilhado: boolean) {
-  const [pw, ph] = RAZAO_PC;
-  const [fw, fh] = RAZAO_FONE;
-  if (empilhado) {
-    const k = ph / pw + fh / fw;
-    const w = Math.max(0, Math.floor(Math.min(largura, (altura - FOLGA) / k)));
-    return { w, h: Math.floor(w * k + FOLGA) };
-  }
-  const s = pw / ph + fw / fh;
-  const h = Math.max(0, Math.floor(Math.min(altura, (largura - FOLGA) / s)));
-  return { w: Math.floor(h * s + FOLGA), h };
-}
-
 function textoDaRotaPc(rota: EstadoRota) {
   if (rota === "lendo") return "Abrindo a tela do PC…";
   return "A tela do PC ainda não está disponível.";
@@ -112,13 +96,11 @@ function rotuloStatus(status: StatusAndroid) {
   return status.conectado ? "Conectado" : "Desconectado";
 }
 
-export function TelasDoBot({ botId, nome, mostrarPareamento }: {
+export function TelasDoBot({ botId, nome, aba }: {
   botId: string;
   nome: string;
-  mostrarPareamento: boolean;
+  aba: "pc" | "celular";
 }) {
-  const fitRef = useRef<HTMLDivElement | null>(null);
-  const [caixa, setCaixa] = useState({ w: 0, h: 0, empilhado: false });
   const [ampliado, setAmpliado] = useState(false);
   const pcUrl = comChave(`/pc/${encodeURIComponent(botId)}/`);
   const androidUrl = comChave(`/android/${encodeURIComponent(botId)}/`);
@@ -126,59 +108,46 @@ export function TelasDoBot({ botId, nome, mostrarPareamento }: {
   const rotaAndroid = useRota(androidUrl);
   const status = useStatusAndroid(botId);
 
-  useEffect(() => {
-    const el = fitRef.current;
-    if (!el) return;
-    const ler = () => {
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      setCaixa({ w, h, empilhado: w < EMPILHA_ABAIXO });
-    };
-    ler();
-    const ro = new ResizeObserver(ler);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const par = caixa.w > 0 && caixa.h > 0 ? medirPar(caixa.w, caixa.h, caixa.empilhado) : null;
   const androidPronto = status.tipo === "ok" && status.cadastrado && status.conectado && rotaAndroid === "pronta";
   const avisoAndroid = textoDoAndroid(status, rotaAndroid);
 
   return (
     <div className="telas-bot">
-      <div className="telas-fit" ref={fitRef}>
-        {par && (
-          <div
-            className={"telas-par" + (caixa.empilhado ? " empilhado" : "")}
-            style={{ width: par.w, height: par.h }}
-          >
-            <div className="quadro quadro-pc">
-              {rotaPc === "pronta" && !ampliado
-                ? <iframe src={pcUrl} title={`Tela do PC de ${nome || botId}`} tabIndex={-1} />
-                : <div className="quadro-estado">{ampliado && rotaPc === "pronta" ? "Aberto em tela grande" : textoDaRotaPc(rotaPc)}</div>}
-              <button
-                className="quadro-abre"
-                type="button"
-                title="Abrir a tela do PC"
-                aria-label={`Abrir a tela do PC de ${nome || botId}`}
-                onClick={() => setAmpliado(true)}
-              />
-            </div>
-            <div className="quadro quadro-android" aria-label={`Android de ${nome || botId}`}>
-              {androidPronto
-                ? <iframe src={androidUrl} title={`Android de ${nome || botId}`} allow="clipboard-read; clipboard-write" />
-                : <div className="quadro-estado">{avisoAndroid}</div>}
-            </div>
-          </div>
-        )}
-      </div>
+      {aba === "celular" && (
+        <div className="fone-whats">
+          {!androidPronto && <p className="fone-aviso">{avisoAndroid}</p>}
+          <CartaoWhats botId={botId} onde="celular" />
+        </div>
+      )}
+      {aba === "celular" && androidPronto && (
+        <div className="quadro quadro-android solo" aria-label={`Celular de ${nome || botId}`}>
+          <iframe src={androidUrl} title={`Android de ${nome || botId}`} allow="clipboard-read; clipboard-write" />
+        </div>
+      )}
+      {aba === "pc" && (
+        <div className="quadro quadro-pc solo">
+          {rotaPc === "pronta" && !ampliado
+            ? <iframe src={pcUrl} title={`Tela do PC de ${nome || botId}`} tabIndex={-1} />
+            : <div className="quadro-estado">{ampliado && rotaPc === "pronta" ? "Aberto em tela grande" : textoDaRotaPc(rotaPc)}</div>}
+          <button
+            className="quadro-abre"
+            type="button"
+            title="Abrir a tela do PC"
+            aria-label={`Abrir a tela do PC de ${nome || botId}`}
+            onClick={() => setAmpliado(true)}
+          />
+        </div>
+      )}
+      {aba === "pc" && <CartaoWhats botId={botId} onde="pc" />}
 
-      <div className={"android-status" + (status.tipo === "ok" && status.conectado ? " on" : "")} aria-live="polite">
-        <i className={"pc-luz" + (status.tipo === "ok" && status.conectado ? " on" : status.tipo === "ok" && status.cadastrado ? " frio" : "")} />
-        <span>Android · {rotuloStatus(status)}</span>
-      </div>
+      {aba === "celular" && (
+        <div className={"android-status" + (status.tipo === "ok" && status.conectado ? " on" : "")} aria-live="polite">
+          <i className={"pc-luz" + (status.tipo === "ok" && status.conectado ? " on" : status.tipo === "ok" && status.cadastrado ? " frio" : "")} />
+          <span>Android · {rotuloStatus(status)}</span>
+        </div>
+      )}
 
-      {mostrarPareamento && <ParearAndroid botId={botId} />}
+      {aba === "celular" && <ParearAndroid botId={botId} />}
 
       {ampliado && (
         <PcAmpliado

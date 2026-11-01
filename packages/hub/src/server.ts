@@ -554,6 +554,13 @@ export async function startServer(hub: Hub) {
     if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
     return android.parear(id, (req.body ?? {}) as any);
   });
+  app.post("/api/bots/:id/android/usar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    const serial = String(((req.body ?? {}) as any).serial ?? "");
+    return android.usar(id, serial);
+  });
   app.get("/api/bots/:id/android/status", async (req, reply) => {
     const id = String((req.params as any).id ?? "");
     if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
@@ -1740,7 +1747,10 @@ export async function startServer(hub: Hub) {
       },
     });
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith("/api/") || req.url.startsWith("/mcp")) return reply.code(404).send({ error: "não encontrado" });
+      const u = req.url.split("?")[0];
+      if (u.startsWith("/api/") || u.startsWith("/mcp") || u.startsWith("/pc/") || u.startsWith("/android/")) {
+        return reply.code(404).send({ error: "não encontrado" });
+      }
       reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
       reply.header("Pragma", "no-cache");
       return reply.sendFile("index.html");

@@ -87,6 +87,12 @@ export class ServicoAndroid implements FonteDoProvedor {
     return this.pareamento.status(botId);
   }
 
+  async usar(botId: string, serial: string) {
+    if (!idDeBotValido(botId)) return { ok: false as const, erro: "id inválido" };
+    if (!this.deps.botExiste(botId)) return { ok: false as const, erro: "bot não encontrado" };
+    return this.pareamento.usarConectado(botId, serial);
+  }
+
   /** O provedor redroid chama isto. Aparelho já cadastrado não é substituído. */
   async subirFallback(botId: string) {
     const modo = modoFallbackDoAmbiente();

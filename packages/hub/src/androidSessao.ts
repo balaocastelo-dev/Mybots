@@ -102,7 +102,7 @@ export async function abrirSessao(opts: {
     try { video?.destroy(); } catch { /* ok */ }
     try { controleSock?.destroy(); } catch { /* ok */ }
     try { child?.kill(); } catch { /* ok */ }
-    if (portaForward) void opts.adb(["-s", opts.serial, "forward", "--remove", `tcp:127.0.0.1:${portaForward}`], 5000);
+    if (portaForward) void opts.adb(["-s", opts.serial, "forward", "--remove", `tcp:${portaForward}`], 5000);
   };
   const falhar = (texto: string) => {
     opts.onAviso(texto);
@@ -111,16 +111,20 @@ export async function abrirSessao(opts: {
 
   const empurrar = await opts.adb(["-s", opts.serial, "push", opts.servidor, DESTINO], 60000);
   if (!empurrar.ok) {
-    falhar("Não consegui enviar o scrcpy para o aparelho. Confira se ele está em Depuração sem fio e se o adb conectou.");
-    return { controle: () => {}, fechar };
+    const msg = "Não consegui enviar o scrcpy para o aparelho. Confira se ele está em Depuração sem fio e se o adb conectou.";
+    falhar(msg);
+    throw new Error(msg);
   }
   await opts.adb(["-s", opts.serial, "shell", "pkill", "-f", "com.genymobile.scrcpy.Server"], 5000);
+  // Forwards velhos no mesmo localabstract:scrcpy roubam o slot de video/controle.
+  await opts.adb(["-s", opts.serial, "forward", "--remove-all"], 5000);
 
   portaForward = await portaLivre();
-  const fwd = await opts.adb(["-s", opts.serial, "forward", `tcp:127.0.0.1:${portaForward}`, "localabstract:scrcpy"], 10000);
+  const fwd = await opts.adb(["-s", opts.serial, "forward", `tcp:${portaForward}`, "localabstract:scrcpy"], 10000);
   if (!fwd.ok) {
-    falhar("O adb não abriu a ponte da tela neste PC.");
-    return { controle: () => {}, fechar };
+    const msg = "O adb não abriu a ponte da tela neste PC.";
+    falhar(msg);
+    throw new Error(msg);
   }
 
   let log = "";
@@ -144,17 +148,20 @@ export async function abrirSessao(opts: {
     child?.stderr?.on("data", ver);
     ver();
   });
-  if (fechado) return { controle: () => {}, fechar };
+  if (fechado) throw new Error("sessão android cancelada");
   if (!viuDispositivo && child.exitCode != null) {
     falhar("O servidor de tela saiu antes de mostrar o aparelho.");
-    return { controle: () => {}, fechar };
+    throw new Error("O servidor de tela saiu antes de mostrar o aparelho.");
   }
+  // O abstract socket sobe junto do Device:; um pequeno atraso evita connect prematuro no Windows.
+  await new Promise((r) => setTimeout(r, 250));
 
   try {
     video = await conectarVarias(portaForward);
   } catch {
-    falhar("O aparelho não aceitou a tela. Veja se a depuração sem fio ainda está ligada. " + log.replace(/\s+/g, " ").trim().slice(0, 160));
-    return { controle: () => {}, fechar };
+    const msg = "O aparelho não aceitou a tela. Veja se a depuração sem fio ainda está ligada. " + log.replace(/\s+/g, " ").trim().slice(0, 160);
+    falhar(msg);
+    throw new Error(msg);
   }
   const leitor = new Leitor(video);
   try {
@@ -167,8 +174,9 @@ export async function abrirSessao(opts: {
     const codecBruto = await leitor.ler(4, 5000);
     const codec = codecBruto.readUInt32BE(0);
     if (codec !== CODEC_H264) {
-      falhar("O aparelho não ofereceu H.264. Sem isso o painel não desenha a tela.");
-      return { controle: () => {}, fechar };
+      const msg = "O aparelho não ofereceu H.264. Sem isso o painel não desenha a tela.";
+      falhar(msg);
+      throw new Error(msg);
     }
     let largura = 0;
     let altura = 0;
@@ -204,8 +212,9 @@ export async function abrirSessao(opts: {
     };
     void loop();
   } catch (e) {
-    falhar((e as Error).message || "não li o começo da tela");
-    return { controle: () => {}, fechar };
+    const msg = (e as Error).message || "não li o começo da tela";
+    falhar(msg);
+    throw new Error(msg);
   }
 
   return {

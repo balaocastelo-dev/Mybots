@@ -860,6 +860,33 @@ export class Hub {
     if (b) this.broadcastUi({ type: "bot.update", bot: this.summary(b) });
   }
 
+
+  /**
+   * Entrega um arquivo no chat. Se o mesmo bot acabou de mandar outro arquivo
+   * nesta conversa (últimos 2 min), empilha no mesmo cartão (leque/pilha).
+   * Senão cria mensagem nova.
+   */
+  anexarArquivoNaConversa(
+    conversationId: string,
+    botId: string,
+    file: { id: string; name: string; url: string; mime: string },
+    texto: string,
+    extraMeta: Record<string, unknown> = {},
+  ): StoredMessage {
+    const recent = this.db.getMessages(conversationId, 12).slice().reverse();
+    const last = recent.find((m) => m.sender.kind === "bot" && m.sender.id === botId && Array.isArray(m.meta?.files) && (m.meta!.files as unknown[]).length > 0);
+    const young = last && Date.now() - last.createdAt < 120_000;
+    if (young && last) {
+      const files = [...((last.meta?.files as Array<{ id: string; name: string; url: string; mime: string }>) ?? []), file];
+      const meta = { ...(last.meta ?? {}), ...extraMeta, files };
+      this.db.updateMessageMeta(last.id, meta);
+      const updated: StoredMessage = { ...last, meta };
+      this.broadcastUi({ type: "message", message: updated });
+      return updated;
+    }
+    return this.storeMessage(conversationId, this.botSender(botId), texto, { files: [file], ...extraMeta });
+  }
+
   storeMessage(conversationId: string, sender: Sender, text: string, meta?: Record<string, unknown>, id = newId("m")): StoredMessage {
     const m: StoredMessage = { id, conversationId, sender, text, createdAt: Date.now(), meta };
     this.db.insertMessage(m);
@@ -1446,10 +1473,7 @@ export class Hub {
       case "upload": {
         try {
           const f = this.saveFile(botId, msg.name, msg.mime, Buffer.from(msg.dataBase64, "base64"));
-          this.storeMessage(msg.conversationId, this.botSender(botId), msg.caption ?? `Enviou ${f.name}`, {
-            files: [{ id: f.id, name: f.name, url: f.url, mime: f.mime }],
-            ...(msg.tela ? { tela: true } : {}),
-          });
+          this.anexarArquivoNaConversa(msg.conversationId, botId, { id: f.id, name: f.name, url: f.url, mime: f.mime }, msg.caption ?? `Enviou ${f.name}`, msg.tela ? { tela: true } : {});
           this.db.audit(botId, "file.sent", { name: f.name, size: f.size });
           return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: `Arquivo enviado ao chefe: ${f.name} (${config.publicUrl}${f.url})` });
         } catch (e) {
@@ -1742,7 +1766,7 @@ export class Hub {
     const r = await this.media.generate(botId, kind, prompt, opts);
     if (prev) this.setStatusFromMcp(botId, prev.status, prev.busy);
     if (r.ok) {
-      this.storeMessage(conv, this.botSender(botId), `${kind === "image" ? "🖼️" : "🎬"} ${prompt.slice(0, 140)}${r.note ? `\n_${r.note}_` : ""}`, { files: [{ id: r.file.id, name: r.file.name, url: r.file.url, mime: r.file.mime }], generated: { kind, provider: r.provider, seconds: r.seconds } });
+      this.anexarArquivoNaConversa(conv, botId, { id: r.file.id, name: r.file.name, url: r.file.url, mime: r.file.mime }, `${kind === "image" ? "🖼️" : "🎬"} ${prompt.slice(0, 140)}${r.note ? `\n_${r.note}_` : ""}`, { generated: { kind, provider: r.provider, seconds: r.seconds } });
     } else if (r.tried.length && r.tried.every((t) => /cota/.test(t.reason))) {
       // estourou a cota: avisa o chefe em vez de gastar
       this.broadcastUi({ type: "notify", botId, text: `Cota de ${kind === "image" ? "imagens" : "vídeo"} do dia esgotada (${r.tried.map((t) => t.provider).join(", ")}). Aumente em ⚙️ › Mídia ou tente amanhã.` });

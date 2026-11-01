@@ -15,7 +15,7 @@ import { montarPromptChamada } from "./promptChamada.js";
 import { nextRunOf } from "./scheduler.js";
 import type { Db } from "./db.js";
 
-export type TipoFato = "perfil" | "diario";
+export type TipoFato = "perfil" | "diario" | "regra";
 
 export type ReceitaMemory = {
   content: string;
@@ -221,7 +221,7 @@ export function aplicarReceitaNoNascimento(
         id: newId("fato"),
         botId,
         text,
-        tipo: m.type === "diario" ? "diario" : "perfil",
+        tipo: m.type === "diario" ? "diario" : m.type === "regra" ? "regra" : "perfil",
         learnedAt: m.createdAt ? Date.parse(m.createdAt) || Date.now() : Date.now(),
         empresaId,
         promovido: false,

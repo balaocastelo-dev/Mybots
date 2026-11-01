@@ -208,7 +208,8 @@ export const TOOL_DEFS: ToolDef[] = [
   { name: "cancel_task", description: "Cancela uma tarefa que você delegou e que ainda não terminou.", parameters: { type: "object", properties: { taskId: { type: "string" }, id: { type: "string" }, motivo: { type: "string" } }, required: [] } },
   { name: "set_status", description: "Atualiza o status curto mostrado na lista de contatos (ex.: 'Lendo o o ERP').", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
   { name: "notify_user", description: "Notifica o chefe sobre algo (terminou, precisa de atenção) sem esperar resposta.", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
-  { name: "remember", description: "Guarda um fato curto (perfil ou diário) na memória estruturada deste bot e, se houver chave, também na memória da equipe.", parameters: { type: "object", properties: { text: { type: "string" }, key: { type: "string" }, value: { type: "string" }, tipo: { type: "string", description: "perfil ou diario" } }, required: [] } },
+  { name: "remember", description: "Guarda um fato curto (perfil, diário ou regra) na memória estruturada deste bot e, se houver chave, também na memória da equipe.", parameters: { type: "object", properties: { text: { type: "string" }, key: { type: "string" }, value: { type: "string" }, tipo: { type: "string", description: "perfil, diario ou regra" } }, required: [] } },
+  { name: "aprender_regra", description: "Quando o chefe CORRIGIR você, salve a lição como regra aprendida em UMA frase. A regra entra no seu prompt e você obedece daí em diante. Ex.: regra="Nunca use travessão em anúncios OLX".", parameters: { type: "object", properties: { regra: { type: "string", description: "a regra em uma frase clara" }, text: { type: "string" } }, required: ["regra"] } },
   { name: "forget", description: "Esquece um fato pelo id (ou texto).", parameters: { type: "object", properties: { id: { type: "string" }, key: { type: "string" } }, required: [] } },
   { name: "recall", description: "Lê memória: chave clássica, prefixo*, ou busca nos fatos de diário/perfil.", parameters: { type: "object", properties: { key: { type: "string" }, text: { type: "string" } }, required: [] } },
   { name: "send_file", description: "Envia um arquivo do workspace para o chefe no chat (imagem, planilha, PDF, vídeo curto; até 40 MB).", parameters: { type: "object", properties: { path: { type: "string" }, caption: { type: "string" } }, required: ["path"] } },
@@ -428,6 +429,12 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
         const key = String(args.key ?? "").trim();
         ctx.hub.send({ type: "remember", key: key || text.slice(0, 40), value: text || String(args.value ?? ""), text, tipo: String(args.tipo ?? "diario") });
         return { output: "guardado", ok: true };
+      }
+      case "aprender_regra": {
+        const regra = String(args.regra ?? args.text ?? "").trim();
+        if (!regra) return { output: "Diga a regra em uma frase.", ok: false };
+        const r = await ctx.hub.call((callId) => ({ type: "aprender_regra", callId, regra, text: regra }), 15_000);
+        return { output: r.ok ? ("Regra aprendida: " + regra) : String(r.data ?? "falhou"), ok: r.ok };
       }
       case "forget": {
         const r = await ctx.hub.call((callId) => ({ type: "forget", callId, id: String(args.id ?? ""), key: String(args.key ?? args.text ?? "") }), 15_000);

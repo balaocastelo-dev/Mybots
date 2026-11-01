@@ -856,12 +856,20 @@ export class Db {
   }
 
   // ---- fatos estruturados por bot (+ equipe) ----
-  inserirFato(f: { id: string; botId: string; text: string; tipo: "perfil" | "diario"; learnedAt: number; empresaId: string; promovido?: boolean }) {
+  /** perfil | diario | regra (correção do chefe). */
+  normalizarTipoFato(t: unknown): "perfil" | "diario" | "regra" {
+    const x = String(t ?? "").toLowerCase().trim();
+    if (x === "perfil") return "perfil";
+    if (x === "regra" || x === "regra_aprendida" || x === "aprendida" || x === "correction" || x === "lição" || x === "licao") return "regra";
+    return "diario";
+  }
+
+  inserirFato(f: { id: string; botId: string; text: string; tipo: "perfil" | "diario" | "regra"; learnedAt: number; empresaId: string; promovido?: boolean }) {
     this.db.prepare(`INSERT INTO fatos (id, bot_id, text, tipo, learned_at, empresa_id, promovido) VALUES (?,?,?,?,?,?,?)`)
       .run(f.id, f.botId, f.text, f.tipo, f.learnedAt, f.empresaId || "", f.promovido ? 1 : 0);
   }
 
-  listarFatos(botId: string, tipo?: "perfil" | "diario"): Array<{ id: string; botId: string; text: string; tipo: "perfil" | "diario"; learnedAt: number; empresaId: string; promovido: boolean }> {
+  listarFatos(botId: string, tipo?: "perfil" | "diario" | "regra"): Array<{ id: string; botId: string; text: string; tipo: "perfil" | "diario" | "regra"; learnedAt: number; empresaId: string; promovido: boolean }> {
     const rows = tipo
       ? this.db.prepare(`SELECT * FROM fatos WHERE bot_id=? AND tipo=? ORDER BY learned_at DESC`).all(botId, tipo)
       : this.db.prepare(`SELECT * FROM fatos WHERE bot_id=? ORDER BY learned_at DESC`).all(botId);
@@ -872,17 +880,17 @@ export class Db {
 
   listarFatosEquipe(empresaId: string) {
     return (this.db.prepare(`SELECT * FROM fatos WHERE promovido=1 AND empresa_id=? ORDER BY learned_at DESC`).all(empresaId || "") as any[]).map((r) => ({
-      id: r.id, botId: r.bot_id, text: r.text, tipo: r.tipo as "perfil" | "diario", learnedAt: r.learned_at, empresaId: r.empresa_id || "", promovido: true,
+      id: r.id, botId: r.bot_id, text: r.text, tipo: r.tipo as "perfil" | "diario" | "regra", learnedAt: r.learned_at, empresaId: r.empresa_id || "", promovido: true,
     }));
   }
 
   getFato(id: string) {
     const r = this.db.prepare(`SELECT * FROM fatos WHERE id=?`).get(id) as any;
     if (!r) return undefined;
-    return { id: r.id, botId: r.bot_id, text: r.text, tipo: r.tipo as "perfil" | "diario", learnedAt: r.learned_at, empresaId: r.empresa_id || "", promovido: !!r.promovido };
+    return { id: r.id, botId: r.bot_id, text: r.text, tipo: r.tipo as "perfil" | "diario" | "regra", learnedAt: r.learned_at, empresaId: r.empresa_id || "", promovido: !!r.promovido };
   }
 
-  atualizarFato(id: string, patch: { text?: string; tipo?: "perfil" | "diario" }) {
+  atualizarFato(id: string, patch: { text?: string; tipo?: "perfil" | "diario" | "regra" }) {
     const cur = this.getFato(id);
     if (!cur) return false;
     this.db.prepare(`UPDATE fatos SET text=?, tipo=? WHERE id=?`).run(patch.text ?? cur.text, patch.tipo ?? cur.tipo, id);
@@ -919,9 +927,11 @@ export class Db {
   }
 
   regenerarResumoBot(botId: string, _empresaId = "") {
+    const regras = this.listarFatos(botId, "regra").slice(0, 20);
     const perfil = this.listarFatos(botId, "perfil").slice(0, 12);
     const diario = this.listarFatos(botId, "diario").slice(0, 8);
     const linhas = [
+      ...regras.map((f) => `- [regra] ${f.text}`),
       ...perfil.map((f) => `- [perfil] ${f.text}`),
       ...diario.map((f) => `- [diario ${new Date(f.learnedAt).toLocaleDateString("pt-BR")}] ${f.text}`),
     ];
@@ -935,15 +945,22 @@ export class Db {
   }
 
   blocoFatosParaPrompt(botId: string, empresaId: string): string {
+    const regras = this.listarFatos(botId, "regra").slice(0, 30);
     const perfil = this.listarFatos(botId, "perfil").slice(0, 20);
     const resumo = this.lerResumoBot(botId);
     const equipe = this.listarFatosEquipe(empresaId).slice(0, 12);
     const partes: string[] = ["## Memória estruturada deste bot"];
+    if (regras.length) {
+      partes.push("## Regras aprendidas (correções do chefe — OBEDECER SEMPRE, acima de preferências suas)");
+      for (const f of regras) partes.push(`  - ${f.text}  [id: ${f.id}]`);
+    } else {
+      partes.push("Ainda sem regras aprendidas. Quando o chefe corrigir você, chame aprender_regra com a regra em uma frase.");
+    }
     if (perfil.length) {
-      partes.push("Fatos de perfil (sempre no contexto):");
+      partes.push("", "Fatos de perfil (sempre no contexto):");
       for (const f of perfil) partes.push(`  - ${f.text}  [id: ${f.id}]`);
     } else {
-      partes.push("Ainda sem fatos de perfil. Use remember para guardar.");
+      partes.push("", "Ainda sem fatos de perfil. Use remember para guardar.");
     }
     if (resumo) {
       partes.push("", "Resumo rolante:", resumo);
@@ -952,7 +969,7 @@ export class Db {
       partes.push("", "## Memória da equipe (fatos promovidos)");
       for (const f of equipe) partes.push(`  - ${f.text}  [id: ${f.id}]`);
     }
-    partes.push("", "Diário: busque com recall(consulta) ou remember(texto). Para promover ao time: use o painel (Promover para equipe).");
+    partes.push("", "Diário: busque com recall(consulta) ou remember(texto). Correção do chefe → aprender_regra(regra). Painel: editar/apagar regras.");
     return partes.join("\n");
   }
 

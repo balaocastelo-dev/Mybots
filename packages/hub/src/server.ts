@@ -1094,22 +1094,29 @@ export async function startServer(hub: Hub) {
     // Todo bot tem dono: não existe bot sem empresa. Quem cria herda — bot criado por
     // outro bot nasce na empresa de quem o criou.
     const criador = nodeAuthorized(req);
-    const empresa = (b.empresa || (criador ? hub.empresaDe(criador).id : null)) ?? null;
+    // Perfil unico: empresa nao vem mais do formulario. Herda do criador ou
+    // da primeira empresa da casa — em silencio.
+    const empresas = hub.db.listEmpresas();
+    let empresa = (b.empresa || (criador ? hub.empresaDe(criador).id : null) || empresas[0]?.id) ?? null;
+    if (empresa && !hub.db.getEmpresa(empresa)) empresa = empresas[0]?.id ?? null;
     if (!empresa) {
-      const empresas = hub.db.listEmpresas();
       return reply.code(400).send({
-        error: empresas.length
-          ? "Diga de qual empresa é este bot: todo bot pertence a uma."
-          : "Crie a primeira empresa antes: todo bot pertence a uma empresa.",
+        error: "Crie a primeira empresa antes: todo bot pertence a uma empresa.",
       });
     }
-    if (!hub.db.getEmpresa(empresa)) return reply.code(400).send({ error: `Empresa "${empresa}" não existe.` });
     const r = manager.create(b);
     if ("error" in r) return reply.code(400).send(r);
-    hub.db.setEmpresaDoBot(r.id, r.name, empresa ?? null, !!b.ponte);
+    hub.db.setEmpresaDoBot(r.id, r.name, empresa, false);
+    // Grava avatar/role ja na tabela bots para o bot.update sair completo
+    // antes do processo conectar — senao a lista do celular fica vazia.
+    hub.db.upsertBot(
+      { id: r.id, name: r.name, role: r.role, avatar: r.avatar, color: r.color, voice: r.voice },
+      { engine: r.engine, provider: r.provider?.kind, model: r.provider?.model },
+    );
     try { registrarPc({ botId: r.id, empresaId: empresa, nome: r.name }); }
     catch (e) { console.error(`[pc] não registrei o PC de ${r.id}: ${(e as Error).message}`); }
     hub.broadcastKnowledge();
+    hub.botUpdate(r.id);
     return r;
   });
   app.patch("/api/managed/:id", async (req, reply) => {

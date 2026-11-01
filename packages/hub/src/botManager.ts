@@ -58,6 +58,13 @@ export const PADRAO_DA_CASA = { engine: "direct" as const, provider: "zai", mode
 
 const KEY_ENV: Record<string, string> = { zai: "ZAI_API_KEY", groq: "GROQ_API_KEY", cerebras: "CEREBRAS_API_KEY", mistral: "MISTRAL_API_KEY", gemini: "GEMINI_API_KEY", anthropic: "ANTHROPIC_API_KEY", claude: "ANTHROPIC_API_KEY", nous: "NOUS_API_KEY", openrouter: "OPENROUTER_API_KEY", "opencode-zen": "OPENCODE_API_KEY" };
 
+function defaultAmebaV2(id: string): string {
+  let h = 2166136261;
+  for (const c of id) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+  const n = (Math.abs(h) % 100) + 1;
+  return "/amebas/v2/ameba-v2-" + String(n).padStart(3, "0") + ".png";
+}
+
 export class BotManager {
   private procs = new Map<string, { child: ChildProcess; restarts: number; stopped: boolean; lastExit: number | null }>();
   /** Quem ja foi anunciado como caido. Fica aqui, e nao no objeto do processo,
@@ -125,7 +132,7 @@ export class BotManager {
       id,
       name: input.name.trim(),
       role: (input.role ?? "Assistente").trim(),
-      avatar: input.avatar?.trim() || "🧑‍💻",
+      avatar: input.avatar?.trim() || defaultAmebaV2(id),
       voice: input.voice?.trim() || undefined,
       color: input.color,
       engine,
@@ -164,7 +171,7 @@ export class BotManager {
       ...d,
       ...(patch.name ? { name: patch.name.trim() } : {}),
       ...(patch.role !== undefined ? { role: patch.role.trim() } : {}),
-      ...(patch.avatar !== undefined ? { avatar: patch.avatar.trim() || "🤖" } : {}),
+      ...(patch.avatar !== undefined ? { avatar: patch.avatar.trim() || defaultAmebaV2(id) } : {}),
       ...(patch.voice !== undefined ? { voice: patch.voice.trim() || undefined } : {}),
       ...(patch.engine ? { engine: patch.engine } : {}),
       ...(patch.persona !== undefined ? { persona: patch.persona } : {}),
@@ -184,6 +191,11 @@ export class BotManager {
     if (next.provider.kind === "opencode") next.engine = "opencode";
     this.hub.db.upsertManaged(next);
     this.writeFiles(next);
+    this.hub.db.upsertBot(
+      { id: next.id, name: next.name, role: next.role, avatar: next.avatar, color: next.color, voice: next.voice },
+      { engine: next.engine, provider: next.provider?.kind, model: next.provider?.model },
+    );
+    this.hub.botUpdate(id);
     this.hub.db.audit(id, "bot.updated", { fields: Object.keys(patch) });
     const wasRunning = this.procs.get(id) && !this.procs.get(id)!.stopped;
     if (wasRunning) this.restart(id);

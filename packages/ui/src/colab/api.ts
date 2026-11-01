@@ -1,4 +1,4 @@
-import { api } from "../api";
+import { api, UI_BASE } from "../api";
 import { amostra } from "./amostra";
 import {
   ajudandoDasTarefas,
@@ -19,16 +19,16 @@ const AVISO_EXEMPLO = "Dados de exemplo: o Hub ainda não respondeu /api/colab. 
 
 function url(path: string): string {
   const extra = location.search;
-  if (!extra) return `/api${path}`;
-  if (path.includes("?")) return `/api${path}&${extra.slice(1)}`;
-  return `/api${path}${extra}`;
+  if (!extra) return `${UI_BASE}/api${path}`;
+  if (path.includes("?")) return `${UI_BASE}/api${path}&${extra.slice(1)}`;
+  return `${UI_BASE}/api${path}${extra}`;
 }
 
 type Resposta = { ok: boolean; ausente: boolean; json: unknown; erro: string };
 
 async function pedir(path: string): Promise<Resposta> {
   try {
-    const r = await fetch(url(path), { headers: { accept: "application/json" } });
+    const r = await fetch(url(path), { credentials: "include", headers: { accept: "application/json" } });
     if (r.status === 404 || r.status === 501) return { ok: false, ausente: true, json: null, erro: "" };
     if (!r.ok) return { ok: false, ausente: false, json: null, erro: `resposta ${r.status}` };
     return { ok: true, ausente: false, json: await r.json(), erro: "" };

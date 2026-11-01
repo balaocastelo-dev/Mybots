@@ -59,6 +59,8 @@ export const config = {
   askBotTimeoutMs: Number(process.env.MYBOTS_ASK_BOT_TIMEOUT_MS ?? 180_000),
   /** URL pública do Hub, usada em links de arquivos enviados aos bots (ex.: http://192.168.0.10:8790). */
   publicUrl: (process.env.MYBOTS_PUBLIC_URL ?? `http://127.0.0.1:${process.env.MYBOTS_HUB_PORT ?? 8790}`).replace(/\/$/, ""),
+  /** URL do tunel Cloudflare (HTTPS). UI usa para WS direto quando o proxy (Vercel) nao faz upgrade. */
+  tunnelUrl: (process.env.MYBOTS_TUNNEL_URL ?? "").replace(/\/$/, ""),
   /** Webhook de saída para canais externos (WhatsApp via CRM): recebe {channel, to, botId, text}. */
   channelWebhook: process.env.MYBOTS_CHANNEL_WEBHOOK_URL ?? "",
   channelWebhookKey: process.env.MYBOTS_CHANNEL_WEBHOOK_KEY ?? "",

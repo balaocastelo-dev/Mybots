@@ -40,7 +40,7 @@ import { estadoDaChave } from "./chaves.js";
 import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
-import { authOnlineAtivo, cookieDe, hubTokenLoopbackOk, registrarAuthOnline, rotaPublicaOnline, sessaoValida, SESSION_COOKIE } from "./authOnline.js";
+import { authOnlineAtivo, cookieDe, emitirTicketWs, hubTokenLoopbackOk, registrarAuthOnline, rotaPublicaOnline, sessaoValida, SESSION_COOKIE, ticketWsDoReq } from "./authOnline.js";
 
 export async function startServer(hub: Hub) {
   instalarRedacao();
@@ -82,7 +82,14 @@ export async function startServer(hub: Hub) {
   // Sem MYBOTS_UI_PASSWORD a interface inteira segue aberta, como o resto do painel.
   const SENHA_COOKIE = "mybots_k";
       const uiAuthorized = (req: any) => {
-    if (authOnlineAtivo()) return sessaoValida(req);
+    if (authOnlineAtivo()) {
+      if (sessaoValida(req)) return true;
+      // Ticket curto so para /ws/ui cross-origin: cookie do www.balao.info nao cruza o tunel.
+      // Nunca aceitar Bearer MYBOTS_HUB_TOKEN por aqui (hubTokenLoopbackOk ja barra tunel).
+      const caminho = String(req.url ?? "").split("?")[0];
+      if (caminho === "/ws/ui" || caminho.endsWith("/ws/ui")) return ticketWsDoReq(req);
+      return false;
+    }
     if (!config.uiPassword) return true;
     const key = req.headers["x-mybots-key"] ?? (req.query as any)?.k ?? cookieDe(req, SENHA_COOKIE);
     return key === config.uiPassword;
@@ -359,6 +366,37 @@ export async function startServer(hub: Hub) {
     if (!body?.conversationId) return reply.code(400).send({ error: "conversationId é obrigatório" });
     if (!body?.text?.trim() && !body?.attachments?.length) return reply.code(400).send({ error: "informe text ou attachments" });
     return hub.sendUserMessage(body.conversationId, (body.text ?? "").trim(), body.attachments?.length ? body.attachments : undefined);
+  });
+
+  // Snapshot HTTP: lista + aprovacoes quando o WS nao sobe (rewrite Vercel nao faz upgrade).
+  app.get("/api/ui/snapshot", async () => ({
+    type: "snapshot" as const,
+    bots: hub.summaries(),
+    approvals: hub.db.pendingApprovals(),
+    questions: hub.db.pendingQuestions(),
+    groups: hub.db.listGroups(),
+    routines: hub.db.listRoutines(),
+    voice: voiceConfig(),
+    control: hub.control(),
+  }));
+
+  // Origem do tunel para a UI abrir WS direto (cookie nao sobe; use ticket).
+  app.get("/api/ui/ws-url", async () => {
+    const base = (config.tunnelUrl || config.publicUrl || "").replace(/\/$/, "");
+    if (!base) return { wsUrl: null as string | null, httpOrigin: null as string | null };
+    let u: URL;
+    try { u = new URL(base); } catch { return { wsUrl: null, httpOrigin: null }; }
+    const proto = u.protocol === "https:" ? "wss:" : "ws:";
+    return { wsUrl: `${proto}//${u.host}/ws/ui`, httpOrigin: `${u.protocol}//${u.host}` };
+  });
+
+  // Ticket de sessao curto (90s). Exige cookie mybots_session no mesmo host (via rewrite).
+  app.post("/api/ui/ws-ticket", async (req, reply) => {
+    if (authOnlineAtivo()) {
+      if (!sessaoValida(req)) return reply.code(401).send({ error: "nao autenticado" });
+      return emitirTicketWs(config.usuarioOnline);
+    }
+    return { ticket: "", expiresIn: 0 };
   });
   // Registro de chamada de voz na conversa. Guarda a mensagem SEM mandar o bot
   // responder: um "Chamada de voz - 0:05" e um marcador, nao um pedido.

@@ -3485,3 +3485,47 @@ body.puxando-sidebar * { user-select: none !important; }
 }
 .alma-confirma label { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: 13px; margin: 0; }
 @media (max-width: 640px) { .almas-grade { grid-template-columns: 1fr; } }
+
+/* WhatsApp da conta (PR #33) */
+.quadro.solo { width: 100%; height: auto; flex: none; }
+.fone-whats {
+  width: min(280px, 100%);
+  margin: 0 auto;
+  padding: 12px 12px 14px;
+  border-radius: 22px;
+  background: var(--panel, #fff);
+  color: var(--text);
+  box-shadow: 0 0 0 3px #1a1a1e;
+}
+.fone-aviso { margin: 0 0 8px; color: var(--muted); font-size: 12px; text-align: center; }
+.whats-cartao {
+  position: static;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.whats-cartao.reserva {
+  width: auto;
+  margin: 8px 12px 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.whats-cartao img {
+  width: min(100%, 210px);
+  height: auto;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px;
+}
+.whats-cartao p { margin: 0; }
+.whats-cartao .botoes { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.whats-cartao .btn { font-size: 12px; padding: 4px 8px; }
+.whats-erro { color: var(--danger, #d4453c); }

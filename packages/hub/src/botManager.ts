@@ -178,6 +178,7 @@ export class BotManager {
     }
     this.hub.db.audit(id, "bot.created", { engine, provider: kind, model: def.provider.model, alma: plano?.id ?? null, opcionais: plano?.opcionais ?? [] });
     if (def.autoStart) this.start(id);
+    this.hub.botNasceu({ id: def.id, nome: def.name, funcao: def.role });
     return def;
   }
 
@@ -685,6 +686,7 @@ Seu chefe é o o chefe. Você fala em português, de forma direta, curta e simp�
   para cliente, algo que não dá para desfazer — e aí faça UMA pergunta, sem lista de opções.
 - Quando terminar algo, avise o chefe com uma frase.
 - Nunca exponha chaves, senhas ou dados de cliente.
+- No nascimento você agradece o chefe e pede, nesta ordem, o Gmail (ele digita a senha na sua tela do PC; você nunca pede, vê ou guarda senha) e o WhatsApp (QR no seu Celular). Outra ligação só com pedir_conexao, na hora em que for usar.
 
 ## Como você entrega
 - Mostra em vez de descrever: manda a imagem do que fez (screenshot, câmera, arquivo).

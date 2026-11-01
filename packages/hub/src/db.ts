@@ -196,6 +196,32 @@ export class Db {
     );
     CREATE INDEX IF NOT EXISTS idx_colab_tarefas_para ON colab_tarefas(para, status, criada_em);`);
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS planos (
+        id TEXT PRIMARY KEY,
+        bot_id TEXT NOT NULL,
+        conversation_id TEXT,
+        objetivo TEXT NOT NULL,
+        status TEXT NOT NULL,
+        tarefa_id TEXT,
+        criado_em INTEGER NOT NULL,
+        atualizado_em INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_planos_bot ON planos(bot_id, atualizado_em);
+      CREATE TABLE IF NOT EXISTS plano_passos (
+        id TEXT PRIMARY KEY,
+        plano_id TEXT NOT NULL,
+        ordem INTEGER NOT NULL,
+        titulo TEXT NOT NULL,
+        status TEXT NOT NULL,
+        precisa_decisao INTEGER NOT NULL DEFAULT 0,
+        pergunta TEXT,
+        opcoes TEXT,
+        resposta TEXT,
+        atualizado_em INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_plano_passos_plano ON plano_passos(plano_id, ordem);
+    `);
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS fatos (
         id TEXT PRIMARY KEY,
         bot_id TEXT NOT NULL,
@@ -862,6 +888,53 @@ export class Db {
     if (x === "perfil") return "perfil";
     if (x === "regra" || x === "regra_aprendida" || x === "aprendida" || x === "correction" || x === "lição" || x === "licao") return "regra";
     return "diario";
+  }
+
+  
+  inserirPlano(p: { id: string; botId: string; conversationId: string | null; objetivo: string; status: string; tarefaId: string | null; criadoEm: number; atualizadoEm: number }) {
+    this.db.prepare(`INSERT INTO planos (id, bot_id, conversation_id, objetivo, status, tarefa_id, criado_em, atualizado_em)
+      VALUES (@id, @botId, @conversationId, @objetivo, @status, @tarefaId, @criadoEm, @atualizadoEm)`).run(p);
+  }
+  atualizarPlanoStatus(id: string, status: string, atualizadoEm: number) {
+    this.db.prepare(`UPDATE planos SET status = ?, atualizado_em = ? WHERE id = ?`).run(status, atualizadoEm, id);
+  }
+  getPlano(id: string) {
+    const r = this.db.prepare(`SELECT id, bot_id as botId, conversation_id as conversationId, objetivo, status, tarefa_id as tarefaId, criado_em as criadoEm, atualizado_em as atualizadoEm FROM planos WHERE id = ?`).get(id) as any;
+    return r ?? null;
+  }
+  getPlanoPorTarefa(tarefaId: string) {
+    const r = this.db.prepare(`SELECT id, bot_id as botId, conversation_id as conversationId, objetivo, status, tarefa_id as tarefaId, criado_em as criadoEm, atualizado_em as atualizadoEm FROM planos WHERE tarefa_id = ? ORDER BY criado_em DESC LIMIT 1`).get(tarefaId) as any;
+    return r ?? null;
+  }
+  listarPlanos(botId: string) {
+    return this.db.prepare(`SELECT id, bot_id as botId, conversation_id as conversationId, objetivo, status, tarefa_id as tarefaId, criado_em as criadoEm, atualizado_em as atualizadoEm FROM planos WHERE bot_id = ? ORDER BY atualizado_em DESC LIMIT 50`).all(botId) as any[];
+  }
+  inserirPlanoPasso(p: { id: string; planoId: string; ordem: number; titulo: string; status: string; precisaDecisao: boolean; pergunta: string | null; opcoes: string[]; resposta: string | null; atualizadoEm: number }) {
+    this.db.prepare(`INSERT INTO plano_passos (id, plano_id, ordem, titulo, status, precisa_decisao, pergunta, opcoes, resposta, atualizado_em)
+      VALUES (@id, @planoId, @ordem, @titulo, @status, @precisaDecisao, @pergunta, @opcoes, @resposta, @atualizadoEm)`).run({
+      ...p,
+      precisaDecisao: p.precisaDecisao ? 1 : 0,
+      opcoes: JSON.stringify(p.opcoes ?? []),
+    });
+  }
+  atualizarPlanoPasso(p: { id: string; status: string; precisaDecisao: boolean; pergunta: string | null; opcoes: string[]; resposta: string | null; atualizadoEm: number; titulo?: string }) {
+    this.db.prepare(`UPDATE plano_passos SET status = @status, precisa_decisao = @precisaDecisao, pergunta = @pergunta, opcoes = @opcoes, resposta = @resposta, atualizado_em = @atualizadoEm WHERE id = @id`).run({
+      id: p.id,
+      status: p.status,
+      precisaDecisao: p.precisaDecisao ? 1 : 0,
+      pergunta: p.pergunta,
+      opcoes: JSON.stringify(p.opcoes ?? []),
+      resposta: p.resposta,
+      atualizadoEm: p.atualizadoEm,
+    });
+  }
+  listarPlanoPassos(planoId: string) {
+    const rows = this.db.prepare(`SELECT id, plano_id as planoId, ordem, titulo, status, precisa_decisao as precisaDecisao, pergunta, opcoes, resposta, atualizado_em as atualizadoEm FROM plano_passos WHERE plano_id = ? ORDER BY ordem ASC`).all(planoId) as any[];
+    return rows.map((r) => ({
+      ...r,
+      precisaDecisao: !!r.precisaDecisao,
+      opcoes: (() => { try { const a = JSON.parse(r.opcoes || "[]"); return Array.isArray(a) ? a.map(String) : []; } catch { return []; } })(),
+    }));
   }
 
   inserirFato(f: { id: string; botId: string; text: string; tipo: "perfil" | "diario" | "regra"; learnedAt: number; empresaId: string; promovido?: boolean }) {

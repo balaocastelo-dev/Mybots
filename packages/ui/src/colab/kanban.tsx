@@ -34,6 +34,7 @@ export function QuadroKanban({
   onFiltro,
   bots,
   onAbrirBot,
+  onDecidir,
 }: {
   titulo: string;
   subtitulo?: string;
@@ -51,6 +52,7 @@ export function QuadroKanban({
   onFiltro?: (id: string) => void;
   bots?: BotSummary[];
   onAbrirBot?: (id: string) => void;
+  onDecidir?: (tarefaId: string, resposta: string) => void;
 }) {
   const [abertaId, setAbertaId] = useState<string | null>(abertaInicial ?? null);
   useEffect(() => { if (abertaInicial) setAbertaId(abertaInicial); }, [abertaInicial]);
@@ -108,6 +110,11 @@ export function QuadroKanban({
                     </span>
                     <span className="kanban-pct">{t.progresso}% · {ROTULO_STATUS[t.status]}</span>
                   </button>
+                  {t.status === "waiting" && onDecidir && (
+                    <button type="button" className="btn kanban-decidir" data-colab="decidir" onClick={() => onDecidir(t.id, "pode seguir")}>
+                      Pode seguir
+                    </button>
+                  )}
                   {podeCancelar(t) && (
                     <button type="button" className="link kanban-cancelar" data-colab="cancelar" onClick={() => onCancelar(t.id)}>
                       Cancelar
@@ -127,6 +134,7 @@ export function QuadroKanban({
           onFechar={() => setAbertaId(null)}
           onCancelar={() => onCancelar(aberta.id)}
           onAbrirBot={onAbrirBot}
+          onDecidir={onDecidir}
           bots={bots}
         />
       )}
@@ -140,16 +148,26 @@ function rostos(bots: BotSummary[] | undefined, para: string, de: string, ambos?
   return quem;
 }
 
-function DetalheTarefa({ tarefa, nome, onFechar, onCancelar, onAbrirBot, bots }: {
+function DetalheTarefa({ tarefa, nome, onFechar, onCancelar, onAbrirBot, onDecidir, bots }: {
   tarefa: Tarefa; nome: Nome; onFechar: () => void; onCancelar: () => void;
   onAbrirBot?: (id: string) => void;
+  onDecidir?: (tarefaId: string, resposta: string) => void;
   bots?: BotSummary[];
 }) {
+  const [plano, setPlano] = useState<null | { id: string; status: string; passos: Array<{ id: string; ordem: number; titulo: string; status: string; pergunta?: string | null; opcoes?: string[]; resposta?: string | null }> }>(null);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onFechar]);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/colab/tarefas/" + encodeURIComponent(tarefa.id) + "/plano")
+      .then((r) => r.ok ? r.json() : null)
+      .then((p) => { if (vivo) setPlano(p); })
+      .catch(() => { if (vivo) setPlano(null); });
+    return () => { vivo = false; };
+  }, [tarefa.id, tarefa.status, tarefa.atualizadaEm]);
   return (
     <div className="modal-bg" onClick={onFechar}>
       <div className="modal colab-detalhe" data-colab="detalhe" role="dialog" aria-modal="true" aria-label={tarefa.objetivo} onClick={(e) => e.stopPropagation()}>
@@ -170,6 +188,21 @@ function DetalheTarefa({ tarefa, nome, onFechar, onCancelar, onAbrirBot, bots }:
           {tarefa.profundidade != null && <div><dt>Profundidade</dt><dd>{tarefa.profundidade}</dd></div>}
         </dl>
         <div className="kanban-barra larga" title={tarefa.progresso + "%"}><i style={{ width: tarefa.progresso + "%" }} /></div>
+        {plano && (
+          <div className="plano-passos" data-colab="plano">
+            <h3>Passos do plano</h3>
+            <ol>
+              {plano.passos.map((passo) => (
+                <li key={passo.id} data-passo-status={passo.status}>
+                  <b>{passo.ordem}. {passo.titulo}</b>
+                  <span className={"colab-selo st-" + (passo.status === "esperando_ok" ? "waiting" : passo.status === "feito" ? "done" : passo.status === "em_andamento" ? "running" : "queued")}>{passo.status}</span>
+                  {passo.pergunta && <small>{passo.pergunta}</small>}
+                  {passo.resposta && <small>Resposta: {passo.resposta}</small>}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
         {tarefa.contexto && <p><b>Contexto. </b>{tarefa.contexto}</p>}
         {tarefa.criterioSucesso && <p><b>Pronto quando. </b>{tarefa.criterioSucesso}</p>}
         {tarefa.resultado?.resumo && <p><b>Resultado. </b>{tarefa.resultado.resumo}</p>}
@@ -186,6 +219,15 @@ function DetalheTarefa({ tarefa, nome, onFechar, onCancelar, onAbrirBot, bots }:
           ))}
         </ol>
         <div className="dialogo-botoes">
+          {tarefa.status === "waiting" && onDecidir && (
+            <>
+              {(plano?.passos.find((x) => x.status === "esperando_ok")?.opcoes?.length
+                ? plano!.passos.find((x) => x.status === "esperando_ok")!.opcoes!
+                : ["Pode seguir", "Ajustar depois"]).map((op) => (
+                <button key={op} type="button" className="btn" data-colab="decidir" onClick={() => { onDecidir(tarefa.id, op); onFechar(); }}>{op}</button>
+              ))}
+            </>
+          )}
           {onAbrirBot && <button type="button" className="btn" onClick={() => { onAbrirBot(tarefa.para); onFechar(); }}>Abrir conversa de {nome(tarefa.para)}</button>}
           {podeCancelar(tarefa) && <button type="button" className="btn danger" data-colab="cancelar" onClick={onCancelar}>Cancelar tarefa</button>}
         </div>

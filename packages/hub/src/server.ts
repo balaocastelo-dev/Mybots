@@ -1069,6 +1069,44 @@ export async function startServer(hub: Hub) {
     return { ok: true };
   });
 
+  // --- WhatsApp de cada bot (QR no Celular, sessão na pasta do bot) ---
+  app.get("/api/bots/:id/whatsapp", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    return hub.whatsBot.estado(id);
+  });
+  app.post("/api/bots/:id/whatsapp/conectar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const b = (req.body ?? {}) as { forcar?: boolean };
+    hub.db.audit(id, "whatsapp.bot.conectar", { forcar: !!b.forcar });
+    return hub.whatsBot.conectar(id, !!b.forcar);
+  });
+  app.post("/api/bots/:id/whatsapp/desligar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const b = (req.body ?? {}) as { esquecer?: boolean };
+    await hub.whatsBot.desligar(id, !!b.esquecer);
+    hub.db.audit(id, "whatsapp.bot.desligar", { esquecer: !!b.esquecer });
+    return { ok: true };
+  });
+  app.get("/api/bots/:id/nascimento", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    return hub.nascimentoDe(id) ?? { botId: id, passo: null, gmail: "pendente", whatsapp: "pendente", pedidos: [] };
+  });
+  app.post("/api/bots/:id/nascimento/gmail", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const e = await hub.nascimento.tentarGmail(id, true);
+    return e ?? { botId: id };
+  });
+
   // --- WhatsApp de cada empresa (conta propria, QR propria) ---
   app.get("/api/whatsapp", async () => hub.whats.todos());
   app.get("/api/empresas/:id/whatsapp", async (req) => hub.whats.estado((req.params as any).id));

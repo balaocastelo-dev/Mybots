@@ -1,5 +1,6 @@
-/** Base da UI (Vite). Em producao online: /mybots */
-export const UI_BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+/** Base da UI (Vite). Em producao online: /mybots. Sem o Vite (teste no Node) fica /. */
+const baseVite = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL;
+export const UI_BASE = (baseVite || "/").replace(/\/$/, "");
 
 /** Chamadas da interface. Sem corpo, sem content-type: o Fastify recusa JSON vazio com 400. */
 export const api = (path: string, init?: RequestInit) =>

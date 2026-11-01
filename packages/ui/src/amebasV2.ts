@@ -50,7 +50,7 @@ export const AMEBAS_V2_TODOS: string[] = Array.from({ length: 100 }, (_, i) => S
 
 export function amebaV2Path(num: string | number): string {
   const n = String(num).replace(/\D/g, "").padStart(3, "0");
-  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  const base = ((import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL || "/").replace(/\/$/, "");
   return `${base}/amebas/v2/ameba-v2-${n}.png`;
 }
 

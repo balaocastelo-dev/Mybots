@@ -116,7 +116,7 @@ export function classificarAcaoSensivel(tool: string, input: unknown, descriptio
   const acao = String(dados.acao ?? dados.action ?? "").toLowerCase();
   const texto = `${acao} ${description}`.toLowerCase();
 
-  if (nome === "whatsapp") {
+  if (nome === "whatsapp" || nome === "whatsapp_proprio") {
     if (acao === "enviar" || acao === "foto" || acao === "documento") return "envio";
     return null;
   }

@@ -1,7 +1,7 @@
 // Menu de botão direito do chat. Um componente só, usado pela bolha da mensagem e por
 // quem mais precisar: ele cuida de abrir no cursor, não sair da tela, fechar no Esc e
-// no clique fora, e de funcionar no celular (toque longo).
-import { useEffect, useRef, useState } from "react";
+// no clique fora, e de funcionar no celular (toque longo → folha compacta embaixo).
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 export type ItemMenu = {
   label: string;
@@ -13,24 +13,43 @@ export type ItemMenu = {
   onClick: () => void;
 };
 
+function eToqueGrosso() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(hover: none), (pointer: coarse)").matches || window.innerWidth <= 520;
+}
+
 export function ContextMenu({ x, y, itens, onClose }: { x: number; y: number; itens: ItemMenu[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const folha = eToqueGrosso();
   const [pos, setPos] = useState({ x, y });
-  useEffect(() => {
+
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    // O menu ENCOSTA no cursor. A regra antiga prendia o canto de baixo na borda da
-    // janela: numa janela baixa, ou num menu alto, isso jogava o menu la para cima,
-    // longe de onde a pessoa clicou. Agora abre para baixo quando ha espaco e sobe
-    // (o fim dele no cursor) quando nao ha — que e como todo menu de sistema se comporta.
+    if (folha) {
+      const maxW = Math.min(360, window.innerWidth - 16);
+      const nx = Math.max(8, Math.min(x - maxW / 2, window.innerWidth - maxW - 8));
+      const abaixo = y + 12;
+      let ny = abaixo + r.height <= window.innerHeight - 8
+        ? abaixo
+        : Math.max(8, Math.min(y - r.height - 8, window.innerHeight - r.height - 8));
+      if (window.innerWidth <= 520 && r.height < window.innerHeight * 0.55) {
+        setPos({ x: 8, y: Math.max(8, window.innerHeight - r.height - 8) });
+      } else {
+        setPos({ x: nx, y: ny });
+      }
+      el.focus();
+      return;
+    }
+    const altura = Math.min(r.height, window.innerHeight - 16);
     const folgaAbaixo = window.innerHeight - y - 8;
-    const alturaOk = Math.min(r.height, window.innerHeight - 16);
-    const ny = alturaOk <= folgaAbaixo ? y : Math.max(8, y - alturaOk);
-    const nx = x + r.width + 8 <= window.innerWidth ? x : Math.max(8, x - r.width);
-    setPos({ x: nx, y: ny });
+    const ny = altura <= folgaAbaixo ? y : Math.max(8, y - altura);
+    const nx = x + r.width + 8 <= window.innerWidth ? x : Math.max(8, window.innerWidth - r.width - 8);
+    setPos({ x: nx, y: Math.min(ny, window.innerHeight - altura - 8) });
     el.focus();
-  }, []);
+  }, [x, y, folha, itens.length]);
+
   useEffect(() => {
     const fecha = () => onClose();
     const tecla = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
@@ -38,15 +57,34 @@ export function ContextMenu({ x, y, itens, onClose }: { x: number; y: number; it
     window.addEventListener("keydown", tecla);
     return () => { window.removeEventListener("resize", fecha); window.removeEventListener("keydown", tecla); };
   }, [onClose]);
+
+  const estilo: CSSProperties = {
+    left: pos.x,
+    top: pos.y,
+    height: "auto",
+    maxHeight: folha ? "min(70vh, calc(100vh - 16px))" : "calc(100vh - 16px)",
+    overflowY: "auto",
+  };
+  if (folha && typeof window !== "undefined" && window.innerWidth <= 520) {
+    estilo.width = "calc(100vw - 16px)";
+  }
+
   return (
     <div className="ctx-backdrop" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} onWheel={onClose}>
-      <div ref={ref} className="ctx-menu chat" tabIndex={-1} role="menu" style={{ left: pos.x, top: pos.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={ref}
+        className={"ctx-menu ctx-msg" + (folha ? " ctx-folha" : "")}
+        tabIndex={-1}
+        role="menu"
+        style={estilo}
+        onClick={(e) => e.stopPropagation()}
+      >
         {itens.map((it, i) => (
           <div key={i}>
             {it.separar && <hr />}
             <button role="menuitem" className={it.perigo ? "danger" : ""} onClick={() => { onClose(); it.onClick(); }}>
               <span>{it.icone ? `${it.icone} ` : ""}{it.label}</span>
-              {it.atalho && <small className="atalho">{it.atalho}</small>}
+              {it.atalho && !folha && <small className="atalho">{it.atalho}</small>}
             </button>
           </div>
         ))}

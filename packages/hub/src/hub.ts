@@ -10,6 +10,8 @@ import {
 } from "@mybots/shared";
 import { Db } from "./db.js";
 import { Cofre } from "./cofre.js";
+import { alvoDoNavegador } from "./cofreCdp.js";
+import { ehDocumentoLivel, ehImagem, extrairTextoDoArquivo } from "./extrairAnexo.js";
 import { redigir, semSegredo, textoSeguro } from "./redacao.js";
 import { WhatsAppDasEmpresas } from "./whatsapp.js";
 import { PrimeirosPassos } from "./primeirospassos.js";
@@ -1426,6 +1428,64 @@ export class Hub {
           .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
+      case "read_attachment": {
+        void (async () => {
+          try {
+            const id = String(msg.id || "").trim();
+            if (!id) {
+              this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: "informe o id do anexo" });
+              return;
+            }
+            const f = this.db.getFile(id);
+            if (!f || !fs.existsSync(f.path)) {
+              this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: "anexo nao encontrado" });
+              return;
+            }
+            const parte = Math.max(1, Math.floor(Number(msg.parte) || 1));
+            const pedaco = 12_000;
+            if (ehDocumentoLivel(f.mime || "", f.name)) {
+              const r = await extrairTextoDoArquivo(f.path, f.mime || "", f.name);
+              if ("erro" in r) {
+                this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: r.erro });
+                return;
+              }
+              const ini = (parte - 1) * pedaco;
+              const fatia = r.texto.slice(ini, ini + pedaco);
+              const totalPartes = Math.max(1, Math.ceil(r.texto.length / pedaco));
+              this.sendNode(botId, {
+                type: "result", callId: msg.callId, ok: true,
+                data: `arquivo=${f.name}\nmime=${f.mime}\nvia=${r.como}\nparte=${parte}/${totalPartes}\n\n${fatia}`,
+              });
+              return;
+            }
+            if (ehImagem(f.mime || "", f.name)) {
+              this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: `imagem ${f.name} (${f.mime}, ${f.size || "?"} bytes). O canal de visao do turno ja recebe anexos de imagem; nao precisa baixar por HTTP.` });
+              return;
+            }
+            // binario generico: metadados
+            this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: `arquivo=${f.name}\nmime=${f.mime}\ntamanho=${f.size}\ncaminho interno no Hub (nao e URL). Tipo sem extracao de texto.` });
+          } catch (e) {
+            this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) });
+          }
+        })();
+        return;
+      }
+      case "pc_cdp": {
+        void (async () => {
+          try {
+            const empresaId = this.empresaDe(botId).id ?? null;
+            const alvo = await alvoDoNavegador(botId, empresaId);
+            if ("erro" in alvo) {
+              this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: alvo.erro });
+              return;
+            }
+            this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: { porta: alvo.porta, botId } });
+          } catch (e) {
+            this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) });
+          }
+        })();
+        return;
+      }
       case "celular": {
         void this.atenderCelular(botId, msg)
           .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
@@ -1723,7 +1783,13 @@ export class Hub {
       let fullText = text;
       for (const a of atts) {
         if (a.derivedFrom) continue;
-        fullText += `\n[anexo: ${a.name} — ${config.publicUrl}${a.url}${a.transcript ? ` — transcrição do áudio: "${a.transcript.slice(0, 2000)}"` : ""}]`;
+        fullText += `\n[anexo: ${a.name} (id=${a.id}, ${a.mime || "?"})${
+          a.transcript
+            ? `\n--- conteudo do arquivo ---\n${a.transcript}\n--- fim do arquivo ---`
+            : ehImagem(a.mime || "", a.name)
+              ? " — imagem: o modelo enxerga pelo canal de visao; se precisar de novo use read_attachment"
+              : " — use a ferramenta read_attachment com este id (nao use fetch_url em /api/files)"
+        }]`
       }
       const frames = atts.filter((a) => a.derivedFrom).length;
       if (frames) fullText += `\n[${frames} quadros do vídeo seguem como imagens]`;
@@ -1750,10 +1816,34 @@ export class Hub {
     };
     const atts: Attachment[] = files.map((f) => ({ id: f.id, name: f.name, mime: f.mime, url: f.url, size: f.size }));
     // vídeos/áudios: quadros + transcrição antes de entregar (assíncrono; sem ffmpeg/STT entrega só o original)
+    const enriquecerAnexos = async (lista: Attachment[]): Promise<Attachment[]> => {
+      const out: Attachment[] = [];
+      for (const a of lista) {
+        if (a.derivedFrom) { out.push(a); continue; }
+        if (ehDocumentoLivel(a.mime || "", a.name)) {
+          const f = this.db.getFile(a.id);
+          if (f?.path) {
+            const r = await extrairTextoDoArquivo(f.path, a.mime || "", a.name);
+            if ("texto" in r) out.push({ ...a, transcript: r.texto });
+            else out.push({ ...a, transcript: `(nao consegui extrair texto: ${r.erro})` });
+            continue;
+          }
+        }
+        out.push(a);
+      }
+      return out;
+    };
+
+    // videos/audios: quadros + transcicao; documentos: texto extraido no Hub
     if (atts.some((a) => /^(video|audio)\//i.test(a.mime))) {
       const owner = botOfConversation(conversationId) ?? from.id;
-      void this.media.enrich(owner, atts).then(deliver, (e) => { console.error(`[hub] preparo de mídia: ${(e as Error).message}`); deliver(atts); });
+      void this.media.enrich(owner, atts)
+        .then((m) => enriquecerAnexos(m))
+        .then(deliver, (e) => { console.error(`[hub] preparo de midia: ${(e as Error).message}`); void enriquecerAnexos(atts).then(deliver); });
+    } else if (atts.some((a) => ehDocumentoLivel(a.mime || "", a.name))) {
+      void enriquecerAnexos(atts).then(deliver, (e) => { console.error(`[hub] extracao de anexo: ${(e as Error).message}`); deliver(atts); });
     } else deliver(atts);
+
     return stored;
   }
 

@@ -112,10 +112,12 @@ function rotuloStatus(status: StatusAndroid) {
   return status.conectado ? "Conectado" : "Desconectado";
 }
 
-export function TelasDoBot({ botId, nome, mostrarPareamento }: {
+export function TelasDoBot({ botId, nome, mostrarPareamento = false, modo = "ambos" }: {
   botId: string;
   nome: string;
-  mostrarPareamento: boolean;
+  mostrarPareamento?: boolean;
+  /** pc = só Meu PC; celular = só Android; ambos = legado empilhado */
+  modo?: "pc" | "celular" | "ambos";
 }) {
   const fitRef = useRef<HTMLDivElement | null>(null);
   const [caixa, setCaixa] = useState({ w: 0, h: 0, empilhado: false });
@@ -132,13 +134,13 @@ export function TelasDoBot({ botId, nome, mostrarPareamento }: {
     const ler = () => {
       const w = el.clientWidth;
       const h = el.clientHeight;
-      setCaixa({ w, h, empilhado: w < EMPILHA_ABAIXO });
+      setCaixa({ w, h, empilhado: modo !== "ambos" ? true : w < EMPILHA_ABAIXO });
     };
     ler();
     const ro = new ResizeObserver(ler);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [modo]);
 
   const par = caixa.w > 0 && caixa.h > 0 ? medirPar(caixa.w, caixa.h, caixa.empilhado) : null;
   const androidPronto = status.tipo === "ok" && status.cadastrado && status.conectado && rotaAndroid === "pronta";
@@ -152,7 +154,8 @@ export function TelasDoBot({ botId, nome, mostrarPareamento }: {
             className={"telas-par" + (caixa.empilhado ? " empilhado" : "")}
             style={{ width: par.w, height: par.h }}
           >
-            <div className="quadro quadro-pc">
+            {modo !== "celular" && (
+            <div className={"quadro quadro-pc" + (modo === "pc" ? " sozinho" : "")}>
               {rotaPc === "pronta" && !ampliado
                 ? <iframe src={pcUrl} title={`Tela do PC de ${nome || botId}`} tabIndex={-1} />
                 : <div className="quadro-estado">{ampliado && rotaPc === "pronta" ? "Aberto em tela grande" : textoDaRotaPc(rotaPc)}</div>}
@@ -164,21 +167,24 @@ export function TelasDoBot({ botId, nome, mostrarPareamento }: {
                 onClick={() => setAmpliado(true)}
               />
             </div>
-            <div className="quadro quadro-android" aria-label={`Android de ${nome || botId}`}>
+            )}
+            {modo !== "pc" && (
+            <div className={"quadro quadro-android" + (modo === "celular" ? " sozinho" : "")} aria-label={`Android de ${nome || botId}`}>
               {androidPronto
                 ? <iframe src={androidUrl} title={`Android de ${nome || botId}`} allow="clipboard-read; clipboard-write" />
                 : <div className="quadro-estado">{avisoAndroid}</div>}
             </div>
+            )}
           </div>
         )}
       </div>
 
-      <div className={"android-status" + (status.tipo === "ok" && status.conectado ? " on" : "")} aria-live="polite">
+      {modo !== "pc" && <div className={"android-status" + (status.tipo === "ok" && status.conectado ? " on" : "")} aria-live="polite">
         <i className={"pc-luz" + (status.tipo === "ok" && status.conectado ? " on" : status.tipo === "ok" && status.cadastrado ? " frio" : "")} />
         <span>Android · {rotuloStatus(status)}</span>
-      </div>
+      </div>}
 
-      {mostrarPareamento && <ParearAndroid botId={botId} />}
+      {mostrarPareamento && modo !== "pc" && <ParearAndroid botId={botId} />}
 
       {ampliado && (
         <PcAmpliado

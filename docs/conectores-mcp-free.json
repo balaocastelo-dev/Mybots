@@ -1,0 +1,2873 @@
+{
+  "titulo": "Conectores MCP 100% gratuitos para MyBots",
+  "gerado_em": "2026-10-31 15:58 America/Sao_Paulo",
+  "regra_custo": "Apenas MCP sem chave, chave grátis sem cartão, ou free tier permanente sem cartão. Pagos/trial/cartão só em descartados.",
+  "total_servidores": 109,
+  "categorias": [
+    "arquivos/sistema",
+    "automação",
+    "bancos de dados",
+    "busca web",
+    "dev/docs",
+    "docs/pdf",
+    "email/calendário",
+    "financeiro BR",
+    "github/devops",
+    "mapas/geo",
+    "memória/conhecimento",
+    "navegador/scraping",
+    "produtividade",
+    "redes sociais",
+    "utilidades",
+    "whatsapp/chat"
+  ],
+  "como_conectar_mybots": {
+    "visao": "MyBots hub em localhost:8790 no Windows agrega bots; cada bot pode apontar MCP servers stdio (npx/uvx) ou HTTP/SSE.",
+    "passos": [
+      "1. No hub MyBots / config do bot, abra a seção MCP / Tools / Connectors.",
+      "2. Para stdio: informe command + args (+ env). Ex.: npx -y @playwright/mcp@latest",
+      "3. Para HTTP: informe a URL (ex.: https://mcp.bling.com.br/mcp) e faça OAuth se pedido.",
+      "4. Reinicie o bot; liste tools para confirmar.",
+      "5. Prefira modelos OpenRouter free; tools MCP consomem contexto — comece com 3–5 servers."
+    ],
+    "exemplo_stdio": {
+      "playwright": {
+        "command": "npx",
+        "args": [
+          "@playwright/mcp@latest"
+        ]
+      },
+      "filesystem": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "C:/Users/Public/Documents"
+        ]
+      },
+      "brasil_api": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-brasil-api"
+        ]
+      },
+      "duckduckgo": {
+        "command": "uvx",
+        "args": [
+          "duckduckgo-mcp-server"
+        ]
+      }
+    },
+    "exemplo_http": {
+      "bling": {
+        "url": "https://mcp.bling.com.br/mcp"
+      },
+      "firecrawl_keyless": {
+        "url": "https://mcp.firecrawl.dev/v2/mcp"
+      },
+      "n8n": {
+        "url": "https://SUA-INSTANCIA/mcp-server/http"
+      }
+    },
+    "windows_tips": [
+      "Instale Node LTS e Python/uv (uvx) no PATH do usuário do hub.",
+      "Use caminhos absolutos Windows (C:/...).",
+      "Firewall: permita node/python para localhost:8790 e browsers Playwright."
+    ]
+  },
+  "top15": [
+    {
+      "nome": "Bling ERP MCP",
+      "link": "https://developer.bling.com.br/bling-mcp",
+      "por_que": "ERP oficial OAuth — core MEU BLING.",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "API Bling conforme plano; MCP sem taxa"
+    },
+    {
+      "nome": "Playwright MCP",
+      "link": "https://github.com/microsoft/playwright-mcp",
+      "por_que": "Navegador local sem chave — OLX/sites sem API.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local"
+    },
+    {
+      "nome": "MCP Filesystem",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+      "por_que": "Arquivos do hub Windows.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local"
+    },
+    {
+      "nome": "DuckDuckGo MCP",
+      "link": "https://github.com/nickclyde/duckduckgo-mcp-server",
+      "por_que": "Busca web sem conta nem cartão.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Sem cota; ~30/min; pode vir vazio"
+    },
+    {
+      "nome": "MCP Memory",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+      "por_que": "Memória persistente entre sessões.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado (arquivo local)"
+    },
+    {
+      "nome": "Brasil API MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/identity/brasil-api",
+      "por_que": "CEP/CNPJ/bancos BR sem auth.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Rate limit público BrasilAPI"
+    },
+    {
+      "nome": "WhatsApp MCP (lharries)",
+      "link": "https://github.com/lharries/whatsapp-mcp",
+      "por_que": "WhatsApp local via QR sem gateway pago.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado; WhatsApp pessoal; risco ban"
+    },
+    {
+      "nome": "GitHub MCP Official",
+      "link": "https://github.com/github/github-mcp-server",
+      "por_que": "Repos/código PROGRAMADOR.",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "GitHub Free; rate API"
+    },
+    {
+      "nome": "n8n MCP (instância)",
+      "link": "https://docs.n8n.io/advanced-ai/accessing-n8n-mcp-server/",
+      "por_que": "Automação self-host free.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Self-host n8n Community free; cloud tem free trial limitado"
+    },
+    {
+      "nome": "Tavily MCP",
+      "link": "https://github.com/tavily-ai/tavily-mcp",
+      "por_que": "Busca agentic 1000 créditos/mês sem cartão.",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "1000 créditos/mês sem cartão; para ao esgotar"
+    },
+    {
+      "nome": "Firecrawl MCP keyless",
+      "link": "https://github.com/firecrawl/firecrawl-mcp-server",
+      "por_que": "Scrape hospedado sem chave.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Keyless por IP/dia; free key 1000 créditos/mês sem cartão"
+    },
+    {
+      "nome": "MCP Fetch",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+      "por_que": "URL→Markdown oficial.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local"
+    },
+    {
+      "nome": "MarkItDown MCP",
+      "link": "https://github.com/microsoft/markitdown",
+      "por_que": "PDF/Office→MD (aulas/docs).",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local"
+    },
+    {
+      "nome": "Mercado Pago MCP",
+      "link": "https://www.mercadopago.com.br/developers/pt/docs/mcp-server/overview",
+      "por_que": "Pagamentos BR oficial.",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Conta MP free; taxas por transação"
+    },
+    {
+      "nome": "TypeScript MCP SDK",
+      "link": "https://github.com/modelcontextprotocol/typescript-sdk",
+      "por_que": "Criar conectores na Escola de Bots.",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado"
+    }
+  ],
+  "personas": {
+    "MEU BLING": [
+      "Bling ERP MCP",
+      "Brasil API MCP (CodeSpar)",
+      "Mercado Pago MCP",
+      "Playwright MCP",
+      "Excel MCP",
+      "Tiny ERP MCP (CodeSpar)",
+      "Evolution API MCP (CodeSpar)"
+    ],
+    "Herrera": [
+      "Gmail MCP (GongRzhe)",
+      "Google Calendar MCP",
+      "Playwright MCP",
+      "DuckDuckGo MCP",
+      "MCP Memory",
+      "RD Station MCP (CodeSpar)",
+      "Bluesky / ATProto MCP"
+    ],
+    "PROGRAMADOR": [
+      "GitHub MCP Official",
+      "Playwright MCP",
+      "Context7 MCP",
+      "TypeScript MCP SDK",
+      "Docker MCP",
+      "Supabase MCP",
+      "Vercel MCP"
+    ],
+    "Professor": [
+      "MarkItDown MCP",
+      "MCP Sequential Thinking",
+      "Wikipedia MCP",
+      "Obsidian MCP",
+      "MCP Fetch",
+      "YouTube Transcript MCP"
+    ],
+    "escola-navegador": [
+      "Playwright MCP",
+      "Browser MCP",
+      "Firecrawl MCP keyless",
+      "DuckDuckGo MCP",
+      "MCP Fetch"
+    ],
+    "escola-conector": [
+      "TypeScript MCP SDK",
+      "Python MCP SDK",
+      "FastMCP (framework)",
+      "n8n MCP (instância)",
+      "CodeSpar catalogo LATAM",
+      "MCP Registry"
+    ],
+    "escola-rotineiro": [
+      "MCP Memory",
+      "Time MCP",
+      "Home Assistant MCP",
+      "Todoist MCP",
+      "Google Calendar MCP"
+    ],
+    "todos": [
+      "MCP Filesystem",
+      "DuckDuckGo MCP",
+      "MCP Memory",
+      "MCP Fetch",
+      "Time MCP"
+    ]
+  },
+  "servidores": [
+    {
+      "nome": "Box MCP Remote",
+      "link": "https://github.com/box/mcp-server-box-remote",
+      "categoria": "arquivos/sistema",
+      "o_que_faz": "Arquivos Box.com.",
+      "ferramentas": "search/read Box files",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Box free personal",
+      "credencial": "OAuth Box",
+      "origem": "oficial",
+      "instalacao": "ver box/mcp-server-box-remote",
+      "config": {
+        "url": "https://mcp.box.com/"
+      },
+      "bots": [
+        "Herrera",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Desktop Commander",
+      "link": "https://github.com/wonderwhy-er/DesktopCommanderMCP",
+      "categoria": "arquivos/sistema",
+      "o_que_faz": "Terminal, arquivos e processos no desktop.",
+      "ferramentas": "execute_command, read/write files, list_processes",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "npx -y @wonderwhy-er/desktop-commander",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@wonderwhy-er/desktop-commander"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "escola-navegador"
+      ]
+    },
+    {
+      "nome": "Filesystem Go (mark3labs)",
+      "link": "https://github.com/mark3labs/mcp-filesystem-server",
+      "categoria": "arquivos/sistema",
+      "o_que_faz": "Filesystem MCP em Go.",
+      "ferramentas": "read/write/list",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Allowed dirs",
+      "origem": "comunidade",
+      "instalacao": "binário mcp-filesystem-server",
+      "config": {
+        "command": "mcp-filesystem-server",
+        "args": [
+          "C:/Users/user/Documents"
+        ]
+      },
+      "bots": [
+        "todos",
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "MCP Everything",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything",
+      "categoria": "arquivos/sistema",
+      "o_que_faz": "Servidor de teste do protocolo MCP.",
+      "ferramentas": "echo, add, resources, prompts",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "npx -y @modelcontextprotocol/server-everything",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-everything"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "escola-conector"
+      ]
+    },
+    {
+      "nome": "MCP Filesystem",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+      "categoria": "arquivos/sistema",
+      "o_que_faz": "Arquivos locais com pastas liberadas.",
+      "ferramentas": "read_file, write_file, edit_file, list_directory, search_files",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "npx -y @modelcontextprotocol/server-filesystem C:/Users/user/Documents",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "C:/Users/user/Documents"
+        ]
+      },
+      "bots": [
+        "todos",
+        "PROGRAMADOR",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "n8n MCP (instância)",
+      "link": "https://docs.n8n.io/advanced-ai/accessing-n8n-mcp-server/",
+      "categoria": "automação",
+      "o_que_faz": "Expor workflows n8n como tools MCP.",
+      "ferramentas": "workflows habilitados",
+      "transporte": "http",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Self-host n8n Community free; cloud tem free trial limitado",
+      "credencial": "URL + API key da sua instância",
+      "origem": "oficial",
+      "instalacao": "ativar MCP na instância n8n",
+      "config": {
+        "url": "https://sua-instancia.n8n/mcp-server/http"
+      },
+      "bots": [
+        "todos",
+        "MEU BLING",
+        "Herrera",
+        "escola-conector"
+      ]
+    },
+    {
+      "nome": "Airtable MCP",
+      "link": "https://github.com/domdomegg/airtable-mcp-server",
+      "categoria": "bancos de dados",
+      "o_que_faz": "CRUD Airtable.",
+      "ferramentas": "list/create/update records",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Airtable Free",
+      "credencial": "AIRTABLE_API_KEY",
+      "origem": "comunidade",
+      "instalacao": "npx airtable-mcp-server",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "airtable-mcp-server"
+        ],
+        "env": {
+          "AIRTABLE_API_KEY": "${AIRTABLE_API_KEY}"
+        }
+      },
+      "bots": [
+        "Herrera",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Anyquery",
+      "link": "https://github.com/julien040/anyquery",
+      "categoria": "bancos de dados",
+      "o_que_faz": "SQL sobre apps (GitHub, Notion, etc.) + MCP.",
+      "ferramentas": "SQL query",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Local; APIs dependem de cada serviço",
+      "credencial": "Tokens por integração",
+      "origem": "comunidade",
+      "instalacao": "anyquery mcp",
+      "config": {
+        "command": "anyquery",
+        "args": [
+          "mcp"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Appwrite MCP",
+      "link": "https://github.com/appwrite/mcp",
+      "categoria": "bancos de dados",
+      "o_que_faz": "Backend Appwrite.",
+      "ferramentas": "databases, users, storage",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Cloud free / self-host",
+      "credencial": "APPWRITE_API_KEY",
+      "origem": "oficial",
+      "instalacao": "ver appwrite/mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-server-appwrite"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "DBHub",
+      "link": "https://github.com/bytebase/dbhub",
+      "categoria": "bancos de dados",
+      "o_que_faz": "Multi-DB SQL (Postgres/MySQL/SQLite…).",
+      "ferramentas": "execute_sql, list_schemas",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado nos seus DBs",
+      "credencial": "DSN",
+      "origem": "comunidade",
+      "instalacao": "npx @bytebase/dbhub",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@bytebase/dbhub",
+          "--dsn",
+          "sqlite:///./data.db"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Elasticsearch MCP",
+      "link": "https://github.com/elastic/mcp-server-elasticsearch",
+      "categoria": "bancos de dados",
+      "o_que_faz": "Busca ES/OS.",
+      "ferramentas": "search, get",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Self-host OSS; Elastic Cloud tem trial",
+      "credencial": "ES_URL",
+      "origem": "oficial",
+      "instalacao": "npx @elastic/mcp-server-elasticsearch",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@elastic/mcp-server-elasticsearch"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "MongoDB MCP",
+      "link": "https://github.com/mongodb-js/mongodb-mcp-server",
+      "categoria": "bancos de dados",
+      "o_que_faz": "MongoDB Atlas/local.",
+      "ferramentas": "find, aggregate",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Atlas Free M0; local ilimitado",
+      "credencial": "MDB connection string",
+      "origem": "oficial",
+      "instalacao": "npx -y mongodb-mcp-server",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mongodb-mcp-server"
+        ],
+        "env": {
+          "MDB_MCP_CONNECTION_STRING": "${URI}"
+        }
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "MySQL MCP",
+      "link": "https://github.com/designcomputer/mysql_mcp_server",
+      "categoria": "bancos de dados",
+      "o_que_faz": "MySQL/MariaDB.",
+      "ferramentas": "query, list_tables",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Seu MySQL",
+      "credencial": "MYSQL_*",
+      "origem": "comunidade",
+      "instalacao": "uvx mysql-mcp-server",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mysql_mcp_server"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Neo4j MCP",
+      "link": "https://github.com/neo4j-contrib/mcp-neo4j",
+      "categoria": "bancos de dados",
+      "o_que_faz": "Grafos Neo4j.",
+      "ferramentas": "cypher read/write",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Aura Free / local",
+      "credencial": "NEO4J_URI",
+      "origem": "oficial",
+      "instalacao": "uvx mcp-neo4j-cypher",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-neo4j-cypher"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "PostgreSQL MCP (arquivado)",
+      "link": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres",
+      "categoria": "bancos de dados",
+      "o_que_faz": "Postgres read-only.",
+      "ferramentas": "query, schema",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Seu Postgres",
+      "credencial": "DATABASE_URL",
+      "origem": "oficial (arquivado)",
+      "instalacao": "npx -y @modelcontextprotocol/server-postgres postgresql://localhost/db",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-postgres",
+          "postgresql://localhost/db"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Postgres community",
+      "link": "https://github.com/antonorlov/mcp-postgres-server",
+      "categoria": "bancos de dados",
+      "o_que_faz": "Postgres MCP comunidade.",
+      "ferramentas": "query, schema",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Seu Postgres",
+      "credencial": "DATABASE_URL",
+      "origem": "comunidade",
+      "instalacao": "npx mcp-postgres-server",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-postgres-server"
+        ],
+        "env": {
+          "DATABASE_URL": "${DATABASE_URL}"
+        }
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Redis MCP (arquivado)",
+      "link": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/redis",
+      "categoria": "bancos de dados",
+      "o_que_faz": "Redis key-value.",
+      "ferramentas": "get/set/list",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Seu Redis",
+      "credencial": "REDIS_URL",
+      "origem": "oficial (arquivado)",
+      "instalacao": "npx -y @modelcontextprotocol/server-redis redis://localhost:6379",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-redis",
+          "redis://localhost:6379"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "SQLite MCP (arquivado)",
+      "link": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/sqlite",
+      "categoria": "bancos de dados",
+      "o_que_faz": "SQLite local.",
+      "ferramentas": "read_query, write_query, list_tables",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Path .db",
+      "origem": "oficial (arquivado)",
+      "instalacao": "uvx mcp-server-sqlite --db-path ./data.db",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-sqlite",
+          "--db-path",
+          "./data.db"
+        ]
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera",
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "SQLite community",
+      "link": "https://github.com/Aderali06/sqlite-mcp-server",
+      "categoria": "bancos de dados",
+      "o_que_faz": "SQLite MCP comunidade.",
+      "ferramentas": "SQL query/exec",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "DB path",
+      "origem": "comunidade",
+      "instalacao": "ver README",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "sqlite-mcp-server"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Supabase MCP",
+      "link": "https://github.com/supabase/mcp",
+      "categoria": "bancos de dados",
+      "o_que_faz": "Projetos Supabase (SQL/schema).",
+      "ferramentas": "database, schema, docs",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Supabase Free; MCP sem custo extra",
+      "credencial": "OAuth / project_ref",
+      "origem": "oficial",
+      "instalacao": "https://mcp.supabase.com/mcp?read_only=true",
+      "config": {
+        "url": "https://mcp.supabase.com/mcp?read_only=true"
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "DuckDuckGo MCP",
+      "link": "https://github.com/nickclyde/duckduckgo-mcp-server",
+      "categoria": "busca web",
+      "o_que_faz": "Busca DDG HTML sem conta.",
+      "ferramentas": "search, fetch_content",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Sem cota; ~30/min; pode vir vazio",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "uvx duckduckgo-mcp-server",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "duckduckgo-mcp-server"
+        ]
+      },
+      "bots": [
+        "todos",
+        "escola-navegador"
+      ]
+    },
+    {
+      "nome": "Google Custom Search MCP",
+      "link": "https://github.com/A1-x-Tech/mcp-google-custom-search",
+      "categoria": "busca web",
+      "o_que_faz": "Programmable Search Engine.",
+      "ferramentas": "custom search",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "~100 queries/dia free CSE",
+      "credencial": "GOOGLE_API_KEY + CX",
+      "origem": "comunidade",
+      "instalacao": "ver README A1-x-Tech",
+      "config": {
+        "command": "node",
+        "args": [
+          "path/to/gcs-mcp"
+        ]
+      },
+      "bots": [
+        "todos"
+      ]
+    },
+    {
+      "nome": "Hacker News MCP",
+      "link": "https://github.com/pskill9/hn-server",
+      "categoria": "busca web",
+      "o_que_faz": "Hacker News.",
+      "ferramentas": "get_stories, get_story",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "API HN free",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "npx hn-mcp-server",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "hn-server"
+        ]
+      },
+      "bots": [
+        "Professor",
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "MCP Fetch",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+      "categoria": "busca web",
+      "o_que_faz": "URL → Markdown.",
+      "ferramentas": "fetch",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "uvx mcp-server-fetch",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-fetch"
+        ]
+      },
+      "bots": [
+        "todos",
+        "escola-navegador"
+      ]
+    },
+    {
+      "nome": "SearXNG MCP",
+      "link": "https://github.com/ihor-sokoliuk/mcp-searxng",
+      "categoria": "busca web",
+      "o_que_faz": "Metabusca SearXNG self-hosted.",
+      "ferramentas": "search, fetch",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado no seu Docker",
+      "credencial": "SEARXNG_URL",
+      "origem": "comunidade",
+      "instalacao": "uvx mcp-searxng",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-searxng"
+        ],
+        "env": {
+          "SEARXNG_URL": "http://localhost:8080"
+        }
+      },
+      "bots": [
+        "todos",
+        "escola-navegador"
+      ]
+    },
+    {
+      "nome": "Tavily MCP",
+      "link": "https://github.com/tavily-ai/tavily-mcp",
+      "categoria": "busca web",
+      "o_que_faz": "Busca/extract para agentes.",
+      "ferramentas": "tavily-search, tavily-extract",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "1000 créditos/mês sem cartão; para ao esgotar",
+      "credencial": "TAVILY_API_KEY",
+      "origem": "oficial",
+      "instalacao": "npx -y tavily-mcp@latest",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "tavily-mcp@latest"
+        ],
+        "env": {
+          "TAVILY_API_KEY": "${TAVILY_API_KEY}"
+        }
+      },
+      "bots": [
+        "todos",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "WebSearchFree",
+      "link": "https://github.com/drmikecrypto/WebSearchFree",
+      "categoria": "busca web",
+      "o_que_faz": "Metabusca local open-source estilo Tavily.",
+      "ferramentas": "web_search, web_search_multi, web_extract",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "wsf mcp",
+      "config": {
+        "command": "wsf",
+        "args": [
+          "mcp"
+        ]
+      },
+      "bots": [
+        "todos",
+        "escola-navegador"
+      ]
+    },
+    {
+      "nome": "Wikipedia MCP",
+      "link": "https://github.com/rudra-ravi/wikipedia-mcp",
+      "categoria": "busca web",
+      "o_que_faz": "Artigos Wikipedia.",
+      "ferramentas": "search, get_article",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "API Wikimedia fair use",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "uvx wikipedia-mcp",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "wikipedia-mcp"
+        ]
+      },
+      "bots": [
+        "Professor",
+        "todos"
+      ]
+    },
+    {
+      "nome": "YouTube Transcript MCP",
+      "link": "https://github.com/sinco-lab/mcp-youtube-transcript",
+      "categoria": "busca web",
+      "o_que_faz": "Transcrições YouTube.",
+      "ferramentas": "get_transcript",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado (yt); rate YouTube",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "npx mcp-youtube-transcript",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@sinco-lab/mcp-youtube-transcript"
+        ]
+      },
+      "bots": [
+        "Professor",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "arXiv MCP",
+      "link": "https://github.com/blazickjp/arxiv-mcp-server",
+      "categoria": "busca web",
+      "o_que_faz": "Papers arXiv.",
+      "ferramentas": "search_papers, read_paper",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "API arXiv free",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "uvx arxiv-mcp-server",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "arxiv-mcp-server"
+        ]
+      },
+      "bots": [
+        "Professor",
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Context7 MCP",
+      "link": "https://github.com/upstash/context7",
+      "categoria": "dev/docs",
+      "o_que_faz": "Docs atualizadas de libs para o LLM.",
+      "ferramentas": "resolve-library-id, get-library-docs",
+      "transporte": "stdio/http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Free tier Context7 (sem cartão no plano free documentado)",
+      "credencial": "Opcional CONTEXT7_API_KEY",
+      "origem": "oficial",
+      "instalacao": "npx -y @upstash/context7-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@upstash/context7-mcp"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "FastMCP (framework)",
+      "link": "https://github.com/jlowin/fastmcp",
+      "categoria": "dev/docs",
+      "o_que_faz": "Framework Python para criar MCP servers.",
+      "ferramentas": "(SDK)",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado",
+      "credencial": "Nenhuma",
+      "origem": "oficial comunidade",
+      "instalacao": "pip install fastmcp",
+      "config": {
+        "command": "python",
+        "args": [
+          "-m",
+          "fastmcp",
+          "run",
+          "server.py"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "escola-conector"
+      ]
+    },
+    {
+      "nome": "Hugging Face MCP",
+      "link": "https://github.com/huggingface/hf-mcp-server",
+      "categoria": "dev/docs",
+      "o_que_faz": "Hub HF: models, datasets, Spaces.",
+      "ferramentas": "search models, datasets",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "HF Free",
+      "credencial": "HF token opcional",
+      "origem": "oficial",
+      "instalacao": "https://huggingface.co/mcp",
+      "config": {
+        "url": "https://huggingface.co/mcp"
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "MCP Registry",
+      "link": "https://registry.modelcontextprotocol.io",
+      "categoria": "dev/docs",
+      "o_que_faz": "Registry oficial de servers MCP.",
+      "ferramentas": "search servers",
+      "transporte": "http",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado leitura",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "https://registry.modelcontextprotocol.io",
+      "config": {
+        "url": "https://registry.modelcontextprotocol.io"
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "escola-conector"
+      ]
+    },
+    {
+      "nome": "Python MCP SDK",
+      "link": "https://github.com/modelcontextprotocol/python-sdk",
+      "categoria": "dev/docs",
+      "o_que_faz": "SDK oficial Python.",
+      "ferramentas": "(SDK)",
+      "transporte": "stdio/http",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "pip install mcp",
+      "config": {
+        "command": "python",
+        "args": [
+          "server.py"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "escola-conector"
+      ]
+    },
+    {
+      "nome": "TypeScript MCP SDK",
+      "link": "https://github.com/modelcontextprotocol/typescript-sdk",
+      "categoria": "dev/docs",
+      "o_que_faz": "SDK oficial TS para servers/clients.",
+      "ferramentas": "(SDK)",
+      "transporte": "stdio/http",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "npm i @modelcontextprotocol/sdk",
+      "config": {
+        "command": "node",
+        "args": [
+          "server.js"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "escola-conector"
+      ]
+    },
+    {
+      "nome": "Excel MCP",
+      "link": "https://github.com/haris-musa/excel-mcp-server",
+      "categoria": "docs/pdf",
+      "o_que_faz": "Planilhas Excel.",
+      "ferramentas": "read/write sheets",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "uvx excel-mcp-server",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "excel-mcp-server"
+        ]
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "MarkItDown MCP",
+      "link": "https://github.com/microsoft/markitdown",
+      "categoria": "docs/pdf",
+      "o_que_faz": "PDF/Office → Markdown (Microsoft).",
+      "ferramentas": "convert_to_markdown",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "npx / uv markitdown-mcp",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "markitdown-mcp"
+        ]
+      },
+      "bots": [
+        "todos",
+        "Professor",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Markdownify MCP",
+      "link": "https://github.com/zcaceres/markdownify-mcp",
+      "categoria": "docs/pdf",
+      "o_que_faz": "HTML/PDF/YouTube → MD.",
+      "ferramentas": "markdownify",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "npx markdownify-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "markdownify-mcp"
+        ]
+      },
+      "bots": [
+        "todos",
+        "Professor"
+      ]
+    },
+    {
+      "nome": "Mermaid MCP",
+      "link": "https://github.com/peng-shawn/mermaid-mcp-server",
+      "categoria": "docs/pdf",
+      "o_que_faz": "Diagramas Mermaid → imagem.",
+      "ferramentas": "generate",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "npx mermaid-mcp-server",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@peng-shawn/mermaid-mcp-server"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "Professor"
+      ]
+    },
+    {
+      "nome": "Pandoc MCP",
+      "link": "https://github.com/vivekVells/mcp-pandoc",
+      "categoria": "docs/pdf",
+      "o_que_faz": "Conversões pandoc.",
+      "ferramentas": "convert",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado; precisa pandoc instalado",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "uvx mcp-pandoc",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-pandoc"
+        ]
+      },
+      "bots": [
+        "Professor",
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Gmail MCP (GongRzhe)",
+      "link": "https://github.com/GongRzhe/Gmail-MCP-Server",
+      "categoria": "email/calendário",
+      "o_que_faz": "Gmail send/read/labels.",
+      "ferramentas": "send_email, search, read, labels",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Gmail free; quotas Google API",
+      "credencial": "OAuth Google",
+      "origem": "comunidade",
+      "instalacao": "npx @gongrzhe/server-gmail-autoauth-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@gongrzhe/server-gmail-autoauth-mcp"
+        ]
+      },
+      "bots": [
+        "todos",
+        "Herrera",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Gmail MCP (cli_prism)",
+      "link": "https://github.com/shinzo-labs/gmail-mcp",
+      "categoria": "email/calendário",
+      "o_que_faz": "Gmail MCP comunidade.",
+      "ferramentas": "messages, threads, draft",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Gmail free",
+      "credencial": "OAuth Google",
+      "origem": "comunidade",
+      "instalacao": "npx gmail-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@shinzo-labs/gmail-mcp"
+        ]
+      },
+      "bots": [
+        "todos"
+      ]
+    },
+    {
+      "nome": "Google Calendar MCP",
+      "link": "https://github.com/nspady/google-calendar-mcp",
+      "categoria": "email/calendário",
+      "o_que_faz": "Agenda Google.",
+      "ferramentas": "list/create/update events",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Google Calendar free",
+      "credencial": "OAuth Google",
+      "origem": "comunidade",
+      "instalacao": "npx @nspady/google-calendar-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@nspady/google-calendar-mcp"
+        ]
+      },
+      "bots": [
+        "todos",
+        "Herrera",
+        "Professor"
+      ]
+    },
+    {
+      "nome": "MCP Google Workspace",
+      "link": "https://github.com/aaronsb/google-workspace-mcp",
+      "categoria": "email/calendário",
+      "o_que_faz": "Gmail+Calendar+Drive.",
+      "ferramentas": "gmail, calendar, drive",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Google free",
+      "credencial": "OAuth Google",
+      "origem": "comunidade",
+      "instalacao": "ver aaronsb/google-workspace-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "google-workspace-mcp"
+        ]
+      },
+      "bots": [
+        "Herrera",
+        "todos"
+      ]
+    },
+    {
+      "nome": "Asaas MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/payments/asaas",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Cobranças Asaas.",
+      "ferramentas": "customers, payments, subscriptions",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Sandbox free; produção conforme Asaas",
+      "credencial": "ASAAS_API_KEY",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-asaas",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-asaas"
+        ],
+        "env": {
+          "ASAAS_API_KEY": "${ASAAS_API_KEY}"
+        }
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Bling ERP MCP",
+      "link": "https://developer.bling.com.br/bling-mcp",
+      "categoria": "financeiro BR",
+      "o_que_faz": "MCP oficial Bling ERP OAuth.",
+      "ferramentas": "produtos, pedidos, estoque, financeiro, NF",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "API Bling conforme plano; MCP sem taxa",
+      "credencial": "OAuth Bling",
+      "origem": "oficial",
+      "instalacao": "https://mcp.bling.com.br/mcp",
+      "config": {
+        "url": "https://mcp.bling.com.br/mcp"
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Bling MCP (CodeSpar OSS)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/erp/bling",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Bling via stdio OSS (alternativa ao MCP remoto oficial).",
+      "ferramentas": "products, orders, stock, nfe",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "MCP OSS; API Bling OAuth conforme plano",
+      "credencial": "BLING OAuth",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-bling",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-bling"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Brasil API MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/identity/brasil-api",
+      "categoria": "financeiro BR",
+      "o_que_faz": "CEP, CNPJ, banks, FX, IBGE sem auth.",
+      "ferramentas": "cep, cnpj, banks, taxa-cambio, ibge",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Rate limit público BrasilAPI",
+      "credencial": "Nenhuma",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-brasil-api",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-brasil-api"
+        ]
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera",
+        "todos"
+      ]
+    },
+    {
+      "nome": "CodeSpar catalogo LATAM",
+      "link": "https://codespar.dev/servers",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Catálogo 130+ MCP LATAM (MIT) — use só os de API free/sandbox.",
+      "ferramentas": "(meta)",
+      "transporte": "—",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Catálogo e pacotes npm MIT; cada API tem seu limite",
+      "credencial": "Nenhuma para o catálogo",
+      "origem": "comunidade BR",
+      "instalacao": "https://codespar.dev/api/servers",
+      "config": {
+        "url": "https://codespar.dev/api/servers"
+      },
+      "bots": [
+        "MEU BLING",
+        "PROGRAMADOR",
+        "escola-conector"
+      ]
+    },
+    {
+      "nome": "Conta Azul MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/fiscal/conta-azul",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Conta Azul: financeiro, NF, clientes.",
+      "ferramentas": "invoices, customers, products",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "MCP OSS; API Conta Azul conforme plano",
+      "credencial": "CONTA_AZUL credentials",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-conta-azul",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-conta-azul"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Correios MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/ecommerce/correios",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Rastreio, frete e CEP Correios.",
+      "ferramentas": "tracking, rates, cep",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "MCP OSS; API Correios com cadastro (sem cartão típico)",
+      "credencial": "Correios API creds",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-correios",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-correios"
+        ]
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "EFI/Gerencianet MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/payments/efi",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Pix e cobranças EFI (Gerencianet).",
+      "ferramentas": "pix, charges",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Conta EFI; sandbox disponível",
+      "credencial": "EFI credentials",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-efi",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-efi"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Focus NFe MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/fiscal/focus-nfe",
+      "categoria": "financeiro BR",
+      "o_que_faz": "NF via Focus NFe.",
+      "ferramentas": "nfe emit/query",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Sandbox free Focus",
+      "credencial": "FOCUS_NFE_TOKEN",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-focus-nfe",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-focus-nfe"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Iugu MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/payments/iugu",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Cobranças Iugu.",
+      "ferramentas": "invoices, subscriptions",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Sandbox/test Iugu; produção com taxas",
+      "credencial": "IUGU_API_TOKEN",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-iugu",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-iugu"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Melhor Envio MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/ecommerce/melhor-envio",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Fretes, etiquetas, tracking Melhor Envio.",
+      "ferramentas": "rates, labels, tracking",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "MCP OSS; conta Melhor Envio free para cotar",
+      "credencial": "OAuth Melhor Envio",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-melhor-envio",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-melhor-envio"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Mercado Livre MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/ecommerce/mercado-libre",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Anúncios/pedidos Mercado Livre.",
+      "ferramentas": "items, orders",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Conta ML free; API com app gratuito",
+      "credencial": "ML OAuth",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-mercado-libre",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-mercado-libre"
+        ]
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Mercado Pago MCP",
+      "link": "https://www.mercadopago.com.br/developers/pt/docs/mcp-server/overview",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Pagamentos e cobrancas MP.",
+      "ferramentas": "pagamentos, cobrancas, QR",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Conta MP free; taxas por transação",
+      "credencial": "Access Token MP",
+      "origem": "oficial",
+      "instalacao": "docs Mercado Pago MCP",
+      "config": {
+        "url": "consultar docs MP MCP"
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Mercado Pago MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/payments/mercado-pago",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Pagamentos/Pix Mercado Pago via CodeSpar (alt. ao MCP oficial).",
+      "ferramentas": "payments, pix, refunds",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Conta MP free; taxas por transação",
+      "credencial": "MP Access Token",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-mercado-pago",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-mercado-pago"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Nuvem Fiscal MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/fiscal/nuvem-fiscal",
+      "categoria": "financeiro BR",
+      "o_que_faz": "NF-e/NFC-e via Nuvem Fiscal.",
+      "ferramentas": "emitir/consultar NF",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Sandbox; produção paga Nuvem Fiscal",
+      "credencial": "NUVEM_FISCAL_TOKEN",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-nuvem-fiscal",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-nuvem-fiscal"
+        ],
+        "env": {
+          "NUVEM_FISCAL_TOKEN": "${TOKEN}"
+        }
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Omie MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/erp/omie",
+      "categoria": "financeiro BR",
+      "o_que_faz": "ERP Omie.",
+      "ferramentas": "clientes, pedidos, financeiro",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "App Omie free tier conforme conta",
+      "credencial": "OMIE_APP_KEY/SECRET",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-omie",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-omie"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Pluggy Open Finance MCP",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/banking/pluggy",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Open Finance agregador Pluggy.",
+      "ferramentas": "accounts, transactions",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Pluggy tem sandbox free",
+      "credencial": "PLUGGY_API_KEY",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-pluggy",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-pluggy"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Shopify MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/ecommerce/shopify",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Shopify Admin/ecom via CodeSpar (pedidos, produtos conforme API).",
+      "ferramentas": "search docs, graphql",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "MCP OSS; API Shopify conforme plano da loja / partner",
+      "credencial": "Shopify Admin API token",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-shopify",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-shopify"
+        ]
+      },
+      "bots": [
+        "MEU BLING",
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Stripe MCP",
+      "link": "https://docs.stripe.com/mcp",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Pagamentos Stripe.",
+      "ferramentas": "balance, customers, payment_intents",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Test mode free; live com taxas Stripe",
+      "credencial": "STRIPE_SECRET_KEY",
+      "origem": "oficial",
+      "instalacao": "docs.stripe.com/mcp",
+      "config": {
+        "url": "https://mcp.stripe.com"
+      },
+      "bots": [
+        "MEU BLING",
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Tiny ERP MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/erp/tiny",
+      "categoria": "financeiro BR",
+      "o_que_faz": "Tiny ERP: produtos, estoque, pedidos, NF.",
+      "ferramentas": "products, orders, invoices, stock",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "MCP OSS MIT; API Tiny conforme plano da conta (sandbox/dev se disponível)",
+      "credencial": "TINY_TOKEN",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-tiny",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-tiny"
+        ],
+        "env": {
+          "TINY_TOKEN": "${TOKEN}"
+        }
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "VTEX MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/ecommerce/vtex",
+      "categoria": "financeiro BR",
+      "o_que_faz": "E-commerce VTEX pedidos/produtos.",
+      "ferramentas": "orders, products, inventory",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "MCP OSS; VTEX conforme contrato da loja",
+      "credencial": "VTEX app key/token",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-vtex",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-vtex"
+        ]
+      },
+      "bots": [
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Auth0 MCP",
+      "link": "https://github.com/auth0/auth0-mcp-server",
+      "categoria": "github/devops",
+      "o_que_faz": "Gerenciar Auth0.",
+      "ferramentas": "apps, apis",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Auth0 Free 25k MAU",
+      "credencial": "Auth0 token",
+      "origem": "oficial",
+      "instalacao": "npx @auth0/auth0-mcp-server",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@auth0/auth0-mcp-server"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Cloudflare MCP",
+      "link": "https://github.com/cloudflare/mcp-server-cloudflare",
+      "categoria": "github/devops",
+      "o_que_faz": "Workers/DNS/R2 Cloudflare.",
+      "ferramentas": "workers, dns, kv",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "CF Free plan",
+      "credencial": "OAuth CF",
+      "origem": "oficial",
+      "instalacao": "https://mcp.cloudflare.com",
+      "config": {
+        "url": "https://mcp.cloudflare.com"
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Docker MCP",
+      "link": "https://github.com/ckreiling/mcp-server-docker",
+      "categoria": "github/devops",
+      "o_que_faz": "Containers Docker local.",
+      "ferramentas": "list/start/stop containers, logs",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado Docker local",
+      "credencial": "Docker socket",
+      "origem": "comunidade",
+      "instalacao": "uvx mcp-server-docker",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-docker"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Fly.io MCP",
+      "link": "https://github.com/superfly/flymcp",
+      "categoria": "github/devops",
+      "o_que_faz": "Apps Fly.io.",
+      "ferramentas": "apps, machines",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Fly free allowance",
+      "credencial": "FLY_API_TOKEN",
+      "origem": "oficial",
+      "instalacao": "ver superfly/flymcp",
+      "config": {
+        "command": "flymcp"
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Git MCP local",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+      "categoria": "github/devops",
+      "o_que_faz": "Git local read/write.",
+      "ferramentas": "git_status, log, diff, commit",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "uvx mcp-server-git --repository .",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-git",
+          "--repository",
+          "."
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "GitHub MCP Official",
+      "link": "https://github.com/github/github-mcp-server",
+      "categoria": "github/devops",
+      "o_que_faz": "Repos/issues/PRs/Actions oficial.",
+      "ferramentas": "create_issue, list_prs, search_code, actions",
+      "transporte": "stdio/http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "GitHub Free; rate API",
+      "credencial": "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "origem": "oficial",
+      "instalacao": "npx -y @modelcontextprotocol/server-github OU remote",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "${GH_TOKEN}"
+        }
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "todos"
+      ]
+    },
+    {
+      "nome": "GitLab MCP",
+      "link": "https://docs.gitlab.com/user/model_context_protocol/mcp_server/",
+      "categoria": "github/devops",
+      "o_que_faz": "MCP oficial GitLab (issues, MRs, CI) via HTTP.",
+      "ferramentas": "projects, merge_requests, issues, pipelines",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "GitLab Free; rate API",
+      "credencial": "OAuth ou PAT com scope MCP",
+      "origem": "oficial",
+      "instalacao": "https://gitlab.com/api/v4/mcp",
+      "config": {
+        "url": "https://gitlab.com/api/v4/mcp"
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Grafana MCP",
+      "link": "https://github.com/grafana/mcp-grafana",
+      "categoria": "github/devops",
+      "o_que_faz": "Dashboards/alertas Grafana.",
+      "ferramentas": "search dashboards, query",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Grafana OSS self-host free",
+      "credencial": "GRAFANA_URL + token",
+      "origem": "oficial",
+      "instalacao": "uvx mcp-grafana",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-grafana"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Kubernetes MCP",
+      "link": "https://github.com/Flux159/mcp-server-kubernetes",
+      "categoria": "github/devops",
+      "o_que_faz": "kubectl via MCP.",
+      "ferramentas": "get/apply/logs pods",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Seu cluster",
+      "credencial": "kubeconfig",
+      "origem": "comunidade",
+      "instalacao": "npx mcp-server-kubernetes",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-server-kubernetes"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Sentry MCP",
+      "link": "https://github.com/getsentry/sentry-mcp",
+      "categoria": "github/devops",
+      "o_que_faz": "Erros Sentry.",
+      "ferramentas": "list issues, resolve",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Sentry Free 5k errors/mês",
+      "credencial": "OAuth Sentry",
+      "origem": "oficial",
+      "instalacao": "https://mcp.sentry.dev/mcp",
+      "config": {
+        "url": "https://mcp.sentry.dev/mcp"
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Vercel MCP",
+      "link": "https://vercel.com/docs/mcp",
+      "categoria": "github/devops",
+      "o_que_faz": "Deploys/projetos Vercel.",
+      "ferramentas": "projects, deployments, logs",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Hobby free Vercel",
+      "credencial": "OAuth Vercel",
+      "origem": "oficial",
+      "instalacao": "https://mcp.vercel.com",
+      "config": {
+        "url": "https://mcp.vercel.com"
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "OpenStreetMap / Nominatim MCP",
+      "link": "https://github.com/jagan-shanmugam/open-streetmap-mcp",
+      "categoria": "mapas/geo",
+      "o_que_faz": "Geocode OSM Nominatim (uso justo).",
+      "ferramentas": "geocode, reverse",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Política Nominatim 1 req/s; self-host ilimitado",
+      "credencial": "Nenhuma ou self-host",
+      "origem": "comunidade",
+      "instalacao": "uvx open-streetmap-mcp",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "open-streetmap-mcp"
+        ]
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Chroma MCP",
+      "link": "https://github.com/chroma-core/chroma-mcp",
+      "categoria": "memória/conhecimento",
+      "o_que_faz": "Vector DB Chroma local/cloud.",
+      "ferramentas": "add, query, delete",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Local ilimitado; Chroma Cloud free tier",
+      "credencial": "Nenhuma (local)",
+      "origem": "oficial",
+      "instalacao": "uvx chroma-mcp",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "chroma-mcp"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Graphiti MCP",
+      "link": "https://github.com/getzep/graphiti",
+      "categoria": "memória/conhecimento",
+      "o_que_faz": "Temporal knowledge graph (Zep).",
+      "ferramentas": "add/search episodes",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Self-host; Zep cloud tem free limitado",
+      "credencial": "Nenhuma (local)",
+      "origem": "oficial",
+      "instalacao": "ver getzep/graphiti",
+      "config": {
+        "command": "uv",
+        "args": [
+          "run",
+          "graphiti_mcp_server.py"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "MCP Memory",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+      "categoria": "memória/conhecimento",
+      "o_que_faz": "Knowledge graph local persistente.",
+      "ferramentas": "create_entities, relations, search_nodes",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado (arquivo local)",
+      "credencial": "Opcional MEMORY_FILE_PATH",
+      "origem": "oficial",
+      "instalacao": "npx -y @modelcontextprotocol/server-memory",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-memory"
+        ]
+      },
+      "bots": [
+        "todos",
+        "escola-rotineiro",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "MCP Sequential Thinking",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
+      "categoria": "memória/conhecimento",
+      "o_que_faz": "Raciocínio passo a passo.",
+      "ferramentas": "sequentialthinking",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "npx -y @modelcontextprotocol/server-sequential-thinking",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-sequential-thinking"
+        ]
+      },
+      "bots": [
+        "todos",
+        "Professor"
+      ]
+    },
+    {
+      "nome": "Notion MCP",
+      "link": "https://github.com/makenotion/notion-mcp-server",
+      "categoria": "memória/conhecimento",
+      "o_que_faz": "Notion como KB (checar MCP oficial no registry).",
+      "ferramentas": "search pages, blocks",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Notion Free",
+      "credencial": "NOTION_TOKEN",
+      "origem": "oficial/comunidade",
+      "instalacao": "npx -y @notionhq/notion-mcp-server",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@notionhq/notion-mcp-server"
+        ],
+        "env": {
+          "NOTION_TOKEN": "${NOTION_TOKEN}"
+        }
+      },
+      "bots": [
+        "Herrera",
+        "Professor",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Obsidian MCP",
+      "link": "https://github.com/StevenStavrakis/obsidian-mcp",
+      "categoria": "memória/conhecimento",
+      "o_que_faz": "Vault Obsidian local.",
+      "ferramentas": "list/read/write notes",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado; Obsidian free",
+      "credencial": "Path do vault",
+      "origem": "comunidade",
+      "instalacao": "npx -y obsidian-mcp /path/to/vault",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "obsidian-mcp",
+          "C:/Obsidian/Balao"
+        ]
+      },
+      "bots": [
+        "todos",
+        "Professor",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Qdrant MCP",
+      "link": "https://github.com/qdrant/mcp-server-qdrant",
+      "categoria": "memória/conhecimento",
+      "o_que_faz": "Vector search Qdrant.",
+      "ferramentas": "store, find",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Qdrant local / cloud free tier",
+      "credencial": "QDRANT_URL",
+      "origem": "oficial",
+      "instalacao": "uvx mcp-server-qdrant",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-qdrant"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR"
+      ]
+    },
+    {
+      "nome": "Browser MCP",
+      "link": "https://github.com/browsermcp/mcp",
+      "categoria": "navegador/scraping",
+      "o_que_faz": "Controla Chrome local já logado.",
+      "ferramentas": "navigate, click, type, screenshot",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado + extensão Chrome",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "npx @browsermcp/mcp@latest",
+      "config": {
+        "command": "npx",
+        "args": [
+          "@browsermcp/mcp@latest"
+        ]
+      },
+      "bots": [
+        "escola-navegador"
+      ]
+    },
+    {
+      "nome": "Chrome DevTools MCP",
+      "link": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+      "categoria": "navegador/scraping",
+      "o_que_faz": "DevTools protocol no Chrome.",
+      "ferramentas": "inspect, network, performance",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Chrome",
+      "origem": "oficial Google",
+      "instalacao": "npx chrome-devtools-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "chrome-devtools-mcp"
+        ]
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "escola-navegador"
+      ]
+    },
+    {
+      "nome": "Firecrawl MCP keyless",
+      "link": "https://github.com/firecrawl/firecrawl-mcp-server",
+      "categoria": "navegador/scraping",
+      "o_que_faz": "Scrape/search/parse hospedado sem chave.",
+      "ferramentas": "firecrawl_scrape, search, parse",
+      "transporte": "http",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Keyless por IP/dia; free key 1000 créditos/mês sem cartão",
+      "credencial": "Nenhuma ou FIRECRAWL_API_KEY free",
+      "origem": "oficial",
+      "instalacao": "https://mcp.firecrawl.dev/v2/mcp",
+      "config": {
+        "url": "https://mcp.firecrawl.dev/v2/mcp"
+      },
+      "bots": [
+        "escola-navegador",
+        "Herrera",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Playwright MCP",
+      "link": "https://github.com/microsoft/playwright-mcp",
+      "categoria": "navegador/scraping",
+      "o_que_faz": "Browser automation oficial Microsoft.",
+      "ferramentas": "browser_navigate, click, type, snapshot, screenshot, fill_form",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "npx @playwright/mcp@latest",
+      "config": {
+        "command": "npx",
+        "args": [
+          "@playwright/mcp@latest"
+        ]
+      },
+      "bots": [
+        "escola-navegador",
+        "Herrera",
+        "MEU BLING",
+        "todos"
+      ]
+    },
+    {
+      "nome": "Puppeteer MCP (arquivado)",
+      "link": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/puppeteer",
+      "categoria": "navegador/scraping",
+      "o_que_faz": "Chrome headless via Puppeteer.",
+      "ferramentas": "navigate, screenshot, click, fill, evaluate",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado local",
+      "credencial": "Nenhuma",
+      "origem": "oficial (arquivado)",
+      "instalacao": "npx -y @modelcontextprotocol/server-puppeteer",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-puppeteer"
+        ]
+      },
+      "bots": [
+        "escola-navegador"
+      ]
+    },
+    {
+      "nome": "Atlassian MCP",
+      "link": "https://github.com/atlassian/atlassian-mcp-server",
+      "categoria": "produtividade",
+      "o_que_faz": "Jira/Confluence.",
+      "ferramentas": "issues, pages",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Jira Free / Confluence Free",
+      "credencial": "OAuth Atlassian",
+      "origem": "oficial",
+      "instalacao": "https://mcp.atlassian.com/v1/sse",
+      "config": {
+        "url": "https://mcp.atlassian.com/v1/sse"
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Figma MCP",
+      "link": "https://www.figma.com/developers/mcp",
+      "categoria": "produtividade",
+      "o_que_faz": "Design Figma para código.",
+      "ferramentas": "get_design_context",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Figma Free/Dev seat",
+      "credencial": "OAuth Figma",
+      "origem": "oficial",
+      "instalacao": "https://mcp.figma.com/mcp",
+      "config": {
+        "url": "https://mcp.figma.com/mcp"
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Google Drive MCP (arquivado)",
+      "link": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/gdrive",
+      "categoria": "produtividade",
+      "o_que_faz": "Drive search/read.",
+      "ferramentas": "search, read_file",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Google Drive free 15GB",
+      "credencial": "OAuth Google",
+      "origem": "oficial (arquivado)",
+      "instalacao": "npx -y @modelcontextprotocol/server-gdrive",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-gdrive"
+        ]
+      },
+      "bots": [
+        "todos",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Linear MCP",
+      "link": "https://linear.app/docs/mcp",
+      "categoria": "produtividade",
+      "o_que_faz": "Issues Linear.",
+      "ferramentas": "create/list issues",
+      "transporte": "http",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Linear Free",
+      "credencial": "OAuth Linear",
+      "origem": "oficial",
+      "instalacao": "https://mcp.linear.app/sse",
+      "config": {
+        "url": "https://mcp.linear.app/sse"
+      },
+      "bots": [
+        "PROGRAMADOR",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Slack MCP",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
+      "categoria": "produtividade",
+      "o_que_faz": "Slack channels/messages (arquivado oficial; ver forks).",
+      "ferramentas": "list_channels, post_message",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Slack Free workspace",
+      "credencial": "SLACK_BOT_TOKEN",
+      "origem": "oficial (arquivado)/comunidade",
+      "instalacao": "npx -y @modelcontextprotocol/server-slack",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-slack"
+        ],
+        "env": {
+          "SLACK_BOT_TOKEN": "${TOKEN}"
+        }
+      },
+      "bots": [
+        "Herrera",
+        "todos"
+      ]
+    },
+    {
+      "nome": "Todoist MCP",
+      "link": "https://github.com/abhiz123/todoist-mcp-server",
+      "categoria": "produtividade",
+      "o_que_faz": "Tasks Todoist.",
+      "ferramentas": "create/list tasks",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Todoist Free",
+      "credencial": "TODOIST_API_TOKEN",
+      "origem": "comunidade",
+      "instalacao": "npx todoist-mcp-server",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "todoist-mcp-server"
+        ],
+        "env": {
+          "TODOIST_API_TOKEN": "${TOKEN}"
+        }
+      },
+      "bots": [
+        "todos",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Bluesky / ATProto MCP",
+      "link": "https://github.com/cameronrye/atproto-mcp",
+      "categoria": "redes sociais",
+      "o_que_faz": "AT Protocol Bluesky.",
+      "ferramentas": "timeline, search, post (com app password)",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Bluesky free",
+      "credencial": "BSKY handle/app password",
+      "origem": "comunidade",
+      "instalacao": "npx atproto-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "atproto-mcp"
+        ]
+      },
+      "bots": [
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "LinkedIn MCP (community)",
+      "link": "https://github.com/stickerdaniel/linkedin-mcp-server",
+      "categoria": "redes sociais",
+      "o_que_faz": "LinkedIn via scrap/login (cuidado ToS).",
+      "ferramentas": "profile, posts",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Local; risco ToS LinkedIn",
+      "credencial": "Sessão/login",
+      "origem": "comunidade",
+      "instalacao": "ver stickerdaniel/linkedin-mcp-server",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "linkedin-mcp-server"
+        ]
+      },
+      "bots": [
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "RD Station MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/communication/rd-station",
+      "categoria": "redes sociais",
+      "o_que_faz": "Marketing RD Station.",
+      "ferramentas": "contacts, emails",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "RD Station free/light conforme plano",
+      "credencial": "RD_STATION_TOKEN",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-rd-station",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-rd-station"
+        ]
+      },
+      "bots": [
+        "Herrera",
+        "MEU BLING"
+      ]
+    },
+    {
+      "nome": "Reddit MCP",
+      "link": "https://github.com/adhikasp/mcp-reddit",
+      "categoria": "redes sociais",
+      "o_que_faz": "Ler Reddit.",
+      "ferramentas": "search, get_thread",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Reddit free API (rate limit)",
+      "credencial": "Opcional client id",
+      "origem": "comunidade",
+      "instalacao": "uvx mcp-reddit",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-reddit"
+        ]
+      },
+      "bots": [
+        "Herrera",
+        "Professor"
+      ]
+    },
+    {
+      "nome": "X/Twitter MCP (EnesCinr)",
+      "link": "https://github.com/EnesCinr/twitter-mcp",
+      "categoria": "redes sociais",
+      "o_que_faz": "Post/search X via API.",
+      "ferramentas": "post_tweet, search_tweets",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "API X free tier muito limitado (read)",
+      "credencial": "X API keys",
+      "origem": "comunidade",
+      "instalacao": "npx twitter-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@enescinr/twitter-mcp"
+        ],
+        "env": {
+          "API_KEY": "${X_API_KEY}"
+        }
+      },
+      "bots": [
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Home Assistant MCP",
+      "link": "https://github.com/voska/hass-mcp",
+      "categoria": "utilidades",
+      "o_que_faz": "Automação casa HA.",
+      "ferramentas": "call_service, get_state",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "HA OSS self-host",
+      "credencial": "HA_URL + token",
+      "origem": "comunidade",
+      "instalacao": "uvx hass-mcp",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "hass-mcp"
+        ],
+        "env": {
+          "HA_URL": "http://homeassistant.local:8123"
+        }
+      },
+      "bots": [
+        "escola-rotineiro"
+      ]
+    },
+    {
+      "nome": "Time MCP",
+      "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
+      "categoria": "utilidades",
+      "o_que_faz": "Hora/timezone.",
+      "ferramentas": "get_current_time, convert_time",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado",
+      "credencial": "Nenhuma",
+      "origem": "oficial",
+      "instalacao": "uvx mcp-server-time",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-time"
+        ]
+      },
+      "bots": [
+        "todos",
+        "escola-rotineiro"
+      ]
+    },
+    {
+      "nome": "Weather MCP (Open-Meteo)",
+      "link": "https://github.com/isdaniel/mcp_weather_server",
+      "categoria": "utilidades",
+      "o_que_faz": "Clima via Open-Meteo (sem chave).",
+      "ferramentas": "get_weather",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Open-Meteo free non-commercial",
+      "credencial": "Nenhuma",
+      "origem": "comunidade",
+      "instalacao": "uvx mcp-weather-server",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-weather-server"
+        ]
+      },
+      "bots": [
+        "todos",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Discord MCP",
+      "link": "https://github.com/SaseQ/discord-mcp",
+      "categoria": "whatsapp/chat",
+      "o_que_faz": "Bot Discord.",
+      "ferramentas": "send/read channels",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Discord free",
+      "credencial": "DISCORD_TOKEN",
+      "origem": "comunidade",
+      "instalacao": "ver SaseQ/discord-mcp",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "discord-mcp"
+        ],
+        "env": {
+          "DISCORD_TOKEN": "${TOKEN}"
+        }
+      },
+      "bots": [
+        "Herrera",
+        "escola-conector"
+      ]
+    },
+    {
+      "nome": "Evolution API MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/communication/evolution-api",
+      "categoria": "whatsapp/chat",
+      "o_que_faz": "WhatsApp via Evolution API self-host.",
+      "ferramentas": "send message, instances, contacts",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Evolution OSS self-host ilimitado; WhatsApp risco ban",
+      "credencial": "EVOLUTION_API_URL + key da instância",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-evolution-api",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-evolution-api"
+        ]
+      },
+      "bots": [
+        "todos",
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "Telegram MCP",
+      "link": "https://github.com/dryeab/mcp-telegram",
+      "categoria": "whatsapp/chat",
+      "o_que_faz": "Telegram via Telethon/API.",
+      "ferramentas": "send/list messages",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Telegram free; API id free",
+      "credencial": "API_ID/HASH + login",
+      "origem": "comunidade",
+      "instalacao": "ver dryeab/mcp-telegram",
+      "config": {
+        "command": "uvx",
+        "args": [
+          "mcp-telegram"
+        ]
+      },
+      "bots": [
+        "todos",
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "WhatsApp Cloud MCP (CodeSpar)",
+      "link": "https://github.com/codespar/mcp-dev-latam/tree/main/packages/communication/whatsapp-cloud",
+      "categoria": "whatsapp/chat",
+      "o_que_faz": "WhatsApp Cloud API oficial Meta.",
+      "ferramentas": "messages, media, templates",
+      "transporte": "stdio",
+      "custo_tipo": "chave grátis",
+      "limite_gratis": "Meta free tier de conversas/mês; depois cobrado",
+      "credencial": "Meta System User token + Phone ID",
+      "origem": "comunidade BR",
+      "instalacao": "npx @codespar/mcp-whatsapp-cloud",
+      "config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@codespar/mcp-whatsapp-cloud"
+        ]
+      },
+      "bots": [
+        "MEU BLING",
+        "Herrera"
+      ]
+    },
+    {
+      "nome": "WhatsApp MCP (lharries)",
+      "link": "https://github.com/lharries/whatsapp-mcp",
+      "categoria": "whatsapp/chat",
+      "o_que_faz": "WhatsApp via whatsmeow (bridge Go + MCP).",
+      "ferramentas": "search_contacts, list_messages, send_message, media",
+      "transporte": "stdio",
+      "custo_tipo": "sem chave",
+      "limite_gratis": "Ilimitado; WhatsApp pessoal; risco ban",
+      "credencial": "QR scan WhatsApp",
+      "origem": "comunidade",
+      "instalacao": "clone + go build bridge + uv run whatsapp-mcp",
+      "config": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "path/whatsapp-mcp/whatsapp-mcp-server",
+          "run",
+          "main.py"
+        ]
+      },
+      "bots": [
+        "todos",
+        "MEU BLING",
+        "Herrera"
+      ]
+    }
+  ],
+  "descartados_por_custo": [
+    {
+      "nome": "Brave Search MCP",
+      "motivo": "API exige cartão mesmo para créditos free ($5/mês)."
+    },
+    {
+      "nome": "Browserbase",
+      "motivo": "Cloud browser pago / cartão."
+    },
+    {
+      "nome": "Replicate / fal.ai",
+      "motivo": "Inferência paga; free trial com cartão típico."
+    },
+    {
+      "nome": "ElevenLabs",
+      "motivo": "TTS pago após trial; cartão comum."
+    },
+    {
+      "nome": "Pollinations",
+      "motivo": "Modelo Pollen passou a ser pago."
+    },
+    {
+      "nome": "Composio / Zapier MCP pagos",
+      "motivo": "Planos úteis são pagos."
+    },
+    {
+      "nome": "Z-API (CodeSpar)",
+      "motivo": "Gateway WhatsApp comercial pago (use Evolution self-host ou Cloud free tier)."
+    },
+    {
+      "nome": "Google Maps MCP",
+      "motivo": "Google Cloud exige cartão; preferir Nominatim/OSM."
+    },
+    {
+      "nome": "Make.com MCP",
+      "motivo": "Free 1000 ops existe, mas upsell/cartão frequente — evitar na regra estrita."
+    },
+    {
+      "nome": "Apify MCP",
+      "motivo": "Créditos sérios costumam exigir cartão."
+    }
+  ],
+  "lacunas": [
+    {
+      "necessidade": "OLX Brasil API oficial",
+      "status": "Sem MCP dedicado; usar Playwright/Browser MCP no site."
+    },
+    {
+      "necessidade": "Buffer / agendamento social pago",
+      "status": "Sem opção 100% free permanente; Bluesky/Mastodon self ou RD Station free limitado."
+    },
+    {
+      "necessidade": "Tiny / Conta Azul",
+      "status": "PREENCHIDO via @codespar/mcp-tiny e @codespar/mcp-conta-azul (API depende do plano)."
+    },
+    {
+      "necessidade": "Instagram / TikTok / Facebook post",
+      "status": "Sem MCP free estável (Meta Graph tem app review); Playwright com sessão logada."
+    }
+  ],
+  "fontes": [
+    "https://registry.modelcontextprotocol.io",
+    "https://github.com/modelcontextprotocol/servers",
+    "https://github.com/punkpeye/awesome-mcp-servers",
+    "https://codespar.dev/servers",
+    "https://github.com/codespar/mcp-dev-latam",
+    "https://developer.bling.com.br/bling-mcp",
+    "https://docs.n8n.io/advanced-ai/accessing-n8n-mcp-server/"
+  ]
+}

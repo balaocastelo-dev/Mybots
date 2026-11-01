@@ -50,18 +50,27 @@ function quandoLegivel(ts: number) {
   return mesmoDia ? `hoje ${hora}` : `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ${hora}`;
 }
 
-export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, onAbrirBot }: {
+export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, filtroBotPadrao = false, onAbrirBot }: {
   bots: BotSummary[];
   onClose?: () => void;
   botInicial?: string;
   embutido?: boolean;
+  /** Quando true (aba Trabalho do chat), começa filtrando o bot atual com toggle. */
+  filtroBotPadrao?: boolean;
   onAbrirBot?: (botId: string) => void;
 }) {
   const [itens, setItens] = useState<Trabalho[] | null>(null);
   const [contagem, setContagem] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
   const [tipo, setTipo] = useState(() => { try { return localStorage.getItem("mybots.trab-tipo") ?? ""; } catch { return ""; } });
-  const [bot, setBot] = useState(botInicial);
+  const [soDesteBot, setSoDesteBot] = useState(() => {
+    if (!filtroBotPadrao || !botInicial) return false;
+    try {
+      const v = localStorage.getItem("mybots.trab-so-bot");
+      return v === null ? true : v === "1";
+    } catch { return true; }
+  });
+  const [bot, setBot] = useState(() => (filtroBotPadrao && botInicial ? botInicial : ""));
   const [busca, setBusca] = useState("");
   const [recado, setRecado] = useState("");
 
@@ -75,8 +84,12 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
     const d = await r.json();
     setItens(d.itens); setContagem(d.contagem ?? {}); setTotal(d.total ?? 0);
   };
+  useEffect(() => {
+    if (filtroBotPadrao) setBot(soDesteBot ? botInicial : "");
+  }, [soDesteBot, botInicial, filtroBotPadrao]);
   useEffect(() => { void carregar(); }, [tipo, bot, busca]);
   useEffect(() => { try { localStorage.setItem("mybots.trab-tipo", tipo); } catch { /* privado */ } }, [tipo]);
+  useEffect(() => { try { localStorage.setItem("mybots.trab-so-bot", soDesteBot ? "1" : "0"); } catch { /* privado */ } }, [soDesteBot]);
 
   const nomeDoBot = useMemo(() => {
     const m: Record<string, string> = { user: "você" };
@@ -99,8 +112,8 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
     <div className={"trabalhos" + (embutido ? " embutido" : "")}>
       <header className="trab-head">
         <div>
-          <h2>📂 Trabalhos feitos</h2>
-          <small>{total} {total === 1 ? "arquivo produzido" : "arquivos produzidos"} pelos bots</small>
+          <h2>📂 Trabalho</h2>
+          <small>{total} {total === 1 ? "arquivo" : "arquivos"}{soDesteBot && botInicial ? " deste bot" : " de todos os bots"}</small>
         </div>
         <div className="trab-acoes">
           <button className="btn primary" onClick={() => void levarParaAPasta()} title="Copia com nome legível para a Área de Trabalho e abre a pasta">
@@ -113,6 +126,17 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
       {recado && <div className="trab-recado">{recado}</div>}
 
       <div className="trab-filtros">
+        {filtroBotPadrao && botInicial && (
+          <button
+            type="button"
+            className={"trab-tipo" + (soDesteBot ? " on" : "")}
+            aria-pressed={soDesteBot}
+            onClick={() => setSoDesteBot((v) => !v)}
+            title="Mostra só os arquivos produzidos pelo bot desta conversa"
+          >
+            Trabalhos desse bot
+          </button>
+        )}
         {TIPOS.map((t) => {
           const n = t.id ? (contagem[t.id] ?? 0) : total;
           if (t.id && !n) return null;
@@ -167,4 +191,4 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, on
     </div>
   );
 }
-
+

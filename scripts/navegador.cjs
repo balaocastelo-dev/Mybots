@@ -32,6 +32,7 @@ const { spawn } = require("child_process");
 const WebSocket = require("ws");
 
 const PORTA = Number(process.env.MYBOTS_NAVEGADOR_PORTA || 9222);
+const NAO_SUBIR = process.env.MYBOTS_NAVEGADOR_NAO_SUBIR === "1" || process.env.MYBOTS_NAVEGADOR_NAO_SUBIR === "true";
 const RAIZ = path.resolve(__dirname, "..");
 const PERFIL = process.env.MYBOTS_NAVEGADOR_PERFIL || path.join(RAIZ, "dados", "navegador-bots");
 const CHROMES = [
@@ -63,6 +64,7 @@ async function noAr() { try { await pegaJson("/json/version"); return true; } ca
 
 async function sobeChrome(espera = 25000) {
   if (await noAr()) return false;
+  if (NAO_SUBIR) erro("o Chromium do PC deste bot ainda não está na porta " + PORTA + " — abra a aba Meu PC e espere o desktop subir");
   const exe = CHROMES.find((c) => fs.existsSync(c));
   if (!exe) erro("não achei o chrome.exe neste PC");
   fs.mkdirSync(PERFIL, { recursive: true });

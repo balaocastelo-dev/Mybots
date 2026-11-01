@@ -76,7 +76,11 @@ export type NodeToHub =
   /** preenche login ou cartão no navegador. A resposta é só "ok" ou "erro: …" — o valor não volta. */
   | { type: "fill_credential"; callId: string; site: string; campo: string }
   /** o celular da empresa do bot, via ADB no Hub. aprovado = o chefe já liberou uma ação sensível */
-  | { type: "celular"; callId: string; acao: string; conversationId?: string; x?: number; y?: number; x2?: number; y2?: number; texto?: string; tecla?: string; pacote?: string; aprovado?: boolean };
+  | { type: "celular"; callId: string; acao: string; conversationId?: string; x?: number; y?: number; x2?: number; y2?: number; texto?: string; tecla?: string; pacote?: string; aprovado?: boolean }
+  /** acorda o PC deste bot e devolve a porta CDP (Chromium visível na aba Meu PC) */
+  | { type: "pc_cdp"; callId: string }
+  /** le anexo do chat por id (PDF/DOCX/texto) com auth do Hub — sem fetch HTTP */
+  | { type: "read_attachment"; callId: string; id: string; parte?: number };
 
 /** Hub → Nó */
 export type HubToNode =

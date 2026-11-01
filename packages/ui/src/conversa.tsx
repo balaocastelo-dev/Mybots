@@ -247,6 +247,15 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     const fixar = { label: m.pinned ? "Desafixar" : "Fixar", icone: "📌", onClick: async () => { await api(`/messages/${m.id}/pin`, { method: "POST", body: JSON.stringify({ pinned: !m.pinned }) }); } };
     const apagar = { label: "Apagar mensagem", icone: "🗑️", perigo: true, separar: true, onClick: async () => { stopSpeaking(); await api(`/messages/${m.id}`, { method: "DELETE" }); } };
     const guardar = { label: "Guardar na memória", icone: "🧠", onClick: async () => { const r = await api(`/messages/${m.id}/remember`, { method: "POST", body: JSON.stringify({}) }); avisar(r.ok ? "guardado na base da casa" : "não consegui guardar"); } };
+    const regraAprendida = { label: "Salvar como regra aprendida", icone: "📌", onClick: async () => {
+      const sugestao = (selecao && selecao.length > 2 ? selecao : m.text).replace(/\s+/g, " ").trim().slice(0, 500);
+      const regra = prompt("Regra que o bot deve seguir daqui pra frente:", sugestao);
+      if (regra == null) return;
+      const t = regra.trim();
+      if (!t) return avisar("regra vazia");
+      const r = await api(`/messages/${m.id}/aprender-regra`, { method: "POST", body: JSON.stringify({ regra: t }) });
+      avisar(r.ok ? "regra aprendida salva" : "não consegui salvar a regra");
+    } };
     if (selecao && selecao.length > 2 && m.text.includes(selecao.slice(0, 20))) {
       return [
         { label: "Perguntar sobre isso", icone: "💬", onClick: () => { setText(`> ${selecao}\n\n`); textRef.current?.focus(); } },
@@ -259,6 +268,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       return [
         { label: "Editar pedido", icone: "✏️", atalho: "E", onClick: () => { stopSpeaking(); setEditando(m.id); } },
         { label: "Reenviar", icone: "🔁", onClick: async () => { stopSpeaking(); const r = await api(`/messages/${m.id}/edit`, { method: "POST", body: JSON.stringify({ text: m.text }) }); if (!r.ok) avisar("não consegui reenviar"); } },
+        regraAprendida,
         { label: "Voltar aqui", icone: "⏪", separar: true, onClick: () => void rebobinar(m, "after", "Voltei até este pedido") },
         copiar, fixar, apagar,
       ];
@@ -267,6 +277,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       { label: "Tentar de novo", icone: "🔁", onClick: async () => { stopSpeaking(); const r = await api(`/messages/${m.id}/retry`, { method: "POST" }); if (!r.ok) avisar("não achei o pedido que gerou essa resposta"); } },
       { label: "Ler em voz alta", icone: "🔊", onClick: () => { if (isSpeaking()) stopSpeaking(); else void speak(m.text, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true); } },
       guardar,
+      regraAprendida,
       { label: "Voltar aqui", icone: "⏪", separar: true, onClick: async () => { const pedido = pedidoAntesDe(m); if (!pedido) return avisar("não achei o pedido desta resposta"); setText(pedido.text); await rebobinar(pedido, "this", "Desfiz esta resposta"); textRef.current?.focus(); } },
       copiar,
       { label: "Salvar como .md", icone: "💾", onClick: () => {

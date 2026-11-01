@@ -682,6 +682,7 @@ export class Hub {
       botId ? this.db.blocoFatosParaPrompt(botId, botId ? (this.empresaDe(botId).id ?? "") : "") : "",
       "",
       "Aprendeu algo que serve para a equipe? Grave com learn_knowledge: no mesmo instante TODO bot passa a enxergar, inclusive os que nascerem depois.",
+      "Quando o chefe CORRIGIR voce (nao e assim / da proxima vez / sempre faca X / nunca faca Y), chame aprender_regra com a regra em UMA frase clara. Essas regras entram no seu prompt e voce OBEDECE sempre.",
     ].filter(Boolean).join("\n");
   }
 
@@ -1404,12 +1405,27 @@ export class Hub {
         if (key) this.db.remember(botId, key, value || key, emp);
         const text = value || key;
         if (text) {
-          const tipo = msg.tipo === "perfil" ? "perfil" : "diario";
+          const tipo = this.db.normalizarTipoFato(msg.tipo);
           this.db.inserirFato({ id: newId("fato"), botId, text, tipo, learnedAt: Date.now(), empresaId: emp, promovido: false });
           this.db.regenerarResumoBot(botId, emp);
         }
         this.db.audit(botId, "memory.set", { key: key || undefined, text: text.slice(0, 80) });
         return;
+      }
+      case "aprender_regra": {
+        const emp = this.empresaDe(botId).id ?? "";
+        const regra = String(msg.regra ?? msg.text ?? msg.value ?? "").trim();
+        if (!regra) return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: "Digite a regra em uma frase." });
+        const id = newId("fato");
+        this.db.inserirFato({ id, botId, text: regra, tipo: "regra", learnedAt: Date.now(), empresaId: emp, promovido: false });
+        this.db.regenerarResumoBot(botId, emp);
+        this.db.audit(botId, "regra.aprendida", { id, text: regra.slice(0, 120) });
+        this.broadcastUi({ type: "notify", botId, text: "Regra aprendida salva" });
+        try {
+          const knowledge = this.knowledgeIndex(botId);
+          this.sendNode(botId, { type: "knowledge", knowledge });
+        } catch { /* ok */ }
+        return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: { id, regra, ok: true } });
       }
       case "forget": {
         const id = String(msg.id ?? msg.key ?? "").trim();

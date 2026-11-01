@@ -541,7 +541,7 @@ function FatosDoBot({ botId }: { botId: string }) {
   const [fatos, setFatos] = useState<Array<{ id: string; text: string; tipo: string; learnedAt: number; promovido?: boolean }>>([]);
   const [resumo, setResumo] = useState("");
   const [novo, setNovo] = useState("");
-  const [tipo, setTipo] = useState<"perfil" | "diario">("diario");
+  const [tipo, setTipo] = useState<"perfil" | "diario" | "regra">("regra");
   const load = async () => {
     const r = await api(`/bots/${botId}/fatos`);
     if (!r.ok) return;
@@ -550,37 +550,47 @@ function FatosDoBot({ botId }: { botId: string }) {
     setResumo(j.resumo || "");
   };
   useEffect(() => { void load(); }, [botId]);
+  const regras = fatos.filter((f) => f.tipo === "regra");
+  const outros = fatos.filter((f) => f.tipo !== "regra");
+  const linha = (f: { id: string; text: string; tipo: string; learnedAt: number; promovido?: boolean }) => (
+    <li key={f.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
+      <span style={{ flex: 1 }}><small className="muted">{f.tipo === "regra" ? "regra aprendida" : f.tipo}{f.promovido ? " · equipe" : ""} · {new Date(f.learnedAt).toLocaleDateString("pt-BR")}</small><br />{f.text}</span>
+      <button className="link" type="button" onClick={async () => {
+        const text = prompt(f.tipo === "regra" ? "Editar regra aprendida" : "Editar fato", f.text); if (text == null) return;
+        await api(`/bots/${botId}/fatos/${f.id}`, { method: "PATCH", body: JSON.stringify({ text }) });
+        void load();
+      }}>editar</button>
+      {f.tipo !== "regra" && <button className="link" type="button" onClick={async () => {
+        await api(`/bots/${botId}/fatos/${f.id}/promover`, { method: "POST", body: "{}" });
+        void load();
+      }}>Promover para equipe</button>}
+      <button className="link" type="button" onClick={async () => {
+        if (!confirm(f.tipo === "regra" ? "Apagar esta regra?" : "Apagar este fato?")) return;
+        await api(`/bots/${botId}/fatos/${f.id}`, { method: "DELETE" });
+        void load();
+      }}>apagar</button>
+    </li>
+  );
   return (
     <div className="fatos-painel" style={{ border: "1px solid var(--border,#2a3344)", borderRadius: 12, padding: 12, margin: "8px 0" }}>
+      <b>Regras aprendidas</b>
+      <div className="hint" style={{ marginTop: 4 }}>Quando você corrige o bot, a regra fica aqui e ele passa a obedecer. Também dá para salvar pelo menu do chat.</div>
+      <ul style={{ listStyle: "none", padding: 0, margin: "8px 0" }}>
+        {regras.length === 0 && <li className="hint">Nenhuma regra ainda.</li>}
+        {regras.map(linha)}
+      </ul>
       <b>Memória estruturada</b>
       {resumo && <pre style={{ whiteSpace: "pre-wrap", fontSize: 12, opacity: 0.85 }}>{resumo}</pre>}
       <ul style={{ listStyle: "none", padding: 0, margin: "8px 0" }}>
-        {fatos.map((f) => (
-          <li key={f.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
-            <span style={{ flex: 1 }}><small className="muted">{f.tipo}{f.promovido ? " · equipe" : ""} · {new Date(f.learnedAt).toLocaleDateString("pt-BR")}</small><br />{f.text}</span>
-            <button className="link" type="button" onClick={async () => {
-              const text = prompt("Editar fato", f.text); if (text == null) return;
-              await api(`/bots/${botId}/fatos/${f.id}`, { method: "PATCH", body: JSON.stringify({ text }) });
-              void load();
-            }}>editar</button>
-            <button className="link" type="button" onClick={async () => {
-              await api(`/bots/${botId}/fatos/${f.id}/promover`, { method: "POST", body: "{}" });
-              void load();
-            }}>Promover para equipe</button>
-            <button className="link" type="button" onClick={async () => {
-              if (!confirm("Apagar este fato?")) return;
-              await api(`/bots/${botId}/fatos/${f.id}`, { method: "DELETE" });
-              void load();
-            }}>apagar</button>
-          </li>
-        ))}
+        {outros.map(linha)}
       </ul>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <select value={tipo} onChange={(e) => setTipo(e.target.value as any)}>
+          <option value="regra">regra aprendida</option>
           <option value="diario">diário</option>
           <option value="perfil">perfil</option>
         </select>
-        <input style={{ flex: 1, minWidth: 160 }} value={novo} onChange={(e) => setNovo(e.target.value)} placeholder="Novo fato…" />
+        <input style={{ flex: 1, minWidth: 160 }} value={novo} onChange={(e) => setNovo(e.target.value)} placeholder={tipo === "regra" ? "Nova regra (uma frase)…" : "Novo fato…"} />
         <button className="btn" type="button" disabled={!novo.trim()} onClick={async () => {
           await api(`/bots/${botId}/fatos`, { method: "POST", body: JSON.stringify({ text: novo, tipo }) });
           setNovo("");

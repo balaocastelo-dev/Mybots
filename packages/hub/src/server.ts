@@ -3,7 +3,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
 import path from "node:path";
-import { isControlMode } from "@mybots/shared";
+import { botOfConversation, isControlMode } from "@mybots/shared";
 import { config, tokenAllows, botForToken, raizDoProjeto } from "./config.js";
 import { Hub } from "./hub.js";
 import type { FichaEmpresa } from "./db.js";
@@ -456,6 +456,30 @@ export async function startServer(hub: Hub) {
     hub.broadcastKnowledge();
     hub.db.audit(m.sender.kind === "bot" ? m.sender.id : null, "chat.remember", { messageId: m.id, saber: id });
     return { ok: true, id: v.id, titulo: v.titulo };
+  });
+  /** Salva uma correção do chefe como regra aprendida do bot da conversa. */
+  app.post("/api/messages/:id/aprender-regra", async (req, reply) => {
+    const m = hub.db.getMessage((req.params as any).id);
+    if (!m) return reply.code(404).send({ error: "mensagem não encontrada" });
+    const body = (req.body as any) || {};
+    let botId = String(body.botId || "").trim();
+    if (!botId) botId = botOfConversation(m.conversationId) || "";
+    if (!botId && m.sender.kind === "bot") botId = m.sender.id;
+    if (!botId && m.conversationId.startsWith("channel:")) {
+      const parts = m.conversationId.split(":");
+      botId = parts[parts.length - 1] || "";
+    }
+    if (!botId) return reply.code(400).send({ error: "não achei o bot desta conversa" });
+    const regra = String(body.regra || body.text || m.text || "").replace(/\s+/g, " ").trim();
+    if (!regra) return reply.code(400).send({ error: "regra vazia" });
+    const id = newId("fato");
+    const emp = hub.empresaDe(botId).id ?? "";
+    hub.db.inserirFato({ id, botId, text: regra.slice(0, 500), tipo: "regra", learnedAt: Date.now(), empresaId: emp, promovido: false });
+    hub.db.regenerarResumoBot(botId, emp);
+    hub.db.audit(botId, "regra.aprendida", { id, messageId: m.id, text: regra.slice(0, 120) });
+    try { hub.sendNode(botId, { type: "knowledge", knowledge: hub.knowledgeIndex(botId) }); } catch {}
+    hub.broadcastUi({ type: "notify", botId, text: "Regra aprendida salva" });
+    return { ok: true, id, botId, regra: regra.slice(0, 500) };
   });
 
   app.post("/api/conversations/:id/marcador", async (req, reply) => {
@@ -1428,7 +1452,7 @@ export async function startServer(hub: Hub) {
     const b = req.body as any;
     const text = String(b?.text || "").trim();
     if (!text) return reply.code(400).send({ error: "text obrigatório" });
-    const fato = { id: newId("fato"), botId: id, text, tipo: b?.tipo === "perfil" ? "perfil" : "diario", learnedAt: Date.now(), empresaId: hub.empresaDe(id).id ?? "", promovido: false };
+    const fato = { id: newId("fato"), botId: id, text, tipo: hub.db.normalizarTipoFato(b?.tipo), learnedAt: Date.now(), empresaId: hub.empresaDe(id).id ?? "", promovido: false };
     hub.db.inserirFato(fato as any);
     hub.db.regenerarResumoBot(id, fato.empresaId);
     return fato;
@@ -1436,7 +1460,7 @@ export async function startServer(hub: Hub) {
   app.patch("/api/bots/:id/fatos/:fatoId", async (req, reply) => {
     const fatoId = (req.params as any).fatoId;
     const b = req.body as any;
-    if (!hub.db.atualizarFato(fatoId, { text: b?.text, tipo: b?.tipo })) return reply.code(404).send({ error: "fato não encontrado" });
+    if (!hub.db.atualizarFato(fatoId, { text: b?.text, tipo: b?.tipo != null ? hub.db.normalizarTipoFato(b.tipo) : undefined })) return reply.code(404).send({ error: "fato não encontrado" });
     const botId = (req.params as any).id;
     hub.db.regenerarResumoBot(botId, hub.empresaDe(botId).id ?? "");
     return hub.db.getFato(fatoId);

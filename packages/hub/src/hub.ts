@@ -31,7 +31,7 @@ import { aprovacaoDoPainel, classificarAcaoSensivel, mensagemLiberaEnvioExterno,
 import { UsosDoPc } from "./usoDoPc.js";
 import { Gravacoes, codificarMp4, ligarCdp, portaCdpPermitida, temFfmpeg, limitesDaGravacao } from "./gravacao.js";
 import { estadoDa as estadoDaMaquina } from "./maquinas.js";
-import { acordarPc, botPadraoDaEmpresa, temRegistro, tocarPc, type BotParaPc } from "./pcs.js";
+import { acordarPc, botPadraoDaEmpresa, temRegistro, tocarPc, type BotParaPc, humanoNoControle } from "./pcs.js";
 import * as celular from "./celular.js";
 import {
   TravaDosCelulares, acaoSensivel, enderecoParaReconectar, lerMdns, lerPareamento, pacoteValido, resumoDoCelular,
@@ -1231,6 +1231,9 @@ export class Hub {
   }
 
   private async atenderCelular(botId: string, msg: Extract<NodeToHub, { type: "celular" }>): Promise<{ ok: boolean; texto: string }> {
+    if (humanoNoControle(botId)) {
+      return { ok: false, texto: "O chefe está no controle do celular (Assumir controle). Espere ele devolver para a IA." };
+    }
     const emp = this.empresaDe(botId).id;
     if (!emp) return { ok: false, texto: "Você não está numa empresa, então não tem celular." };
     const v = this.vinculoDoCelular(emp);
@@ -1557,6 +1560,10 @@ export class Hub {
         return;
       }
       case "pc_cdp": {
+        if (humanoNoControle(botId)) {
+          this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: "O chefe está no controle do PC (Assumir controle). Espere ele devolver para a IA." });
+          return;
+        }
         void (async () => {
           try {
             const empresaId = this.empresaDe(botId).id ?? null;

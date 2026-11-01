@@ -22,6 +22,7 @@ import {
   IMAGEM_PC, MARCA_RAIZ, docker, garantirPonte, limpo, nomesDeContainerEmpresa,
   portaIntocavel, portasDaChave, raizMaquinas, temDocker,
 } from "./dockerPc.js";
+import { garantirDesktop } from "./desktopPc.js";
 import { portaCdpPermitida } from "./gravacao.js";
 import { idSeguro, portaDeEmpresaPermitida } from "./ponteVnc.js";
 
@@ -49,6 +50,8 @@ export type RegistroPc = {
   acessoLiberado?: boolean;
   /** PC do bot fica ligado: sem desligar por ociosidade; Hub sobe de novo e reacorda. */
   sempreLigado?: boolean;
+  /** Chefe assumiu o mouse/teclado: o bot pausa PC e celular até devolver. */
+  controleHumano?: boolean;
   android: { rota: string };
 };
 
@@ -425,6 +428,7 @@ async function acordarMesmo(botId: string, agora: number): Promise<EstadoPc | nu
     console.log(`[pc] ${botId}: ligando ${reg.container} em 127.0.0.1:${reg.portaTela}`);
     const r = await docker(["start", reg.container], 60000);
     if (!r.ok) return { ...atual, erro: r.saida.slice(0, 300) };
+    try { garantirDesktop(volumeAbsoluto(reg)); } catch { /* volume */ }
     if (process.env.MYBOTS_PC_PONTE !== "0") setTimeout(() => void garantirPonte(reg.container, volumeAbsoluto(reg)), 12000);
     void avisarAndroid("ligar", botId);
     return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${reg.portaTela}/` };
@@ -437,6 +441,7 @@ async function acordarMesmo(botId: string, agora: number): Promise<EstadoPc | nu
   console.log(`[pc] ${botId}: criando ${reg.container} memória=${pol.memoria} cpu=${pol.cpus} porta=${reg.portaTela}`);
   const r = await docker(argumentosDeSubida(reg), 180000);
   if (!r.ok) return { ...atual, erro: r.saida.slice(0, 400) };
+  try { garantirDesktop(volumeAbsoluto(reg)); } catch { /* volume */ }
   if (process.env.MYBOTS_PC_PONTE !== "0") setTimeout(() => void garantirPonte(reg.container, volumeAbsoluto(reg)), 15000);
   void avisarAndroid("ligar", botId);
   return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${reg.portaTela}/` };
@@ -506,6 +511,21 @@ export async function acordarPcsSempreLigados(): Promise<string[]> {
   }
   if (ligados.length) console.log(`[pc] reacordados após Hub: ${ligados.join(", ")}`);
   return ligados;
+}
+
+export function humanoNoControle(botId: string): boolean {
+  const r = lerRegistro(botId);
+  return !!r?.controleHumano;
+}
+
+export function definirControleHumano(botId: string, ativo: boolean): RegistroPc | null {
+  if (!idSeguro(botId)) return null;
+  const mapa = lerMapa();
+  const atual = mapa[botId];
+  if (!atual) return null;
+  atual.controleHumano = !!ativo;
+  gravarMapa(mapa);
+  return atual;
 }
 
 export function marcarSempreLigado(botId: string, ligado = true): RegistroPc | null {

@@ -2081,7 +2081,56 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   display: block;
   background: #000;
 }
-.quadro-pc iframe { pointer-events: none; }
+.quadro-pc iframe { pointer-events: none; }
+.quadro-pc.controlando iframe { pointer-events: auto; }
+.quadro-android iframe { pointer-events: none; }
+.quadro-android.controlando iframe { pointer-events: auto; }
+.quadro-bloqueio {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: transparent;
+  cursor: not-allowed;
+}
+.telas-controle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  flex-wrap: wrap;
+  padding: 6px 2px 2px;
+}
+.telas-controle-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #1e293b;
+  color: #93c5fd;
+  border: 1px solid #334155;
+}
+.telas-controle-badge.humano {
+  background: #3b1d0f;
+  color: #fdba74;
+  border-color: #9a3412;
+}
+.telas-controle-badge::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+.telas-controle-badge.humano::before {
+  background: #f97316;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.3);
+}
+.telas-controle-btn { font-size: 12.5px; padding: 6px 12px; }
 .quadro-estado {
   display: grid;
   place-items: center;

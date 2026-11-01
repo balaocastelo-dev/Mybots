@@ -1,0 +1,44 @@
+#!/bin/bash
+# MyBots: desktop leve sob labwc (Wayland) + painel + wallpaper.
+WALL="${HOME}/wallpapers/mybots.png"
+export DISPLAY="${DISPLAY:-:0}"
+
+mkdir -p "${HOME}/.config/pcmanfm-qt/default"
+CONF="${HOME}/.config/pcmanfm-qt/default/settings.conf"
+if [ ! -f "$CONF" ]; then
+  cat > "$CONF" << 'CONF'
+[Desktop]
+BgColor=#121628
+DesktopBgColor=#121628
+DesktopFgColor=#ffffff
+DesktopShadowColor=#000000
+Wallpaper=/config/wallpapers/mybots.png
+WallpaperMode=stretch
+ShowHidden=false
+CONF
+else
+  # garante wallpaper mesmo se o arquivo ja existir
+  grep -q '^Wallpaper=' "$CONF" 2>/dev/null && sed -i 's|^Wallpaper=.*|Wallpaper=/config/wallpapers/mybots.png|' "$CONF" || true
+  grep -q '^WallpaperMode=' "$CONF" 2>/dev/null && sed -i 's|^WallpaperMode=.*|WallpaperMode=stretch|' "$CONF" || true
+  grep -q '^BgColor=' "$CONF" 2>/dev/null && sed -i 's|^BgColor=.*|BgColor=#121628|' "$CONF" || true
+fi
+
+if [ -f "$WALL" ] && command -v swaybg >/dev/null 2>&1; then
+  swaybg -i "$WALL" -m fill &
+elif [ -f "$WALL" ] && command -v feh >/dev/null 2>&1; then
+  feh --bg-fill "$WALL" &
+elif command -v xsetroot >/dev/null 2>&1; then
+  xsetroot -solid "#121628" &
+fi
+
+if command -v tint2 >/dev/null 2>&1; then
+  tint2 &
+fi
+
+if command -v pcmanfm-qt >/dev/null 2>&1; then
+  QT_QPA_PLATFORM=xcb pcmanfm-qt --desktop &
+elif command -v pcmanfm >/dev/null 2>&1; then
+  pcmanfm --desktop --profile mybots &
+fi
+
+( wrapped-chromium ${CHROME_CLI} ) &

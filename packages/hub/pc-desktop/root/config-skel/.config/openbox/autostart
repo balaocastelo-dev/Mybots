@@ -1,0 +1,19 @@
+#!/bin/bash
+# MyBots: desktop leve (openbox/X11) + tint2 + icones.
+WALL="${HOME}/wallpapers/mybots.png"
+export DISPLAY="${DISPLAY:-:1}"
+
+if [ -f "$WALL" ] && command -v feh >/dev/null 2>&1; then
+  feh --bg-fill "$WALL" &
+elif command -v xsetroot >/dev/null 2>&1; then
+  xsetroot -solid "#121628" &
+fi
+if command -v tint2 >/dev/null 2>&1; then
+  tint2 &
+fi
+if command -v pcmanfm-qt >/dev/null 2>&1; then
+  QT_QPA_PLATFORM=xcb pcmanfm-qt --desktop &
+elif command -v pcmanfm >/dev/null 2>&1; then
+  pcmanfm --desktop --profile mybots &
+fi
+( wrapped-chromium ${CHROME_CLI} ) &

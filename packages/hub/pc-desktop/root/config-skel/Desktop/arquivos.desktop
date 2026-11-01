@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Arquivos
+Comment=Gerenciador de arquivos
+Exec=pcmanfm-qt
+Icon=system-file-manager
+Terminal=false
+Categories=System;FileTools;FileManager;

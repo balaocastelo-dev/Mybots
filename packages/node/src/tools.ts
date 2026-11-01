@@ -273,9 +273,35 @@ function textoDoHub(r: { ok: boolean; data: unknown }): string {
   return typeof d === "string" ? d : JSON.stringify(d, null, 2);
 }
 
+
+/** Chefe assumiu o PC/celular deste bot: pausa ferramentas de tela até devolver. */
+async function chefeNoControleDasTelas(ctx: ToolContext): Promise<string | null> {
+  try {
+    const base = String(ctx.cfg.hub || "").replace(/\/$/, "");
+    const bot = encodeURIComponent(ctx.cfg.bot.id);
+    const r = await fetch(`${base}/api/bots/${bot}/controle-humano`, {
+      headers: {
+        authorization: `Bearer ${ctx.cfg.token}`,
+        "x-mybots-bot": ctx.cfg.bot.id,
+      },
+    });
+    if (!r.ok) return null;
+    const d = await r.json() as { controleHumano?: boolean };
+    if (d.controleHumano) {
+      return "O chefe está no controle (Assumir controle). Espere ele clicar em Devolver para a IA.";
+    }
+  } catch { /* hub offline: não bloqueia */ }
+  return null;
+}
+
 export async function runTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<{ output: string; ok: boolean }> {
   try {
-    switch (name) {
+    const TELAS_PAUSAVEIS = new Set(["navegador", "celular", "screenshot", "gravar_tela", "fill_credential"]);
+  if (TELAS_PAUSAVEIS.has(name)) {
+    const pausa = await chefeNoControleDasTelas(ctx);
+    if (pausa) return { output: pausa, ok: false };
+  }
+  switch (name) {
       case "run_command": return await runCommand(String(args.command ?? ""), String(args.why ?? ""), ctx);
       case "search_knowledge": {
         const r = await ctx.hub.call((callId) => ({ type: "search_knowledge", callId, query: String(args.query ?? ""), limit: Number(args.limit) || undefined, id: args.id ? String(args.id) : undefined, parte: Number(args.parte) || undefined }), 30_000);

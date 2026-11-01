@@ -17,18 +17,21 @@ export function RoutinesPanel({ bot, routines, onClose }: { bot: BotSummary; rou
   const [name, setName] = useState("");
   const [cron, setCron] = useState("0 8 * * *");
   const [prompt, setPrompt] = useState("");
+  const [paused, setPaused] = useState(false);
   const [err, setErr] = useState("");
+  const mine = routines.filter((r) => r.botId === bot.id);
   const create = async () => {
     setErr("");
-    const r = await api("/routines", { method: "POST", body: JSON.stringify({ botId: bot.id, name, cron, prompt }) });
+    const r = await api("/routines", { method: "POST", body: JSON.stringify({ botId: bot.id, name, cron, prompt, enabled: !paused }) });
     if (!r.ok) { setErr((await r.json()).error ?? "erro"); return; }
-    setName(""); setPrompt("");
+    setName(""); setPrompt(""); setPaused(false);
   };
   return (
     <div className="panel">
-      <div className="panel-head"><b>⏰ Rotinas de {bot.name}</b><button className="link" onClick={onClose}>fechar</button></div>
-      {routines.length === 0 && <div className="hint">Nenhuma rotina. Crie uma abaixo — ou peça ao bot: "toda segunda às 8h, confira o o ERP".</div>}
-      {routines.map((r) => (
+      <div className="panel-head"><b>Rotinas de {bot.name}</b><button className="link" onClick={onClose}>fechar</button></div>
+      <div className="hint">O Hub roda estas rotinas mesmo com a interface fechada. O resultado entra no chat deste bot e gera notificação.</div>
+      {mine.length === 0 && <div className="hint">Nenhuma rotina. Crie uma abaixo — ou peça ao bot: "toda segunda às 8h, confira o ERP". Receitas nascem com rotinas pausadas.</div>}
+      {mine.map((r) => (
         <div key={r.id} className={"routine" + (r.enabled ? "" : " off")}>
           <div className="routine-main"><b>{r.name}</b> <code>{r.cron}</code><div className="routine-prompt">{r.prompt}</div><small>{r.nextRun ? "próxima: " + new Date(r.nextRun).toLocaleString("pt-BR") : ""}{r.lastRun ? " · última: " + new Date(r.lastRun).toLocaleString("pt-BR") : ""}</small></div>
           <div className="routine-actions">
@@ -39,7 +42,7 @@ export function RoutinesPanel({ bot, routines, onClose }: { bot: BotSummary; rou
         </div>
       ))}
       <div className="routine-form">
-        <input placeholder="Nome (ex.: Conferir o o ERP)" value={name} onChange={(e) => setName(e.target.value)} />
+        <input placeholder="Nome (ex.: Conferir o ERP)" value={name} onChange={(e) => setName(e.target.value)} />
         <div className="row">
           <input placeholder="cron: min hora dia mês dia-semana" value={cron} onChange={(e) => setCron(e.target.value)} />
           <select value="" onChange={(e) => { if (e.target.value) setCron(e.target.value); }}>
@@ -49,6 +52,7 @@ export function RoutinesPanel({ bot, routines, onClose }: { bot: BotSummary; rou
         </div>
         <textarea placeholder="O que o bot deve fazer nesse horário" rows={2} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
         {err && <div className="err">{err}</div>}
+        <label className="chk"><input type="checkbox" checked={paused} onChange={(e) => setPaused(e.target.checked)} /> Criar pausada</label>
         <button className="btn primary" disabled={!cron || !prompt.trim()} onClick={create}>Criar rotina</button>
       </div>
     </div>

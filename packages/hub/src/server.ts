@@ -630,6 +630,7 @@ export async function startServer(hub: Hub) {
     botExiste: botConhecido,
   });
   android.registrar();
+  hub.androidDoBot = (id) => android.cadastro(id);
   atenderAndroidHttp = (req, reply) => android.http(req, reply);
   atenderAndroidWs = (socket, req) => android.ws(socket, req);
   app.post("/api/bots/:id/android/pair", async (req, reply) => {
@@ -644,6 +645,18 @@ export async function startServer(hub: Hub) {
     if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
     const serial = String(((req.body ?? {}) as any).serial ?? "");
     return android.usar(id, serial);
+  });
+  app.get("/api/bots/:id/android/aparelhos", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    return { aparelhos: await android.aparelhosConectados() };
+  });
+  app.post("/api/bots/:id/android/adotar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    return android.adotar(id, String((req.body as { serial?: unknown } | null)?.serial ?? ""));
   });
   app.get("/api/bots/:id/android/status", async (req, reply) => {
     const id = String((req.params as any).id ?? "");

@@ -12,7 +12,7 @@ import {
   listarMaquinas,
 } from "./maquinas";
 import { Interruptor } from "./Geral";
-import { lerStatusPareamento, parearCelular, type StatusPareamento } from "./pareamento";
+import { adotarCelular, lerStatusPareamento, parearCelular, type StatusPareamento } from "./pareamento";
 
 const ROTULO: Record<EstadoMaquina, string> = {
   ligado: "Ligado",
@@ -169,6 +169,9 @@ function Pareamento({ bots }: { bots: { id: string; nome: string }[] }) {
   const [status, setStatus] = useState<StatusPareamento | null>(null);
   const [recado, setRecado] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [serial, setSerial] = useState("");
+  const [adotando, setAdotando] = useState(false);
+  const [recadoAdotar, setRecadoAdotar] = useState("");
 
   useEffect(() => {
     if (!botId) return;
@@ -203,7 +206,22 @@ function Pareamento({ bots }: { bots: { id: string; nome: string }[] }) {
     }
   };
 
+  const vincular = async () => {
+    setRecadoAdotar("");
+    setAdotando(true);
+    try {
+      const r = await adotarCelular(botId, serial);
+      if (!r.ok) { setRecadoAdotar(r.erro ?? "Não vinculei."); return; }
+      setSerial("");
+      setRecadoAdotar("Vinculado a este bot. O código de pareamento não entrou nisso.");
+      setStatus(await lerStatusPareamento(botId));
+    } finally {
+      setAdotando(false);
+    }
+  };
+
   return (
+    <>
     <form className="ajustes-form" autoComplete="off" onSubmit={(e) => { e.preventDefault(); void enviar(); }}>
       <h4>Parear celular</h4>
       <p className="ajustes-lead">Mesma rede Wi-Fi. Depuração sem fio no aparelho. A imagem não abre aqui: o link “Abrir tela” é que leva para <code>/android/&lt;bot&gt;/</code>.</p>
@@ -222,6 +240,16 @@ function Pareamento({ bots }: { bots: { id: string; nome: string }[] }) {
         <button type="submit" className="btn" disabled={!botId || enviando}>{enviando ? "Pareando…" : "Parear"}</button>
       </div>
     </form>
+    <form className="ajustes-form" autoComplete="off" onSubmit={(e) => { e.preventDefault(); void vincular(); }}>
+      <h4>Aparelho já conectado</h4>
+      <p className="ajustes-lead">Sem código. O serial precisa estar em <code>adb devices</code> como device, por exemplo <code>192.168.15.5:5555</code>.</p>
+      <label>Serial <input value={serial} autoComplete="off" spellCheck={false} placeholder="192.168.15.5:5555" onChange={(e) => setSerial(e.target.value)} /></label>
+      {recadoAdotar ? <p className="ajustes-lead" role="status">{recadoAdotar}</p> : null}
+      <div className="ajustes-form-acoes">
+        <button type="submit" className="btn" disabled={!botId || adotando}>{adotando ? "Vinculando…" : "Vincular este aparelho"}</button>
+      </div>
+    </form>
+    </>
   );
 }
 

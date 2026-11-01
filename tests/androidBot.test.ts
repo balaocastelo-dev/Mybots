@@ -9,9 +9,11 @@ import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
 import {
-  aparelhosDe, ipDeAparelho, PareamentoAndroid, portaValida, semSegredo, validarPareamento,
+  aparelhosDe, ipDeAparelho, PareamentoAndroid, portaValida, semSegredo, serialTcpip, validarPareamento,
   type AdbFn, type CadastroAndroid,
 } from "../packages/hub/src/androidBot.ts";
+import { escolherAlvoDoCelular } from "../packages/hub/src/celularDoBot.ts";
+import { ServicoAndroid } from "../packages/hub/src/androidServico.ts";
 import {
   argumentosDoServidorScrcpy, argumentosWhatsapp, avccDe, classificarCabecalho, descricaoDeH264,
   i16DoScroll, mensagemToque, URL_WHATSAPP,
@@ -30,8 +32,12 @@ test("o pedido de pareamento exige IP local, portas livres e código de 6 dígit
   assert.equal(ipDeAparelho("8.8.8.8"), false);
   assert.equal(ipDeAparelho("192.168.15.999"), false);
   assert.equal(portaValida(8787).ok, false);
+  assert.equal(portaValida(8790).ok, false);
   assert.equal(portaValida(8791).ok, false);
   assert.equal(portaValida(37123).ok, true);
+  assert.equal(serialTcpip("192.168.15.5:5555").ok, true);
+  assert.equal(serialTcpip("192.168.15.5:8790").ok, false);
+  assert.equal(serialTcpip("192.168.15.5:8787").ok, false);
 
   const ruim = validarPareamento({ ip: "8.8.8.8", porta: 37123, codigo: "123456" });
   assert.equal(ruim.ok, false);
@@ -111,6 +117,91 @@ test("sem portaConexao o pareamento acha a porta de conexão no mdns, e código 
   }).parear("bia", { ip: "192.168.15.20", porta: 8787, codigo: "654321" });
   assert.equal(porta.ok, false);
   assert.equal(chamadas.length, antes);
+});
+
+test("adotar grava o serial que já está device e não chama pair nem connect", async () => {
+  const chamadas: string[][] = [];
+  const guardado: CadastroAndroid[] = [];
+  const adb: AdbFn = async (args) => {
+    chamadas.push(args);
+    if (args[0] === "devices") {
+      return { ok: true, saida: "List of devices attached\n192.168.15.5:5555 device product:POCO model:POCO_X5\n192.168.15.9:5555 offline\n" };
+    }
+    return { ok: true, saida: "não devia chegar aqui" };
+  };
+  const p = new PareamentoAndroid({
+    adb,
+    ler: () => guardado[0] ?? null,
+    gravar: (_id, c) => { if (c) guardado[0] = c; },
+    agora: () => 50,
+  });
+  const r = await p.adotar("marketeiro-vendedor", "192.168.15.5:5555");
+  assert.deepEqual(r, { ok: true });
+  assert.deepEqual(chamadas, [["devices", "-l"]]);
+  assert.equal(guardado[0].serial, "192.168.15.5:5555");
+  assert.equal(guardado[0].ip, "192.168.15.5");
+  assert.equal(guardado[0].portaConexao, 5555);
+  assert.equal(guardado[0].modo, "aparelho");
+
+  const offline = await p.adotar("marketeiro-vendedor", "192.168.15.9:5555");
+  assert.equal(offline.ok, false);
+  if (!offline.ok) assert.match(offline.erro, /offline/);
+  const sumido = await p.adotar("marketeiro-vendedor", "192.168.15.8:5555");
+  assert.equal(sumido.ok, false);
+  if (!sumido.ok) assert.match(sumido.erro, /device/);
+  const proibida = await p.adotar("marketeiro-vendedor", "127.0.0.1:8790");
+  assert.equal(proibida.ok, false);
+  assert.equal(chamadas.every((c) => c[0] === "devices"), true);
+});
+
+test("a ferramenta celular prefere o cadastro do bot e só cai na empresa se ele não tiver", () => {
+  const doBot = escolherAlvoDoCelular({
+    botId: "marketeiro-vendedor",
+    cadastro: { serial: "192.168.15.5:5555" },
+    empresaId: "balao-anchieta",
+    vinculo: { serial: "192.168.15.20:42111", modelo: "outro" },
+  });
+  assert.equal(doBot?.serial, "192.168.15.5:5555");
+  assert.equal(doBot?.origem, "bot");
+  assert.equal(doBot?.trava, "bot:marketeiro-vendedor");
+
+  const daEmpresa = escolherAlvoDoCelular({
+    botId: "bia",
+    cadastro: null,
+    empresaId: "balao-anchieta",
+    vinculo: { serial: "192.168.15.20:42111", modelo: "POCO" },
+  });
+  assert.equal(daEmpresa?.origem, "empresa");
+  assert.equal(daEmpresa?.serial, "192.168.15.20:42111");
+  assert.equal(daEmpresa?.trava, "balao-anchieta");
+
+  assert.equal(escolherAlvoDoCelular({ botId: "bia", cadastro: null, empresaId: null, vinculo: null }), null);
+  assert.equal(escolherAlvoDoCelular({
+    botId: "bia", cadastro: null, empresaId: "balao-anchieta", vinculo: null,
+  }), null);
+});
+
+test("o serviço só adota para bot que existe e não abre o WhatsApp", async () => {
+  const chamadas: string[][] = [];
+  const loja = new Map<string, CadastroAndroid>();
+  const srv = new ServicoAndroid({
+    loja: {
+      ler: (id) => loja.get(id) ?? null,
+      gravar: (id, c) => { if (c) loja.set(id, c); else loja.delete(id); },
+    },
+    botExiste: (id) => id === "marketeiro-vendedor",
+    adb: async (args) => {
+      chamadas.push(args);
+      return { ok: true, saida: "List of devices attached\n192.168.15.5:5555 device\n" };
+    },
+  });
+  const sumiu = await srv.adotar("nao-existe", "192.168.15.5:5555");
+  assert.equal(sumiu.ok, false);
+  assert.equal(chamadas.length, 0);
+  const ok = await srv.adotar("marketeiro-vendedor", "192.168.15.5:5555");
+  assert.deepEqual(ok, { ok: true });
+  assert.equal(srv.cadastro("marketeiro-vendedor")?.serial, "192.168.15.5:5555");
+  assert.equal(chamadas.some((c) => c[0] === "pair" || c[0] === "connect" || c.includes("am")), false);
 });
 
 test("o protocolo da tela é o scrcpy 5, H.264, sem áudio, e o toque tem 32 bytes", () => {

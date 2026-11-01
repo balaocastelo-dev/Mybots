@@ -1,3 +1,4 @@
+import { AMEBAS_V2_TODOS, amebaV2Path, amebaV2Num, amebaV2StoragePath, amebaV2Url, sortearAmebaV2, isAmebaV2 } from "./amebasV2";
 import { useState } from "react";
 // ---------------------------------------------------------------------------
 // A APARENCIA DOS BOTS
@@ -366,71 +367,44 @@ export function EscolhaAparencia({ id, valor, onSalvar, onFechar }: {
   onSalvar: (codigo: string) => void | Promise<void>;
   onFechar: () => void;
 }) {
-  const [a, setA] = useState(lerAparencia(valor) ?? aparenciaDe(id));
-  const [aba, setAba] = useState<string>("prontos");
+  const inicial = isAmebaV2(valor) ? amebaV2StoragePath(valor!) : amebaV2StoragePath(sortearAmebaV2(id));
+  const [avatar, setAvatar] = useState(inicial);
   const [salvando, setSalvando] = useState(false);
-  const trocar = (k: keyof Aparencia, v: number) => setA({ ...a, [k]: v });
   return (
     <div className="modal-bg" onClick={onFechar}>
-      <div className="modal wide ap" onClick={(e) => e.stopPropagation()}>
-        <div className="ap-topo">
-          <div className="ap-previa"><BotArte a={a} id={id} size={96} /></div>
-          <div>
-            <h3>Aparencia do bot</h3>
-            <p className="muted">Escolha um dos 100 prontos ou monte o seu: corpo, cor, olhos, cabelo e roupa.</p>
-            <div className="ap-abas">
-              {ABAS.map((t) => (
-                <button key={t.id} className={"ap-aba" + (aba === t.id ? " on" : "")} onClick={() => setAba(t.id)}>{t.titulo}</button>
-              ))}
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Ameba do bot</h3>
+        <p className="muted">So as amebas novas. Sorteie ou escolha uma.</p>
+        <div className="ameba-picker">
+          <div className="ameba-picker-topo">
+            <img src={amebaV2Url(id, avatar) || amebaV2Path(amebaV2Num(avatar) || "001")} alt="" width={72} height={72} style={{ borderRadius: 16 }} />
+            <div className="ameba-picker-acoes">
+              <b>Ameba</b>
+              <button type="button" className="btn" onClick={() => setAvatar(amebaV2StoragePath(sortearAmebaV2(id + "-" + Date.now())))}>Sortear</button>
             </div>
           </div>
+          <div className="ameba-grade" role="listbox" aria-label="Escolher ameba">
+            {AMEBAS_V2_TODOS.map((n) => {
+              const path = amebaV2StoragePath(n);
+              const on = amebaV2Num(avatar) === n;
+              return (
+                <button key={n} type="button" role="option" aria-selected={on} className={"ameba-opcao" + (on ? " on" : "")}
+                  onClick={() => setAvatar(path)}>
+                  <img src={amebaV2Path(n)} alt="" draggable={false} />
+                </button>
+              );
+            })}
+          </div>
         </div>
-
-        <div className="ap-grade">
-          {aba === "prontos" && CEM.map((c, i) => (
-            <button key={i} className={"ap-item" + (igual(c, a) ? " on" : "")} title={`bot ${i + 1}`} onClick={() => setA(c)}>
-              <BotArte a={c} id={"pronto-" + i} size={52} /><span>{i + 1}</span>
-            </button>
-          ))}
-          {aba === "forma" && FORMAS.map((f, i) => (
-            <button key={f.nome} className={"ap-item" + (a.forma === i ? " on" : "")} onClick={() => trocar("forma", i)}>
-              <BotArte a={{ ...a, forma: i }} id={id} size={52} /><span>{f.nome}</span>
-            </button>
-          ))}
-          {aba === "cor" && CORES.map((c, i) => (
-            <button key={c.nome} className={"ap-item" + (a.cor === i ? " on" : "")} onClick={() => trocar("cor", i)}>
-              <span className="ap-bola" style={{ background: `linear-gradient(140deg, ${c.clara}, ${c.escura})` }} /><span>{c.nome}</span>
-            </button>
-          ))}
-          {aba === "olhos" && OLHOS.map((o, i) => (
-            <button key={o.nome} className={"ap-item" + (a.olhos === i ? " on" : "")} onClick={() => trocar("olhos", i)}>
-              <BotArte a={{ ...a, olhos: i }} id={id} size={52} /><span>{o.nome}</span>
-            </button>
-          ))}
-          {aba === "cabelo" && CABELOS.map((c, i) => (
-            <button key={c.nome} className={"ap-item" + (a.cabelo === i ? " on" : "")} onClick={() => trocar("cabelo", i)}>
-              <BotArte a={{ ...a, cabelo: i }} id={id} size={52} /><span>{c.nome}</span>
-            </button>
-          ))}
-          {aba === "roupa" && ROUPAS.map((rp, i) => (
-            <button key={rp.nome} className={"ap-item" + (a.roupa === i ? " on" : "")} onClick={() => trocar("roupa", i)}>
-              <BotArte a={{ ...a, roupa: i }} id={id} size={52} /><span>{rp.nome}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="modal-foot">
-          <button className="btn" onClick={() => setA(aparenciaDe(id + ":" + Date.now()))}>Sortear</button>
-          <button className="btn" onClick={onFechar}>Cancelar</button>
-          <button className="btn primary" disabled={salvando} onClick={async () => {
+        <div className="row" style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button type="button" className="link" onClick={onFechar}>Cancelar</button>
+          <button type="button" className="btn primary" disabled={salvando} onClick={async () => {
             setSalvando(true);
-            try { await onSalvar(escreverAparencia(a)); onFechar(); } finally { setSalvando(false); }
-          }}>{salvando ? "Salvando..." : "Usar esta aparencia"}</button>
+            try { await onSalvar(avatar); onFechar(); }
+            finally { setSalvando(false); }
+          }}>{salvando ? "Salvando…" : "Salvar"}</button>
         </div>
       </div>
     </div>
   );
 }
-
-const igual = (x: Aparencia, y: Aparencia) =>
-  x.cor === y.cor && x.forma === y.forma && x.olhos === y.olhos && x.cabelo === y.cabelo && x.roupa === y.roupa;

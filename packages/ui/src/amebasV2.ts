@@ -1,4 +1,4 @@
-/** Amebas v2 (PNG) — mapeamento dos 23 + helper p/ bots novos. */
+/** Amebas v2 (PNG) - mapeamento dos 23 + helper p/ bots novos. */
 export const AMEBAS_V2_POR_BOT: Record<string, string> = {
   "chaves": "042",
   "gerente-meu-bling": "091",
@@ -25,7 +25,7 @@ export const AMEBAS_V2_POR_BOT: Record<string, string> = {
   "escola-rotineiro": "067"
 };
 
-/** Famílias 001–100 (10 por família). Especialidade → faixa preferida. */
+/** Famílias 001-100 (10 por família). Especialidade → faixa preferida. */
 export const AMEBA_V2_FAMILIAS: Record<string, [number, number]> = {
   email: [11, 20],
   seguranca: [91, 100],
@@ -45,16 +45,25 @@ export const AMEBA_V2_FAMILIAS: Record<string, [number, number]> = {
   default: [1, 100],
 };
 
+/** Todos os números 001..100 para o seletor. */
+export const AMEBAS_V2_TODOS: string[] = Array.from({ length: 100 }, (_, i) => String(i + 1).padStart(3, "0"));
+
 export function amebaV2Path(num: string | number): string {
   const n = String(num).replace(/\D/g, "").padStart(3, "0");
   const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
   return `${base}/amebas/v2/ameba-v2-${n}.png`;
 }
 
-/** Resolve PNG: avatar já é path v2, ou mapeamento fixo dos 23. */
+/** Extrai o número 001-100 de um avatar path/emoji legado. */
+export function amebaV2Num(avatar?: string | null): string | null {
+  if (!avatar) return null;
+  const m = String(avatar).match(/ameba-v2-(\d{3})\.png/i);
+  return m ? m[1] : null;
+}
+
+/** Resolve PNG: avatar já é v2, ou mapeamento fixo dos 23. Sempre com BASE_URL. */
 export function amebaV2Url(botId: string, avatar?: string | null): string | null {
-  if (avatar && /(?:^|\/)amebas\/v2\/ameba-v2-\d{3}\.png$/.test(avatar)) return avatar;
-  const n = AMEBAS_V2_POR_BOT[botId];
+  const n = amebaV2Num(avatar) || AMEBAS_V2_POR_BOT[botId];
   return n ? amebaV2Path(n) : null;
 }
 
@@ -69,4 +78,16 @@ export function sortearAmebaV2(seed: string, especialidadeId?: string | null): s
   const span = faixa[1] - faixa[0] + 1;
   const n = faixa[0] + (Math.abs(h) % span);
   return amebaV2Path(n);
+}
+
+/** Path canônico sem BASE_URL — o que grava no Hub/banco. */
+export function amebaV2StoragePath(numOrUrl: string | number): string {
+  const n = typeof numOrUrl === "number"
+    ? String(numOrUrl).padStart(3, "0")
+    : (amebaV2Num(String(numOrUrl)) || String(numOrUrl).replace(/\D/g, "").padStart(3, "0"));
+  return `/amebas/v2/ameba-v2-${n}.png`;
+}
+
+export function isAmebaV2(avatar?: string | null): boolean {
+  return !!amebaV2Num(avatar);
 }

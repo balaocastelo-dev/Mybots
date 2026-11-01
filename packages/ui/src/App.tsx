@@ -105,6 +105,7 @@ export function App() {
   };
   const [newGroup, setNewGroup] = useState(false);
   const [newBot, setNewBot] = useState(false);
+  const [nascendoId, setNascendoId] = useState<string | null>(null);
   // Empresas: cada uma com seus bots, gerentes e regras. O conhecimento continua universal.
   const [empresas, setEmpresas] = useState<Array<{ id: string; nome: string; regras: string; idioma?: string; bots: number }>>([]);
   const [empresaAtiva, setEmpresaAtiva] = useState<string>("todas"); // perfil unico: sem troca de empresa na UI
@@ -334,7 +335,7 @@ export function App() {
             return (
               <li key={"ativo-" + b.id} data-colab={ajuda ? "ajudando" : "ativo"} className={"linha-bot" + (conv === selected && !verQuadro && !verGrafo ? " active" : "")}
                 onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 768) setSidebarOpen(false); }}>
-                <Avatar bot={b} size={42} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
+                <Avatar bot={b} size={42} cutucadas={cutuca.id === b.id ? cutuca.n : 0} forceAnim={nascendoId === b.id ? "nascer" : null} />
                 <div className="bot-text">
                   <div className="bot-name">{nomeNaTela(b, painel.prefs)}</div>
                   <div className={"bot-status" + (ajuda ? " ajudando" : " busy")}>
@@ -366,7 +367,7 @@ export function App() {
                       onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 768) setSidebarOpen(false); }}
                       onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
                       <span className="grade-rosto">
-                        <Avatar bot={b} size={80} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
+                        <Avatar bot={b} size={80} cutucadas={cutuca.id === b.id ? cutuca.n : 0} forceAnim={nascendoId === b.id ? "nascer" : null} />
                         {(b.unread ?? 0) > 0 && <i className="nao-lido" title="não lido" />}
                       </span>
                       <span className="grade-nome">{nomeNaTela(b, painel.prefs)}</span>
@@ -387,7 +388,7 @@ export function App() {
               <li key={b.id} className={"linha-bot" + (gerente ? " linha-gerente" : "") + (conv === selected ? " active" : "") + (b.online ? "" : " offline") + (espera ? " espera-ok" : "") + (pendingFor(b.id) > 0 ? " tem-aprovacao" : "") + (b.gerente ? " gerente-linha" : "")}
                 onClick={() => { cutucar(b.id); fecharColab(); setSelected(conv); if (window.innerWidth < 768) setSidebarOpen(false); }}
                 onContextMenu={(e) => { e.preventDefault(); setSelected(conv); setMenu({ bot: b, x: e.clientX, y: e.clientY }); }}>
-                <Avatar bot={b} size={gerente ? 64 : 42} cutucadas={cutuca.id === b.id ? cutuca.n : 0} />
+                <Avatar bot={b} size={gerente ? 64 : 42} cutucadas={cutuca.id === b.id ? cutuca.n : 0} forceAnim={nascendoId === b.id ? "nascer" : null} />
                 <div className="bot-text">
                   <div className="bot-name">{nomeNaTela(b, painel.prefs)}{espera && <span className="badge perigo">OK</span>}{pendingFor(b.id) > 0 && <span className="badge aprovacao" title="Espera o seu OK">{pendingFor(b.id)}</span>}{(b.unread ?? 0) > 0 && conv !== selected && pendingFor(b.id) === 0 && !espera && <span className="badge">{b.unread}</span>}</div>
                   {b.online && b.busy && pendingFor(b.id) === 0 && <div className="bot-vivo">{faseDoStatus(b.status, b.busy, b.fase) === "trabalhando" ? "está trabalhando" : "digitando…"}</div>}
@@ -546,7 +547,7 @@ export function App() {
       {legalPara && <TelaLegal empresaId={legalPara} empresaNome={empresas.find((e) => e.id === legalPara)?.nome ?? legalPara}
         onClose={() => { setLegalPara(null); setVerEmpresas(true); }} />}
       {verEmpresas && <EmpresasDialog empresas={empresas} bots={state.bots} onClose={() => { setVerEmpresas(false); void carregarEmpresas(); }} />}
-      {newBot && <NewBotDialog empresas={empresas} empresaAtiva={empresaAtiva} onCriou={() => void carregarEmpresas()} onClose={() => setNewBot(false)} onCreated={(id) => { setNewBot(false); setSelected(dmConversation(id)); }} />}
+      {newBot && <NewBotDialog empresas={empresas} empresaAtiva={empresaAtiva} onCriou={() => void carregarEmpresas()} onClose={() => setNewBot(false)} onCreated={(id) => { setNewBot(false); setNascendoId(id); window.setTimeout(() => setNascendoId((cur) => cur === id ? null : cur), 2800); setSelected(dmConversation(id)); if (window.innerWidth < 768) setSidebarOpen(true); }} />}
 
       {dialogo?.tipo === "aparencia" && (
         <EscolhaAparencia id={dialogo.bot.id} valor={dialogo.bot.avatar} onFechar={() => setDialogo(null)}

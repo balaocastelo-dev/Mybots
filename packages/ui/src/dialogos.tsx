@@ -10,6 +10,7 @@ import { TelaCreditos } from "./creditos";
 import { api } from "./api";
 import { confirmDeus } from "./controles";
 import { RetratoPreview } from "./avatar";
+import { AMEBAS_V2_TODOS, amebaV2Path, amebaV2Num, amebaV2StoragePath, sortearAmebaV2, isAmebaV2 } from "./amebasV2";
 import { CRON_PRESETS } from "./mensagem";
 
 export function RoutinesPanel({ bot, routines, onClose }: { bot: BotSummary; routines: Routine[]; onClose: () => void }) {
@@ -125,9 +126,30 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
         <>
           <div className="row">
             <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
-            <div className="campo-rosto">
-              <RetratoPreview id={value.id ?? value.name ?? ""} avatar={value.avatar} />
-              <label className="narrow">Rosto<input value={value.avatar} onChange={(e) => set({ avatar: e.target.value })} placeholder="deixe vazio: desenho próprio" /><small>Vazio = retrato desenhado para este bot. Pode pôr um emoji ou o endereço de uma foto.</small></label>
+            <div className="ameba-picker">
+              <div className="ameba-picker-topo">
+                <RetratoPreview id={value.id ?? value.name ?? "novo"} avatar={value.avatar} size={64} />
+                <div className="ameba-picker-acoes">
+                  <b>Ameba</b>
+                  <small className="muted">So as amebas novas. Sorteie ou escolha uma.</small>
+                  <button type="button" className="btn" onClick={() => {
+                    const seed = (value.id || value.name || "novo") + "-" + Date.now();
+                    set({ avatar: amebaV2StoragePath(sortearAmebaV2(seed, value.especialidadeId)) });
+                  }}>Sortear</button>
+                </div>
+              </div>
+              <div className="ameba-grade" role="listbox" aria-label="Escolher ameba">
+                {AMEBAS_V2_TODOS.map((n) => {
+                  const path = amebaV2StoragePath(n);
+                  const on = amebaV2Num(value.avatar) === n;
+                  return (
+                    <button key={n} type="button" role="option" aria-selected={on} className={"ameba-opcao" + (on ? " on" : "")}
+                      onClick={() => set({ avatar: path })}>
+                      <img src={amebaV2Path(n)} alt="" draggable={false} />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
           <label>Função<input value={value.role} onChange={(e) => set({ role: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(value.name, e.target.value, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Marketing e redes sociais" /></label>
@@ -145,7 +167,7 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
                     } else {
                       const esp = especialidades.find((x) => x.id === id) || null;
                       onEspecialidade?.(id, false);
-                      set({ especialidadeId: id, especialidadeDesligada: false, avatar: value.avatar || esp?.emoji || value.avatar, role: value.role || esp?.nome || value.role, ...( !value.personaTouched ? { persona: personaTemplate(value.name, value.role || esp?.nome || "", esp) } : {}) });
+                      set({ especialidadeId: id, especialidadeDesligada: false, avatar: isAmebaV2(value.avatar) ? value.avatar : amebaV2StoragePath(sortearAmebaV2(value.id || value.name || "novo", id)), role: value.role || esp?.nome || value.role, ...( !value.personaTouched ? { persona: personaTemplate(value.name, value.role || esp?.nome || "", esp) } : {}) });
                     }
                   }}
                 >
@@ -228,7 +250,7 @@ export function NewGerenteDialog({ bots, onClose, onCreated }: { bots: BotSummar
   const { providers, voices } = usePresets();
   const [equipe, setEquipe] = useState<string[]>(bots.filter((b) => !b.manages?.length).map((b) => b.id));
   const [etapa, setEtapa] = useState<0 | 1 | 2>(0);
-  const [v, setV] = useState<any>({ name: "", role: "Gerente da equipe", avatar: "", voice: "", ...PADRAO_DA_CASA });
+  const [v, setV] = useState<any>({ name: "", role: "Gerente da equipe", avatar: amebaV2StoragePath(sortearAmebaV2("novo-gerente")), voice: "", ...PADRAO_DA_CASA });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const id = slug(v.name || "gerente");
@@ -285,13 +307,9 @@ export function NewGerenteDialog({ bots, onClose, onCreated }: { bots: BotSummar
 export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva = "todas", onCriou }: { onClose: () => void; onCreated: (id: string) => void; empresas?: Array<{ id: string; nome: string }>; empresaAtiva?: string; onCriou?: () => void }) {
   const { providers, voices } = usePresets();
   const [where, setWhere] = useState<"hub" | "other">("hub");
-  // Com uma empresa só na casa, "Todas" não é motivo para o bot nascer órfão.
-  const [empresa, setEmpresa] = useState(
-    empresaAtiva !== "todas" ? empresaAtiva : (empresas.length === 1 ? empresas[0].id : ""),
-  );
-  const [ponte, setPonte] = useState(false);
+  /* empresa/ponte removidos da UI: o Hub escolhe a empresa padrao em silencio */
   const [etapa, setEtapa] = useState<1 | 2>(1);
-  const [v, setV] = useState<any>({ name: "", role: "", avatar: "", voice: "", especialidadeId: null, especialidadeDesligada: false, ...PADRAO_DA_CASA, persona: personaTemplate("", "") });
+  const [v, setV] = useState<any>({ name: "", role: "", avatar: amebaV2StoragePath(sortearAmebaV2("novo-bot")), voice: "", especialidadeId: null, especialidadeDesligada: false, ...PADRAO_DA_CASA, persona: personaTemplate("", "") });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [especialidades, setEspecialidades] = useState<EspecialidadeResumo[]>([]);
@@ -312,7 +330,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
               return {
                 ...prev,
                 especialidadeId: j.id,
-                avatar: prev.avatar || j.emoji || prev.avatar,
+                avatar: isAmebaV2(prev.avatar) ? prev.avatar : amebaV2StoragePath(sortearAmebaV2(prev.id || prev.name || "novo", j.id)),
                 role: prev.role || j.nome || prev.role,
                 ...(prev.personaTouched ? {} : { persona: j.personaPreview || personaTemplate(prev.name, prev.role || j.nome || "", esp) }),
               };
@@ -326,7 +344,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
   const id = slug(v.name || "bot");
   const create = async () => {
     setBusy(true); setErr("");
-    const r = await api("/managed", { method: "POST", body: JSON.stringify({ ...v, id, empresa: empresa || null, ponte }) });
+    const r = await api("/managed", { method: "POST", body: JSON.stringify({ ...v, id, avatar: isAmebaV2(v.avatar) ? amebaV2StoragePath(v.avatar) : amebaV2StoragePath(sortearAmebaV2(id, v.especialidadeId)) }) });
     setBusy(false);
     if (!r.ok) { setErr((await r.json()).error ?? "erro"); return; }
     onCriou?.();
@@ -343,17 +361,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
           <button type="button" className={where === "hub" ? "on" : ""} aria-pressed={where === "hub"} onClick={() => setWhere("hub")}>Roda neste PC (o Hub cuida dele)</button>
           <button type="button" className={where === "other" ? "on" : ""} aria-pressed={where === "other"} onClick={() => setWhere("other")}>Roda em outro PC</button>
         </div>
-        {etapa === 1 && (
-          <>
-            <label>Empresa <small className="muted">(todo bot pertence a uma)</small></label>
-            <select aria-label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
-              <option value="" disabled>Escolha a empresa…</option>
-              {empresas.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-            </select>
-            {!empresas.length && <p className="muted">Nenhuma empresa cadastrada ainda — crie a empresa primeiro, em ＋ gerenciar empresas.</p>}
-            <label className="linha-check"><input type="checkbox" checked={ponte} onChange={(e) => setPonte(e.target.checked)} /> Ponte: pode falar com bots de outras empresas</label>
-          </>
-        )}
+        {/* empresa e ponte: removidos — perfil unico */}
 
         <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew etapa={etapa === 1 ? "identidade" : "modelo"} especialidades={especialidades} deteccao={deteccao} onEspecialidade={(id, desligada) => setV((prev: any) => ({ ...prev, especialidadeId: id, especialidadeDesligada: desligada }))} />
         {etapa === 2 && where === "other" && (
@@ -365,7 +373,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
           {etapa === 1
             ? <button className="btn primary" type="button" disabled={!v.name.trim()} onClick={() => setEtapa(2)}>Continuar</button>
             : where === "hub"
-              ? <button className="btn primary" type="button" disabled={!v.name.trim() || !empresa || busy} onClick={create}>{busy ? "Criando…" : `Criar e iniciar (${id})`}</button>
+              ? <button className="btn primary" type="button" disabled={!v.name.trim() || busy} onClick={create}>{busy ? "Criando…" : `Criar e iniciar (${id})`}</button>
               : <button className="btn primary" type="button" onClick={() => { navigator.clipboard?.writeText(cmd); onClose(); }}>Copiar comando e fechar</button>}
         </div>
       </div>

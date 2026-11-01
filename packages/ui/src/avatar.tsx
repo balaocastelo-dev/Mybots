@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type { BotSummary } from "@mybots/shared";
 import { ArteDoBot, lerAparencia } from "./aparencia";
+import { amebaV2Url, sortearAmebaV2 } from "./amebasV2";
 import { caminhoDaBolha } from "./mensagem";
 
 // ---------------------------------------------------------------------------
@@ -210,30 +211,48 @@ export function emojiDoEstado(bot: BotSummary, falando: boolean): string | undef
 }
 export const PARADO = ["👀", "🧠", "📋", "☕"];
 
-export function Avatar({ bot, size = 88, falando = false, cutucadas = 0 }: { bot: BotSummary; size?: number; falando?: boolean; cutucadas?: number }) {
-  const url = bot.avatar && /^(https?:|data:|\/)/.test(bot.avatar) ? bot.avatar : null;
-  const style = { width: size, height: size, fontSize: size * 0.45, background: "transparent" };
-  // Parado respira. Trabalhando pula e balança. Falando mexe a boca.
-  // 1 a 4 cliques: ele se sacode. Do 5o em diante fica bravo — e segue bravo
-  // enquanto voce insistir, nao so por um instante.
+export type AvatarAnim = "dormindo" | "nascer" | "chave-nova";
+
+export function Avatar({ bot, size = 88, falando = false, cutucadas = 0, forceAnim }: { bot: BotSummary; size?: number; falando?: boolean; cutucadas?: number; forceAnim?: AvatarAnim | null }) {
+  // So amebas v2 (PNG). Legado emoji/SVG/arte cai no sorteio estavel por id.
+  const url = amebaV2Url(bot.id, bot.avatar) || sortearAmebaV2(bot.id);
+  const style = { width: size, height: size, fontSize: size * 0.45, background: "transparent", position: "relative" as const };
   const bravo = cutucadas >= 5;
-  const estado = (!bot.online ? " dormindo" : falando ? " falando" : bot.busy ? " ocupado" : "")
-    + (bravo ? " bravo" : cutucadas > 0 ? " cutucado" : "");
+  const semToken = !!(bot as any).semToken
+    || /429|quota|falha no modelo|rate.?limit|sem.?token|chave.*(esgot|recus|inv[aá]lid)|token.*(esgot|expir)/i.test(String(bot.status ?? ""));
+  const doHub = (forceAnim ?? (bot as any).avatarAnim ?? null) as AvatarAnim | null;
+  const [flash, setFlash] = useState<AvatarAnim | null>(null);
+  useEffect(() => {
+    if (doHub === "nascer" || doHub === "chave-nova") {
+      setFlash(doHub);
+      const ms = doHub === "nascer" ? 2600 : 1900;
+      const t = window.setTimeout(() => setFlash(null), ms);
+      return () => clearTimeout(t);
+    }
+    if (doHub === "dormindo" || semToken) setFlash("dormindo");
+    else setFlash((f) => (f === "dormindo" ? null : f));
+  }, [doHub, semToken, bot.id]);
+  const animFinal: AvatarAnim | null = forceAnim ?? flash ?? (semToken ? "dormindo" : null);
+  const estado = (!bot.online && !animFinal ? " dormindo" : falando ? " falando" : bot.busy ? " ocupado" : "")
+    + (bravo ? " bravo" : cutucadas > 0 ? " cutucado" : "")
+    + (animFinal === "dormindo" ? " anim-dormindo" : "")
+    + (animFinal === "nascer" ? " anim-nascer" : "")
+    + (animFinal === "chave-nova" ? " anim-chave" : "");
   return (
     <div className={"avatar" + estado} style={style} data-ameba={bot.id}>
-      {url ? <img src={url} alt="" /> : lerAparencia(bot.avatar) ? <ArteDoBot id={bot.id} avatar={bot.avatar} size={size} /> : <Ameba id={bot.id} size={size} />}
+      {animFinal === "nascer" && (<><span className="ovo-casca" aria-hidden /><span className="ovo-casca-baixo" aria-hidden /></>)}
+      {animFinal === "chave-nova" && (<><i className="brilho" /><i className="brilho" /><i className="brilho" /><i className="brilho" /><i className="brilho" /></>)}
+      <img src={url} alt="" />
       {((bot as any).gerente || (bot as any).manages?.length) ? <span className="coroa-cabeca" aria-hidden>👑</span> : null}
-      <span className={"presence " + (bot.online ? (bot.busy ? "busy" : "on") : "off")} />
+      <span className={"presence " + (animFinal === "dormindo" ? "off" : bot.online ? (bot.busy ? "busy" : "on") : "off")} />
     </div>
   );
 }
 
-/** Mostra o retrato que o bot teria, para o formulário. */
+/** Previa do retrato no formulario: so ameba v2. */
 export function RetratoPreview({ id, avatar, size = 56 }: { id: string; avatar?: string; size?: number }) {
-  const emoji = avatar && /\p{Extended_Pictographic}/u.test(avatar) ? avatar : null;
-  const url = avatar && /^(https?:|data:|\/)/.test(avatar) ? avatar : null;
-  if (url) return <img className="retrato-previa" src={url} alt="" style={{ width: size, height: size }} />;
-  return <div className="retrato-previa"><Ameba id={id || "novo"} size={size} /></div>;
+  const url = amebaV2Url(id, avatar) || sortearAmebaV2(id || "novo");
+  return <img className="retrato-previa" src={url} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }} />;
 }
 
 export function colorFor(id: string) {

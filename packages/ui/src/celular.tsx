@@ -83,7 +83,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
           <div>
             <h3>Celular da empresa</h3>
             <p className="muted">
-              O aparelho de verdade, por ADB. E nele que moram o WhatsApp e as contas da empresa â€”
+              O aparelho de verdade, por ADB. E nele que moram o WhatsApp e as contas da empresa —
               por isso ele, e nao um emulador. Voce pode tocar na tela aqui mesmo.
             </p>
           </div>
@@ -92,7 +92,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
               <option value="">escolha o aparelho</option>
               {lista.map((a) => (
                 <option key={a.serial} value={a.serial} disabled={a.estado !== "device"}>
-                  {a.modelo}{a.viaWifi ? " (wifi)" : " (cabo)"}{a.estado !== "device" ? ` â€” ${a.estado}` : ""}
+                  {a.modelo}{a.viaWifi ? " (wifi)" : " (cabo)"}{a.estado !== "device" ? ` — ${a.estado}` : ""}
                 </option>
               ))}
             </select>
@@ -120,10 +120,10 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
 
           <div className="cel-lado">
             <div className="cel-teclas">
-              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "voltar" })}>â—€ Voltar</button>
-              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "inicio" })}>âŒ‚ InÃ­cio</button>
-              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "recentes" })}>â–¢ Recentes</button>
-              <button className="btn" disabled={!qual} onClick={() => void mandar("acordar", {})}>â˜€ Acordar</button>
+              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "voltar" })}>◀ Voltar</button>
+              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "inicio" })}>⌂ Início</button>
+              <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "recentes" })}>▢ Recentes</button>
+              <button className="btn" disabled={!qual} onClick={() => void mandar("acordar", {})}>☀ Acordar</button>
             </div>
 
             <label className="cel-campo">Escrever no aparelho
@@ -132,7 +132,7 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
                   placeholder="o que digitar"
                   onKeyDown={(e) => { if (e.key === "Enter" && texto.trim()) { void mandar("digitar", { texto }).then(() => setTexto("")); } }} />
                 <button className="btn" disabled={!qual || !texto.trim()} onClick={() => void mandar("digitar", { texto }).then(() => setTexto(""))}>Digitar</button>
-                <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "enter" })}>âŽ</button>
+                <button className="btn" disabled={!qual} onClick={() => void mandar("tecla", { tecla: "enter" })}>⏎</button>
               </div>
             </label>
 
@@ -150,9 +150,9 @@ export function CelularDaEmpresa({ onFechar }: { onFechar: () => void }) {
 
             <p className="cel-nota muted">
               {aparelho
-                ? `${aparelho.modelo} Â· ${aparelho.largura ?? "?"}Ã—${aparelho.altura ?? "?"} Â· ${vivo ? "ao vivo" : "parado"}`
+                ? `${aparelho.modelo} · ${aparelho.largura ?? "?"}×${aparelho.altura ?? "?"} · ${vivo ? "ao vivo" : "parado"}`
                 : "nenhum aparelho escolhido"}
-              <br />Arraste sobre a tela para rolar. O toque vai em proporÃ§Ã£o, entÃ£o funciona em qualquer resoluÃ§Ã£o.
+              <br />Arraste sobre a tela para rolar. O toque vai em proporção, então funciona em qualquer resolução.
             </p>
           </div>
         </div>

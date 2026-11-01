@@ -1,7 +1,7 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 
-/** LÃª .env simples (sem dependÃªncia) a partir da pasta do hub ou da raiz do repo. */
+/** Lê .env simples (sem dependência) a partir da pasta do hub ou da raiz do repo. */
 function loadDotEnv() {
   const candidates = [
     path.resolve(process.cwd(), ".env"),
@@ -19,12 +19,12 @@ function loadDotEnv() {
 loadDotEnv();
 
 /**
- * A raiz do repositÃ³rio, achada subindo atÃ© encontrar o package.json de cima.
+ * A raiz do repositório, achada subindo até encontrar o package.json de cima.
  *
- * O Hub roda com a pasta de trabalho em packages/hub (Ã© assim que o npm workspace
- * inicia), entÃ£o `process.cwd()` NÃƒO Ã© a raiz. Quem usou cwd para achar scripts/ e .env
- * procurou em packages/hub/scripts e nunca encontrou â€” o PDF da demonstraÃ§Ã£o ficou
- * quebrado assim, em silÃªncio, atÃ© a mensagem de erro passar a dizer o caminho.
+ * O Hub roda com a pasta de trabalho em packages/hub (é assim que o npm workspace
+ * inicia), então `process.cwd()` NÃO é a raiz. Quem usou cwd para achar scripts/ e .env
+ * procurou em packages/hub/scripts e nunca encontrou — o PDF da demonstração ficou
+ * quebrado assim, em silêncio, até a mensagem de erro passar a dizer o caminho.
  */
 export function raizDoProjeto(): string {
   let dir = process.cwd();
@@ -40,11 +40,11 @@ export function raizDoProjeto(): string {
 export const config = {
   host: process.env.MYBOTS_HUB_HOST ?? "0.0.0.0",
   port: Number(process.env.MYBOTS_HUB_PORT ?? 8790),
-  /** Token aceito de qualquer nÃ³ (uso simples na LAN). */
+  /** Token aceito de qualquer nó (uso simples na LAN). */
   hubToken: process.env.MYBOTS_HUB_TOKEN ?? "",
   /** Tokens por bot: "joao-videomaker:abc,robertinho-auditor:def" */
   nodeTokens: parseNodeTokens(process.env.MYBOTS_NODE_TOKENS ?? ""),
-  /** Senha opcional da interface (vazia = sem senha; use sÃ³ na LAN). */
+  /** Senha opcional da interface (vazia = sem senha; use só na LAN). */
   uiPassword: process.env.MYBOTS_UI_PASSWORD ?? "",
   /** Login online (e-mail). Com MYBOTS_SENHA_HASH, a interface exige sessao. */
   usuarioOnline: process.env.MYBOTS_USUARIO ?? "",
@@ -55,16 +55,16 @@ export const config = {
   dbFile: process.env.MYBOTS_DB ?? path.resolve(process.cwd(), "data", "mybots.sqlite"),
   uiDist: process.env.MYBOTS_UI_DIST ?? path.resolve(process.cwd(), "../ui/dist"),
   version: "0.1.0",
-  /** Tempo mÃ¡ximo que um ask_bot espera a resposta do outro Bot (ms). */
+  /** Tempo máximo que um ask_bot espera a resposta do outro Bot (ms). */
   askBotTimeoutMs: Number(process.env.MYBOTS_ASK_BOT_TIMEOUT_MS ?? 180_000),
-  /** URL pÃºblica do Hub, usada em links de arquivos enviados aos bots (ex.: http://192.168.0.10:8790). */
+  /** URL pública do Hub, usada em links de arquivos enviados aos bots (ex.: http://192.168.0.10:8790). */
   publicUrl: (process.env.MYBOTS_PUBLIC_URL ?? `http://127.0.0.1:${process.env.MYBOTS_HUB_PORT ?? 8790}`).replace(/\/$/, ""),
-  /** Webhook de saÃ­da para canais externos (WhatsApp via CRM): recebe {channel, to, botId, text}. */
+  /** Webhook de saída para canais externos (WhatsApp via CRM): recebe {channel, to, botId, text}. */
   channelWebhook: process.env.MYBOTS_CHANNEL_WEBHOOK_URL ?? "",
   channelWebhookKey: process.env.MYBOTS_CHANNEL_WEBHOOK_KEY ?? "",
   /** Token que o CRM/canal usa para postar em /api/channels/incoming (vazio = usa o token do hub). */
   channelInboundKey: process.env.MYBOTS_CHANNEL_INBOUND_KEY ?? "",
-  /** Ponte do Telegram. Sem allowedChatIds a ponte nÃ£o sobe (bot aberto seria comandar o PC de fora). */
+  /** Ponte do Telegram. Sem allowedChatIds a ponte não sobe (bot aberto seria comandar o PC de fora). */
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN ?? "",
     username: process.env.TELEGRAM_BOT_USERNAME ?? "",

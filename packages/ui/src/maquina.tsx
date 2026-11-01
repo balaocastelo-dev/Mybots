@@ -32,25 +32,25 @@ export function Maquina({ bots, pendencias, voz }: { bots: BotSummary[]; pendenc
   return (
     <aside className="maquina">
       <div>
-        <h3>MÃ¡quina</h3>
+        <h3>Máquina</h3>
         {m ? (
           <>
-            <Medidor rotulo="MemÃ³ria" usada={m.ram.usadaGb} total={m.ram.totalGb} reserva={m.reserva.ramGb} />
+            <Medidor rotulo="Memória" usada={m.ram.usadaGb} total={m.ram.totalGb} reserva={m.reserva.ramGb} />
             {m.vram
-              ? <Medidor rotulo={"VÃ­deo Â· " + m.vram.nome.replace(/^NVIDIA GeForce /, "")} usada={m.vram.usadaGb} total={m.vram.totalGb} reserva={m.reserva.vramGb} />
-              : <p className="maq-nota">Sem placa NVIDIA visÃ­vel aqui.</p>}
+              ? <Medidor rotulo={"Vídeo · " + m.vram.nome.replace(/^NVIDIA GeForce /, "")} usada={m.vram.usadaGb} total={m.vram.totalGb} reserva={m.reserva.vramGb} />
+              : <p className="maq-nota">Sem placa NVIDIA visível aqui.</p>}
             <p className="maq-nota">
-              A marca Ã© a reserva da casa: {m.reserva.ramGb} GB de memÃ³ria e {m.reserva.vramGb} GB de vÃ­deo
+              A marca é a reserva da casa: {m.reserva.ramGb} GB de memória e {m.reserva.vramGb} GB de vídeo
               sempre livres para o sistema.
             </p>
           </>
-        ) : <p className="maq-nota">Lendo a mÃ¡quinaâ€¦</p>}
+        ) : <p className="maq-nota">Lendo a máquina…</p>}
       </div>
 
       <div>
         <h3>Equipe</h3>
         <div className="lig"><span className="nome">Bots ligados</span><span className="n">{online} / {bots.length}</span></div>
-        <div className="lig"><span className="nome">Esperando vocÃª</span><span className="n">{pendencias}</span></div>
+        <div className="lig"><span className="nome">Esperando você</span><span className="n">{pendencias}</span></div>
         <div className="lig"><span className="nome">Voz</span><span className="n">{voz.tts ? voz.ttsEngine : "navegador"}</span></div>
       </div>
 

@@ -1,16 +1,16 @@
 import { UI_BASE } from "./api";
-// A abertura do MyBots: um enxame se junta em "isso Ã© o futuro", se reorganiza em
-// "escrito por" pequeno sobre "THIAGO HERRERA" grande, e entÃ£o EXPLODE.
+// A abertura do MyBots: um enxame se junta em "isso é o futuro", se reorganiza em
+// "escrito por" pequeno sobre "THIAGO HERRERA" grande, e então EXPLODE.
 //
-// QUANTAS PARTÃCULAS CABEM: em canvas 2D cada partÃ­cula Ã© um desenho por quadro. Dez
-// milhÃµes nÃ£o Ã© lento â€” Ã© travado. O teto prÃ¡tico a 60 quadros por segundo fica entre
-// 40 e 60 mil; acima disso sÃ³ reescrevendo em WebGL. Aqui sÃ£o 50 mil, pequenas, o que
-// dÃ¡ o aspecto de areia densa â€” e o laÃ§o MEDE o prÃ³prio tempo de quadro e corta pela
-// metade se a mÃ¡quina engasgar, em vez de entregar uma abertura travando.
+// QUANTAS PARTÍCULAS CABEM: em canvas 2D cada partícula é um desenho por quadro. Dez
+// milhões não é lento — é travado. O teto prático a 60 quadros por segundo fica entre
+// 40 e 60 mil; acima disso só reescrevendo em WebGL. Aqui são 50 mil, pequenas, o que
+// dá o aspecto de areia densa — e o laço MEDE o próprio tempo de quadro e corta pela
+// metade se a máquina engasgar, em vez de entregar uma abertura travando.
 //
-// COMO A EXPLOSÃƒO Ã‰ DE VERDADE: impulso Ãºnico de fora para dentro do centro, dado uma
-// vez; depois sÃ³ arrasto, gravidade e o caco encolhendo. O quadro deixa de ser apagado
-// e recebe um vÃ©u translÃºcido, o que deixa rastro atrÃ¡s de cada estilhaÃ§o.
+// COMO A EXPLOSÃO É DE VERDADE: impulso único de fora para dentro do centro, dado uma
+// vez; depois só arrasto, gravidade e o caco encolhendo. O quadro deixa de ser apagado
+// e recebe um véu translúcido, o que deixa rastro atrás de cada estilhaço.
 import { useEffect, useRef, useState } from "react";
 import { falar, calar, mudo, alternarMudo, preparar, boasVindas, definirIdioma, idiomaAtual, IDIOMAS, ESCOLHA_IDIOMA, prepararConvite, falarConvite, aoConvidar, prepararFrase, tocarFrase, type Idioma } from "./guia";
 import { PreviaNavegador } from "./previa";
@@ -32,7 +32,7 @@ const T_TROCA = 2600, T_EXPLODE = 6600, T_FIM = 7450;
 type Par = { x: number; y: number; ax: number; ay: number; vx: number; vy: number; t: number; g: number; cor: string; lados: number; ang: number; giro: number; palavra: number };
 type Linha = { tipo: "hero" | "nota" | "regra"; texto?: string };
 
-/** Desenha as linhas num canvas invisÃ­vel e devolve os pixels com tinta. */
+/** Desenha as linhas num canvas invisível e devolve os pixels com tinta. */
 /** Desenha as linhas num canvas invisivel, UMA PALAVRA POR VEZ, e devolve os pixels
  *  com tinta marcados com o indice da palavra. E esse indice que depois faz cada
  *  palavra nascer na sua vez, no ritmo da voz, em vez de a frase inteira aparecer.
@@ -43,7 +43,7 @@ type Linha = { tipo: "hero" | "nota" | "regra"; texto?: string };
 /** O desenho das duas telas.
  *  A ideia: nao e cartaz de parede, e capa. Uma linha FINA e muito espacada por cima,
  *  quase um sussurro visual, e embaixo a palavra em peso maximo ocupando a largura.
- *  O nome vem quebrado em duas linhas de proposito â€” "THIAGO" e "HERRERA" sozinhos
+ *  O nome vem quebrado em duas linhas de proposito — "THIAGO" e "HERRERA" sozinhos
  *  ficam o dobro do tamanho que ficariam lado a lado. */
 const BLOCO_1: Linha[] = [
   { tipo: "nota", texto: "isso \u00E9 o" },
@@ -94,7 +94,7 @@ function alvos(w: number, h: number, linhas: Linha[]): { x: number; y: number; p
   const pts: { x: number; y: number; palavra: number }[] = [];
   let unidade = 0;
   // o passo decide a densidade: a hero e grossa e 2 basta; a nota e fina e clara, e
-  // com passo 2 saem tao poucos pontos que ela some. Para ela, 1 â€” custa pouco porque
+  // com passo 2 saem tao poucos pontos que ela some. Para ela, 1 — custa pouco porque
   // a caixa dela e pequena.
   const amostra = (bx: number, by: number, bw: number, bh: number, idx: number, passo = 2) => {
     bx = Math.max(0, Math.floor(bx)); by = Math.max(0, Math.floor(by));
@@ -166,7 +166,7 @@ export function Abertura({ onFim }: { onFim: () => void }) {
   const tempoA = useRef<number[]>([]);
   const tempoB = useRef<number[]>([]);
   // onFim e uma funcao NOVA a cada render do painel. Com ela nas dependencias o efeito
-  // reiniciava a cada atualizacao e a locucao recomecava â€” por isso a frase saia varias
+  // reiniciava a cada atualizacao e a locucao recomecava — por isso a frase saia varias
   // vezes. Guardada num ref, a abertura roda UMA vez so.
   const fim = useRef(onFim);
   fim.current = onFim;
@@ -357,7 +357,7 @@ export function Abertura({ onFim }: { onFim: () => void }) {
     setAnalisando(true); setErr("");
     const r = await api("/empresas/sugerir", { method: "POST", body: JSON.stringify({ nome, site, instagram: insta }) });
     setAnalisando(false);
-    if (!r.ok) { setErr((await r.json()).error ?? "nÃ£o consegui ler o site"); return; }
+    if (!r.ok) { setErr((await r.json()).error ?? "não consegui ler o site"); return; }
     const f = await r.json();
     if (f.nome && !nome.trim()) setNome(f.nome);
     setResumo(f.resumo ?? ""); setRegras(f.regras ?? ""); setAvisos(f.avisos ?? []);
@@ -375,11 +375,11 @@ export function Abertura({ onFim }: { onFim: () => void }) {
   return (
     <div className="primeira">
       <div className="primeira-folha">
-        <p className="primeira-olho">A casa estÃ¡ vazia</p>
+        <p className="primeira-olho">A casa está vazia</p>
         <h1>Vamos cadastrar a sua primeira empresa</h1>
         <p className="primeira-sub">
-          Cada empresa tem os seus bots, as suas regras, a sua memÃ³ria e o seu prÃ³prio WhatsApp.
-          O conhecimento da casa Ã© um sÃ³: toda empresa lÃª a mesma base.
+          Cada empresa tem os seus bots, as suas regras, a sua memória e o seu próprio WhatsApp.
+          O conhecimento da casa é um só: toda empresa lê a mesma base.
         </p>
 
         <div className="primeira-campos">
@@ -400,23 +400,23 @@ export function Abertura({ onFim }: { onFim: () => void }) {
           </div>
           <label>Idioma da empresa <small className="muted">(os bots dela falam nele; respondem no idioma de quem escrever)</small>
             <select value={idioma} onChange={(e) => setIdioma(e.target.value)}>
-              <option value="pt">PortuguÃªs (Brasil)</option>
+              <option value="pt">Português (Brasil)</option>
               <option value="en">English</option>
-              <option value="es">EspaÃ±ol</option>
+              <option value="es">Español</option>
             </select>
           </label>
           <button className="btn" disabled={analisando || (!site.trim() && !insta.trim())} onClick={() => void analisar()}>
-            {analisando ? "Lendo o siteâ€¦" : "Ler o site e sugerir as regras"}
+            {analisando ? "Lendo o site…" : "Ler o site e sugerir as regras"}
           </button>
         </div>
 
         {(resumo || regras) && (
           <div className="primeira-sugestao">
-            <b>SugestÃ£o da anÃ¡lise</b> <small>leia e corrija â€” Ã© sugestÃ£o, nÃ£o verdade</small>
+            <b>Sugestão da análise</b> <small>leia e corrija — é sugestão, não verdade</small>
             {resumo && <p>{resumo}</p>}
             <textarea rows={9} value={regras} onChange={(e) => setRegras(e.target.value)}
               placeholder="As regras que todo bot desta empresa vai seguir." />
-            {avisos.map((a, i) => <small key={i}>âš  {a}</small>)}
+            {avisos.map((a, i) => <small key={i}>⚠ {a}</small>)}
           </div>
         )}
 
@@ -424,30 +424,30 @@ export function Abertura({ onFim }: { onFim: () => void }) {
 
         <div className="primeira-acoes">
           <button className="btn primary" disabled={!nome.trim() || criando} onClick={() => void criar()}>
-            {criando ? "Criandoâ€¦" : "Criar empresa"}
+            {criando ? "Criando…" : "Criar empresa"}
           </button>
-          <button className="link" onClick={onPular}>agora nÃ£o</button>
+          <button className="link" onClick={onPular}>agora não</button>
         </div>
         <p className="primeira-pe">
           Ao criar: o WhatsApp dela sobe e mostra o QR para escanear, e o Gerente Geral da empresa nasce,
-          se apresenta e propÃµe os primeiros bots.
+          se apresenta e propõe os primeiros bots.
         </p>
       </div>
     </div>
   );
 }
 
-/** A primeira tela depois da explosÃ£o: em que lÃ­ngua esta casa vai falar.
- *  Vem ANTES do cadastro porque tudo que vier depois â€” a voz do guia e o idioma da
- *  empresa â€” jÃ¡ nasce na escolha dela, em vez de nascer em portuguÃªs e ser trocado. */
-/** Reduz a tela a cacos e os explode â€” a MESMA fisica do nome na abertura:
+/** A primeira tela depois da explosão: em que língua esta casa vai falar.
+ *  Vem ANTES do cadastro porque tudo que vier depois — a voz do guia e o idioma da
+ *  empresa — já nasce na escolha dela, em vez de nascer em português e ser trocado. */
+/** Reduz a tela a cacos e os explode — a MESMA fisica do nome na abertura:
  *  impulso unico de fora para dentro do centro, depois so arrasto, gravidade e o caco
  *  encolhendo; o quadro deixa de ser apagado e recebe um veu, o que deixa rastro.
  *
  *  COMO A TELA VIRA ALVO: o navegador nao deixa fotografar a propria pagina, entao em
  *  vez de rasterizar a folha a gente le o RETANGULO de cada peca dela (titulo, texto,
  *  cada botao) e enche esses retangulos de particulas. O estilhaco segue o desenho real
- *  da tela, nao uma mancha generica â€” e custa quase nada. */
+ *  da tela, nao uma mancha generica — e custa quase nada. */
 function cacosDa(folha: HTMLElement): Caco[] {
   const r = folha.getBoundingClientRect();
   const pecas = Array.from(folha.querySelectorAll<HTMLElement>("h1,p,button"));
@@ -515,11 +515,11 @@ function Estilhaco({ cacos, centro, onFim }: { cacos: Caco[]; centro: { x: numbe
   return <canvas ref={tela} style={{ position: "fixed", inset: 0, zIndex: 3600, pointerEvents: "none" }} />;
 }
 
-/** A primeira tela depois da explosÃ£o: em que lÃ­ngua esta casa vai falar.
- *  Vem ANTES do cadastro porque tudo que vier depois â€” a voz do guia e o idioma da
- *  empresa â€” jÃ¡ nasce na escolha dela, em vez de nascer em portuguÃªs e ser trocado. */
+/** A primeira tela depois da explosão: em que língua esta casa vai falar.
+ *  Vem ANTES do cadastro porque tudo que vier depois — a voz do guia e o idioma da
+ *  empresa — já nasce na escolha dela, em vez de nascer em português e ser trocado. */
 /** O fundo da escolha de idioma: uma malha de pontos que se ligam quando chegam perto.
- *  E o mesmo vocabulario das particulas da abertura, mas em marcha lenta â€” a tela aqui
+ *  E o mesmo vocabulario das particulas da abertura, mas em marcha lenta — a tela aqui
  *  e de LEITURA, e fundo que se mexe demais rouba a atencao de quem precisa escolher.
  *  Por isso poucos pontos, linhas fracas e velocidade baixa. */
 function FundoTecnologico() {
@@ -604,7 +604,7 @@ export function EscolhaIdioma({ onEscolher }: { onEscolher: (l: Idioma) => void 
         <p className="primeira-olho">MyBots</p>
         <p className="titulo-mybots-by" style={{ marginTop: -6, marginBottom: 8 }}>By Thiago Herrera</p>
         <h1>Escolha o seu idioma</h1>
-        <p className="primeira-sub">Choose your language Â· Elige tu idioma Â· Choisissez votre langue</p>
+        <p className="primeira-sub">Choose your language · Elige tu idioma · Choisissez votre langue</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 12, marginTop: 22, maxWidth: 400, marginLeft: "auto", marginRight: "auto" }}>
           {IDIOMAS.map((i) => (
             <button key={i.id} type="button"

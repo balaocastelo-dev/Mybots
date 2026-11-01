@@ -1,6 +1,6 @@
 import { UI_BASE } from "./api";
 // Leis e consentimentos: o que a empresa declara antes de falar com cliente.
-// A tela nÃ£o Ã© enfeite â€” enquanto os obrigatÃ³rios nÃ£o estiverem aceitos na versÃ£o
+// A tela não é enfeite — enquanto os obrigatórios não estiverem aceitos na versão
 // atual, o WhatsApp daquela empresa recusa enviar.
 import { useEffect, useState } from "react";
 
@@ -48,16 +48,16 @@ export function TelaLegal({ empresaId, empresaNome, onClose }: { empresaId: stri
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal wide legal" onClick={(e) => e.stopPropagation()}>
-        <h3>Leis e consentimentos â€” {empresaNome}</h3>
+        <h3>Leis e consentimentos — {empresaNome}</h3>
         <p className="muted">
-          Modelo para vocÃª e o seu advogado revisarem, nÃ£o parecer jurÃ­dico. O que o sistema garante Ã© o
-          registro: cada aceite fica gravado com a data, quem aceitou e a versÃ£o do texto ({versao}).
+          Modelo para você e o seu advogado revisarem, não parecer jurídico. O que o sistema garante é o
+          registro: cada aceite fica gravado com a data, quem aceitou e a versão do texto ({versao}).
         </p>
 
         <div className={"legal-estado " + (liberado.ok ? "ok" : "bloq")}>
           {liberado.ok
             ? "Liberado: esta empresa pode falar com cliente pelo WhatsApp."
-            : `Bloqueado: o WhatsApp desta empresa nÃ£o envia nada enquanto faltar aceitar ${liberado.falta?.length ?? 0} documento(s) obrigatÃ³rio(s).`}
+            : `Bloqueado: o WhatsApp desta empresa não envia nada enquanto faltar aceitar ${liberado.falta?.length ?? 0} documento(s) obrigatório(s).`}
         </div>
 
         <div className="legal-lista">
@@ -70,15 +70,15 @@ export function TelaLegal({ empresaId, empresaNome, onClose }: { empresaId: stri
                     <input type="checkbox" checked={!!e?.aceito} onChange={(ev) => void marcar(d.id, ev.target.checked)} />
                     <b>{d.titulo}</b>
                   </label>
-                  <span className="legal-tag">{d.obrigatorio ? "obrigatÃ³rio" : "sÃ³ se usar"}</span>
+                  <span className="legal-tag">{d.obrigatorio ? "obrigatório" : "só se usar"}</span>
                 </div>
                 <p className="muted">{d.resumo}</p>
-                <p className="legal-declaracao">â€œ{d.declaracao}â€</p>
+                <p className="legal-declaracao">“{d.declaracao}”</p>
                 <button className="link" onClick={() => setAberto(aberto === d.id ? null : d.id)}>
                   {aberto === d.id ? "fechar o texto" : "ler o texto inteiro"}
                 </button>
                 {aberto === d.id && <ul className="legal-corpo">{d.corpo.map((l, i) => <li key={i}>{l}</li>)}</ul>}
-                {e?.aceito && <small className="muted">aceito por {e.quem || "â€”"} em {new Date(e.quando).toLocaleString("pt-BR")}</small>}
+                {e?.aceito && <small className="muted">aceito por {e.quem || "—"} em {new Date(e.quando).toLocaleString("pt-BR")}</small>}
               </div>
             );
           })}
@@ -86,7 +86,7 @@ export function TelaLegal({ empresaId, empresaNome, onClose }: { empresaId: stri
 
         {erro && <div className="err">{erro}</div>}
         <div className="modal-foot">
-          <button className="btn primary" onClick={() => void aceitarTodosObrigatorios()}>Aceitar os obrigatÃ³rios</button>
+          <button className="btn primary" onClick={() => void aceitarTodosObrigatorios()}>Aceitar os obrigatórios</button>
           <button className="btn" onClick={onClose}>Fechar</button>
         </div>
       </div>

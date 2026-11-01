@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { type BotEvent, type HubToNode, type NodeToHub, newId, PROTOCOL_VERSION } from "@mybots/shared";
 import type { NodeConfig } from "./config.js";
 
-/** ConexÃ£o de saÃ­da com o Hub, com reconexÃ£o automÃ¡tica e chamadas com resposta (callId). */
+/** Conexão de saída com o Hub, com reconexão automática e chamadas com resposta (callId). */
 export class HubClient extends EventEmitter {
   private ws: WebSocket | null = null;
   private waiters = new Map<string, { resolve: (v: { ok: boolean; data: unknown }) => void; timer: NodeJS.Timeout }>();
@@ -56,8 +56,8 @@ export class HubClient extends EventEmitter {
         for (const q of this.queue.splice(0)) this.sendRaw(q);
         if (this.heartbeat) clearInterval(this.heartbeat);
         this.heartbeat = setInterval(() => this.sendRaw({ type: "heartbeat" }), 20_000);
-        // o hello.ok carrega a heranÃ§a da casa (base de conhecimento): o motor escuta por ele,
-        // entÃ£o precisa ser emitido, nÃ£o sÃ³ o "connected".
+        // o hello.ok carrega a herança da casa (base de conhecimento): o motor escuta por ele,
+        // então precisa ser emitido, não só o "connected".
         this.emit("hello.ok", msg);
         this.emit("connected");
         return;
@@ -69,8 +69,8 @@ export class HubClient extends EventEmitter {
       }
       if (msg.type === "error") {
         console.error(`[node] hub: ${msg.message}`);
-        // Erro fatal (bot excluÃ­do, token recusado) nÃ£o melhora tentando de novo: o nÃ³
-        // encerra. Sem isto, o nÃ³ de um bot excluÃ­do ficava reconectando para sempre â€”
+        // Erro fatal (bot excluído, token recusado) não melhora tentando de novo: o nó
+        // encerra. Sem isto, o nó de um bot excluído ficava reconectando para sempre —
         // e era assim que o bot voltava a aparecer no painel.
         if (msg.fatal) { this.stop(); setTimeout(() => process.exit(0), 200); }
         return;

@@ -59,14 +59,14 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const [arquivoAberto, setArquivoAberto] = useState<{ files: ArquivoDoChat[]; index: number } | null>(null);
   const [desktopAberto, setDesktopAberto] = useState(false);
   useEffect(() => { setArquivoAberto(null); }, [conversationId]);
-  // Chat aberto: o nÃ³ deixa o modelo quente. Ao sair, esfria.
+  // Chat aberto: o nó deixa o modelo quente. Ao sair, esfria.
   useEffect(() => {
     send({ type: "warm", conversationId, ativo: true });
     return () => { send({ type: "warm", conversationId, ativo: false }); };
   }, [conversationId]);
 
-  // --- com quais bots ele falou em cada turno (rodapÃ© "Mensageou N bots") ---
-  // Uma requisiÃ§Ã£o para a conversa inteira, refeita quando chega mensagem nova.
+  // --- com quais bots ele falou em cada turno (rodapé "Mensageou N bots") ---
+  // Uma requisição para a conversa inteira, refeita quando chega mensagem nova.
   const [trocas, setTrocas] = useState<Record<string, Troca[]>>({});
   const [folha, setFolha] = useState<Troca[] | null>(null);
   useEffect(() => {
@@ -75,7 +75,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       try {
         const r = await fetch(`${UI_BASE}/api/conversations/${encodeURIComponent(conversationId)}/trocas${location.search}`);
         if (r.ok && vivo) setTrocas((await r.json()) as Record<string, Troca[]>);
-      } catch { /* hub reiniciando: o rodapÃ© some, o chat continua */ }
+      } catch { /* hub reiniciando: o rodapé some, o chat continua */ }
     })();
     return () => { vivo = false; };
   }, [conversationId, messages.length]);
@@ -85,8 +85,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   // a chamada so o deixa ligado e mostra o que esta acontecendo.
   const [emChamada, setEmChamada] = useState(false);
   const [mudo, setMudo] = useState(false);
-  // Entradas de Ã¡udio da mÃ¡quina. Quando hÃ¡ mais de uma, a escolha do navegador costuma
-  // ser a errada â€” e microfone errado Ã© a causa mais comum de "escreveu outra coisa".
+  // Entradas de áudio da máquina. Quando há mais de uma, a escolha do navegador costuma
+  // ser a errada — e microfone errado é a causa mais comum de "escreveu outra coisa".
   const [micros, setMicros] = useState<{ id: string; nome: string }[]>([]);
   const [micEscolhido, setMicEscolhido] = useState(microfoneEscolhido());
   useEffect(() => {
@@ -98,7 +98,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const [ondas, setOndas] = useState<number[]>(() => new Array(28).fill(0));
   const inicioChamada = useRef(0);
   const [agoraChamada, setAgoraChamada] = useState(0);
-  // abre o painel pedido pelo menu do botÃ£o direito (mesmo se o bot jÃ¡ estiver selecionado)
+  // abre o painel pedido pelo menu do botão direito (mesmo se o bot já estiver selecionado)
   useEffect(() => {
     if (!initialPanel) return;
     setShowSettings(initialPanel.panel === "settings");
@@ -106,6 +106,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     setShowTarefas(false);
   }, [initialPanel?.n]);
   const [showSettings, setShowSettings] = useState(false);
+  const [menuChat, setMenuChat] = useState(false);
   const [pcAberto, setPcAberto] = useState(() => {
     try {
       if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) return false;
@@ -125,7 +126,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const handsFreeRef = useRef(handsFree); handsFreeRef.current = handsFree;
   const ttsRef = useRef(tts); ttsRef.current = tts;
   const listeningRef = useRef(false);
-  const wantListenRef = useRef(false); // modo conversa ativo (ciclo falar â†’ ouvir)
+  const wantListenRef = useRef(false); // modo conversa ativo (ciclo falar → ouvir)
   // chamada de voz: fala viva (frase a frase) + microfone que nunca fecha
   const falaRef = useRef<FalaViva | null>(null);
   const falaMsgRef = useRef<string>("");
@@ -135,7 +136,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
 
   const bot = target.kind === "bot" ? target.bot : null;
   const busy = target.kind === "bot" ? target.bot.busy : target.group.members.some((m) => bots.find((b) => b.id === m)?.busy);
-  const statusText = target.kind === "bot" ? target.bot.status : bots.filter((b) => target.group.members.includes(b.id) && b.busy).map((b) => `${b.name.split(" ")[0]}: ${b.status}`).join(" Â· ");
+  const statusText = target.kind === "bot" ? target.bot.status : bots.filter((b) => target.group.members.includes(b.id) && b.busy).map((b) => `${b.name.split(" ")[0]}: ${b.status}`).join(" · ");
 
   busyRef.current = busy;
   // O fim da conversa sempre visivel. Rolamos tambem no quadro seguinte e um pouco
@@ -150,18 +151,18 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   }, [messages, approvals.length, questions.length]);
   useEffect(() => onSpeaking(setSpeaking), []);
 
-  // resposta final do bot â†’ fala; ao terminar, volta a escutar se o modo conversa estiver ativo
+  // resposta final do bot → fala; ao terminar, volta a escutar se o modo conversa estiver ativo
   useEffect(() => onEvent((m) => {
     if (m.type !== "message" || m.message.conversationId !== conversationId || m.message.sender.kind !== "bot" || m.message.meta?.streaming !== false || !m.message.text) return;
     const b = bots.find((x) => x.id === m.message.sender.id);
-    if (emChamadaRef.current) return;   // em chamada ele jÃ¡ falou enquanto escrevia (speech.delta)
+    if (emChamadaRef.current) return;   // em chamada ele já falou enquanto escrevia (speech.delta)
     (async () => {
       if (ttsRef.current) await speak(m.message.text, m.message.sender.id, voice, b?.voice);
       if (wantListenRef.current && handsFreeRef.current && !listeningRef.current) startListening();
     })();
   }), [conversationId, bots, voice]);
 
-  // Chamada: cada frase pronta que o Hub manda jÃ¡ vira som â€” o bot fala enquanto escreve.
+  // Chamada: cada frase pronta que o Hub manda já vira som — o bot fala enquanto escreve.
   useEffect(() => onEvent((m) => {
     if (m.type === "speech.delta") {
       if (!emChamadaRef.current || !ttsRef.current || m.conversationId !== conversationId) return;
@@ -175,23 +176,23 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     if (m.type === "speech.done" && m.messageId === falaMsgRef.current) falaRef.current?.fim();
   }), [conversationId, bots, voice]);
 
-  // Tudo que ESTA tela precisa largar quando mandam parar. Quem chama Ã© o stopEverything â€”
-  // um lugar sÃ³, para nÃ£o existir de novo "parei e continuou falando".
+  // Tudo que ESTA tela precisa largar quando mandam parar. Quem chama é o stopEverything —
+  // um lugar só, para não existir de novo "parei e continuou falando".
   useEffect(() => registrarParada(() => {
     wantListenRef.current = false;
-    try { stopRef.current(); } catch { /* microfone jÃ¡ fechado */ }
+    try { stopRef.current(); } catch { /* microfone já fechado */ }
     escutaRef.current?.parar(); escutaRef.current = null;
     falaRef.current?.cancelar(); falaRef.current = null;
     setListening(false); setLevel(0);
-    setHandsFree(false);                 // auto-envio desligado: senÃ£o ele reenvia sozinho e parece que nÃ£o parou
+    setHandsFree(false);                 // auto-envio desligado: senão ele reenvia sozinho e parece que não parou
     if (emChamadaRef.current) { emChamadaRef.current = false; setEmChamada(false); setOndas(new Array(28).fill(0)); }
   }), []);
 
   // O Hub mandou parar (veio de outra janela, do celular ou do /api/stop).
   useEffect(() => onEvent((m) => { if (m.type === "stop") stopEverything(m.reason ?? "o Hub mandou parar", { soAqui: true }); }), []);
 
-  // Esc para tudo, de qualquer lugar do painel â€” sÃ³ quando hÃ¡ algo acontecendo,
-  // para nÃ£o brigar com o Esc que fecha menu e janela.
+  // Esc para tudo, de qualquer lugar do painel — só quando há algo acontecendo,
+  // para não brigar com o Esc que fecha menu e janela.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -203,18 +204,18 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     return () => window.removeEventListener("keydown", k);
   }, []);
 
-  // fechar a janela tambÃ©m cala: nada de voz tocando numa aba que jÃ¡ foi embora
+  // fechar a janela também cala: nada de voz tocando numa aba que já foi embora
   useEffect(() => {
     const sair = () => stopEverything("janela fechada");
     window.addEventListener("pagehide", sair);
     return () => window.removeEventListener("pagehide", sair);
   }, []);
 
-  // sair da conversa desliga o microfone e cala o bot â€” aqui sÃ³ nesta janela:
-  // o trabalho dos outros bots nÃ£o tem nada a ver com eu trocar de tela.
+  // sair da conversa desliga o microfone e cala o bot — aqui só nesta janela:
+  // o trabalho dos outros bots não tem nada a ver com eu trocar de tela.
   useEffect(() => () => stopEverything("troquei de conversa", { soAqui: true }), [conversationId]);
 
-  // ---- menu de botÃ£o direito do chat ----
+  // ---- menu de botão direito do chat ----
   const [menuMsg, setMenuMsg] = useState<{ m: StoredMessage; x: number; y: number } | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
   const [desfazer, setDesfazer] = useState<{ token: number; texto: string } | null>(null);
@@ -230,7 +231,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const rebobinar = async (m: StoredMessage, include: "this" | "after", textoDaBarra: string) => {
     stopSpeaking();
     const r = await api(`/conversations/${encodeURIComponent(conversationId)}/rewind`, { method: "POST", body: JSON.stringify({ messageId: m.id, include }) });
-    if (!r.ok) return avisar("nÃ£o consegui rebobinar");
+    if (!r.ok) return avisar("não consegui rebobinar");
     const { token } = await r.json();
     setDesfazer({ token, texto: textoDaBarra });
   };
@@ -238,39 +239,39 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const itensDoMenu = (m: StoredMessage): ItemMenu[] => {
     const meu = m.sender.kind === "user";
     const selecao = String(window.getSelection?.() ?? "").trim();
-    const copiar = { label: "Copiar", icone: "ðŸ“‹", onClick: () => void navigator.clipboard?.writeText(m.text) };
-    const fixar = { label: m.pinned ? "Desafixar" : "Fixar", icone: "ðŸ“Œ", onClick: async () => { await api(`/messages/${m.id}/pin`, { method: "POST", body: JSON.stringify({ pinned: !m.pinned }) }); } };
-    const apagar = { label: "Apagar mensagem", icone: "ðŸ—‘ï¸", perigo: true, separar: true, onClick: async () => { stopSpeaking(); await api(`/messages/${m.id}`, { method: "DELETE" }); } };
-    const guardar = { label: "Guardar na memÃ³ria", icone: "ðŸ§ ", onClick: async () => { const r = await api(`/messages/${m.id}/remember`, { method: "POST", body: JSON.stringify({}) }); avisar(r.ok ? "guardado na base da casa" : "nÃ£o consegui guardar"); } };
+    const copiar = { label: "Copiar", icone: "📋", onClick: () => void navigator.clipboard?.writeText(m.text) };
+    const fixar = { label: m.pinned ? "Desafixar" : "Fixar", icone: "📌", onClick: async () => { await api(`/messages/${m.id}/pin`, { method: "POST", body: JSON.stringify({ pinned: !m.pinned }) }); } };
+    const apagar = { label: "Apagar mensagem", icone: "🗑️", perigo: true, separar: true, onClick: async () => { stopSpeaking(); await api(`/messages/${m.id}`, { method: "DELETE" }); } };
+    const guardar = { label: "Guardar na memória", icone: "🧠", onClick: async () => { const r = await api(`/messages/${m.id}/remember`, { method: "POST", body: JSON.stringify({}) }); avisar(r.ok ? "guardado na base da casa" : "não consegui guardar"); } };
     if (selecao && selecao.length > 2 && m.text.includes(selecao.slice(0, 20))) {
       return [
-        { label: "Perguntar sobre isso", icone: "ðŸ’¬", onClick: () => { setText(`> ${selecao}\n\n`); textRef.current?.focus(); } },
-        { label: "Explicar melhor", icone: "ðŸ”Ž", onClick: () => submit(`> ${selecao}\n\nExplique melhor esse trecho.`) },
-        { label: "Ler em voz alta", icone: "ðŸ”Š", onClick: () => void speak(selecao, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true) },
-        { label: "Copiar", icone: "ðŸ“‹", onClick: () => void navigator.clipboard?.writeText(selecao) },
+        { label: "Perguntar sobre isso", icone: "💬", onClick: () => { setText(`> ${selecao}\n\n`); textRef.current?.focus(); } },
+        { label: "Explicar melhor", icone: "🔎", onClick: () => submit(`> ${selecao}\n\nExplique melhor esse trecho.`) },
+        { label: "Ler em voz alta", icone: "🔊", onClick: () => void speak(selecao, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true) },
+        { label: "Copiar", icone: "📋", onClick: () => void navigator.clipboard?.writeText(selecao) },
       ];
     }
     if (meu) {
       return [
-        { label: "Editar pedido", icone: "âœï¸", atalho: "E", onClick: () => { stopSpeaking(); setEditando(m.id); } },
-        { label: "Reenviar", icone: "ðŸ”", onClick: async () => { stopSpeaking(); const r = await api(`/messages/${m.id}/edit`, { method: "POST", body: JSON.stringify({ text: m.text }) }); if (!r.ok) avisar("nÃ£o consegui reenviar"); } },
-        { label: "Voltar aqui", icone: "âª", separar: true, onClick: () => void rebobinar(m, "after", "Voltei atÃ© este pedido") },
+        { label: "Editar pedido", icone: "✏️", atalho: "E", onClick: () => { stopSpeaking(); setEditando(m.id); } },
+        { label: "Reenviar", icone: "🔁", onClick: async () => { stopSpeaking(); const r = await api(`/messages/${m.id}/edit`, { method: "POST", body: JSON.stringify({ text: m.text }) }); if (!r.ok) avisar("não consegui reenviar"); } },
+        { label: "Voltar aqui", icone: "⏪", separar: true, onClick: () => void rebobinar(m, "after", "Voltei até este pedido") },
         copiar, fixar, apagar,
       ];
     }
     return [
-      { label: "Tentar de novo", icone: "ðŸ”", onClick: async () => { stopSpeaking(); const r = await api(`/messages/${m.id}/retry`, { method: "POST" }); if (!r.ok) avisar("nÃ£o achei o pedido que gerou essa resposta"); } },
-      { label: "Ler em voz alta", icone: "ðŸ”Š", onClick: () => { if (isSpeaking()) stopSpeaking(); else void speak(m.text, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true); } },
+      { label: "Tentar de novo", icone: "🔁", onClick: async () => { stopSpeaking(); const r = await api(`/messages/${m.id}/retry`, { method: "POST" }); if (!r.ok) avisar("não achei o pedido que gerou essa resposta"); } },
+      { label: "Ler em voz alta", icone: "🔊", onClick: () => { if (isSpeaking()) stopSpeaking(); else void speak(m.text, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true); } },
       guardar,
-      { label: "Voltar aqui", icone: "âª", separar: true, onClick: async () => { const pedido = pedidoAntesDe(m); if (!pedido) return avisar("nÃ£o achei o pedido desta resposta"); setText(pedido.text); await rebobinar(pedido, "this", "Desfiz esta resposta"); textRef.current?.focus(); } },
+      { label: "Voltar aqui", icone: "⏪", separar: true, onClick: async () => { const pedido = pedidoAntesDe(m); if (!pedido) return avisar("não achei o pedido desta resposta"); setText(pedido.text); await rebobinar(pedido, "this", "Desfiz esta resposta"); textRef.current?.focus(); } },
       copiar,
-      { label: "Salvar como .md", icone: "ðŸ’¾", onClick: () => {
+      { label: "Salvar como .md", icone: "💾", onClick: () => {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(new Blob([m.text], { type: "text/markdown" }));
         a.download = `${m.sender.name.replace(/\W+/g, "-").toLowerCase()}-${new Date(m.createdAt).toISOString().slice(0, 16).replace(/[:T]/g, "-")}.md`;
         a.click(); URL.revokeObjectURL(a.href);
       } },
-      { label: "Ver detalhes", icone: "â„¹ï¸", onClick: () => setDetalhes(m) },
+      { label: "Ver detalhes", icone: "ℹ️", onClick: () => setDetalhes(m) },
       fixar, apagar,
     ];
   };
@@ -306,7 +307,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const stopAll = () => { wantListenRef.current = false; stopRef.current(); stopSpeaking(); };
 
   const iniciarChamada = () => {
-    if (!speechSupported(voice)) { alert("Este navegador nÃ£o deixa usar o microfone aqui."); return; }
+    if (!speechSupported(voice)) { alert("Este navegador não deixa usar o microfone aqui."); return; }
     inicioChamada.current = Date.now();
     setAgoraChamada(0); setMudo(false); setEmChamada(true); emChamadaRef.current = true;
     setHandsFree(true); setTts(true);          // chamada e' conversa: ouvir e falar
@@ -338,10 +339,10 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     falaRef.current?.cancelar(); falaRef.current = null;
     stopAll(); setOndas(new Array(28).fill(0)); setListening(false); setLevel(0);
     const mmss = `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, "0")}`;
-    // fica na conversa, gravado no Hub â€” nao some quando a pagina recarrega
+    // fica na conversa, gravado no Hub — nao some quando a pagina recarrega
     try {
       await api(`/conversations/${encodeURIComponent(conversationId)}/marcador`, {
-        method: "POST", body: JSON.stringify({ texto: `Chamada de voz Â· ${mmss}`, meta: { chamada: seg } }),
+        method: "POST", body: JSON.stringify({ texto: `Chamada de voz · ${mmss}`, meta: { chamada: seg } }),
       });
     } catch { /* se o Hub nao responder, a chamada ja acabou do mesmo jeito */ }
   };
@@ -363,7 +364,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     if (!files) return;
     const list: typeof attachments = [];
     for (const f of Array.from(files)) {
-      if (f.size > 20 * 1024 * 1024) { alert(`${f.name}: mÃ¡ximo 20 MB`); continue; }
+      if (f.size > 20 * 1024 * 1024) { alert(`${f.name}: máximo 20 MB`); continue; }
       const buf = new Uint8Array(await f.arrayBuffer());
       let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
       list.push({ name: f.name, mime: f.type || "application/octet-stream", dataBase64: btoa(bin) });
@@ -378,8 +379,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
     ? faseDoStatus(target.bot.status, target.bot.busy, target.bot.fase)
     : (bots.some((b) => target.group.members.includes(b.id) && b.busy && faseDoStatus(b.status, true, b.fase) === "trabalhando") ? "trabalhando" : "digitando");
   const subtitle = target.kind === "bot"
-    ? (target.bot.online ? (target.bot.busy ? (fase === "trabalhando" ? "estÃ¡ trabalhando" : "digitandoâ€¦") : target.bot.role) : "Offline")
-    : (busy ? (fase === "trabalhando" ? "estÃ¡ trabalhando" : "digitandoâ€¦") : target.group.members.map((m) => bots.find((b) => b.id === m)?.name ?? m).join(", "));
+    ? (target.bot.online ? (target.bot.busy ? (fase === "trabalhando" ? "está trabalhando" : "digitando…") : target.bot.role) : "Offline")
+    : (busy ? (fase === "trabalhando" ? "está trabalhando" : "digitando…") : target.group.members.map((m) => bots.find((b) => b.id === m)?.name ?? m).join(", "));
 
   return (
     <>
@@ -387,10 +388,10 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
         <button className="icon-btn only-mobile voltar" onClick={onOpenSidebar} title="Voltar aos bots" aria-label="Voltar">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
-        {bot ? <Avatar bot={bot} size={40} /> : <div className="avatar group-avatar" style={{ width: 40, height: 40 }}>ðŸ‘¥</div>}
+        {bot ? <Avatar bot={bot} size={40} /> : <div className="avatar group-avatar" style={{ width: 40, height: 40 }}>👥</div>}
         <div className="chat-title">
-          <b>{title}</b>
-          <small><span className="sub-texto">{subtitle}</span>{bot?.model && <span className="chip">{bot.engine} Â· {bot.provider}/{bot.model}</span>}{bot?.online && <span className={"chip mode-" + effectiveControl(control.global, bot.controlMode)} title={CONTROL_DESCRIPTIONS[effectiveControl(control.global, bot.controlMode)]}>{CONTROL_LABELS[effectiveControl(control.global, bot.controlMode)]}{control.global ? " (global)" : ""}</span>}</small>
+          <b className="chat-titulo-nome">{title}</b>
+          <small><span className="sub-texto">{subtitle}</span>{bot?.model && <span className="chip">{bot.engine} · {bot.provider}/{bot.model}</span>}{bot?.online && <span className={"chip mode-" + effectiveControl(control.global, bot.controlMode)} title={CONTROL_DESCRIPTIONS[effectiveControl(control.global, bot.controlMode)]}>{CONTROL_LABELS[effectiveControl(control.global, bot.controlMode)]}{control.global ? " (global)" : ""}</span>}</small>
           {bot && (bot.gerente || bot.manages?.length) && onAbrirEquipe && (
             <button type="button" className="chip-trocas chip-equipe" onClick={onAbrirEquipe}>Trocas da equipe</button>
           )}
@@ -398,25 +399,38 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
         <div className="chat-actions">
           {bot && (
             emChamada
-              ? <button className="icon-btn desligar" title="Desligar" onClick={() => void encerrarChamada()}>
+              ? <button className="icon-btn desligar head-keep" title="Desligar" onClick={() => void encerrarChamada()}>
                   <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1-.29-.7c0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .27-.11.52-.29.7l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.27 11.27 0 0 0-2.67-1.85.998.998 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" transform="rotate(135 12 12)"/></svg>
                 </button>
-              : <button className="icon-btn" title={`Ligar para ${bot.name}`} onClick={iniciarChamada}>
+              : <button className="icon-btn head-keep" title={`Ligar para ${bot.name}`} onClick={iniciarChamada}>
                   <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>
                 </button>
           )}
-          {bot && <button className={"icon-btn" + (pcAberto ? " on" : "")} title={pcAberto ? "Recolher a tela do PC" : "Tela do PC da empresa"} aria-pressed={pcAberto} onClick={alternarPc}>ðŸ–¥ï¸</button>}
+          {(busy || speaking || listening) && <button className="icon-btn parar-tudo head-keep" title="Parar tudo: a fala, o microfone e o que os bots estão fazendo (Esc)" onClick={() => stopEverything("⏹ no painel")}>⏹</button>}
+          {bot && <button className={"icon-btn head-more-item" + (pcAberto ? " on" : "")} title={pcAberto ? "Recolher a tela do PC" : "Tela do PC da empresa"} aria-pressed={pcAberto} onClick={alternarPc}>🖥️</button>}
           {bot && colab && (
-            <button type="button" className={"aba-tarefas" + (showTarefas ? " on" : "")} title="Tarefas deste bot" aria-pressed={showTarefas}
+            <button type="button" className={"aba-tarefas head-more-item" + (showTarefas ? " on" : "")} title="Tarefas deste bot" aria-pressed={showTarefas}
               data-colab="aba-tarefas"
-              onClick={() => { setShowTarefas((v) => !v); setShowRoutines(false); setShowSettings(false); }}>
+              onClick={() => { setShowTarefas((v) => !v); setShowRoutines(false); setShowSettings(false); setMenuChat(false); }}>
               Tarefas{tarefasDeste.length ? <sup>{tarefasDeste.length}</sup> : null}
             </button>
           )}
-          {bot && <button className={"icon-btn" + (showSettings ? " on" : "")} title="Configurar este bot" onClick={() => { setShowSettings(!showSettings); setShowRoutines(false); setShowTarefas(false); }}>âš™ï¸</button>}
-          {bot && <button className={"icon-btn" + (showRoutines ? " on" : "")} title="Rotinas agendadas" onClick={() => { setShowRoutines(!showRoutines); setShowSettings(false); setShowTarefas(false); }}>â°{routines.length ? <sup>{routines.length}</sup> : null}</button>}
-          {(busy || speaking || listening) && <button className="icon-btn parar-tudo" title="Parar tudo: a fala, o microfone e o que os bots estÃ£o fazendo (Esc)" onClick={() => stopEverything("â¹ no painel")}>â¹ Parar</button>}
-          <button className={"icon-btn" + (handsFree ? " on" : "")} title={handsFree ? "Modo conversa: volta a ouvir depois que o bot fala" : "Modo conversa desligado"} onClick={() => setHandsFree(!handsFree)}>ðŸ—£ï¸</button>
+          {bot && <button className={"icon-btn head-more-item" + (showSettings ? " on" : "")} title="Configurar este bot" onClick={() => { setShowSettings(!showSettings); setShowRoutines(false); setShowTarefas(false); setMenuChat(false); }}>⚙️</button>}
+          {bot && <button className={"icon-btn head-more-item" + (showRoutines ? " on" : "")} title="Rotinas agendadas" onClick={() => { setShowRoutines(!showRoutines); setShowSettings(false); setShowTarefas(false); setMenuChat(false); }}>⏰{routines.length ? <sup>{routines.length}</sup> : null}</button>}
+          <button className={"icon-btn head-more-item" + (handsFree ? " on" : "")} title={handsFree ? "Modo conversa: volta a ouvir depois que o bot fala" : "Modo conversa desligado"} onClick={() => setHandsFree(!handsFree)}>🗣️</button>
+          <div className="head-overflow">
+            <button className={"icon-btn head-overflow-btn" + (menuChat ? " on" : "")} type="button" title="Mais" aria-label="Mais opções" aria-haspopup="menu" aria-expanded={menuChat}
+              onClick={() => setMenuChat((v) => !v)}>⋮</button>
+            {menuChat && (
+              <div className="mais-menu chat-mais-menu" role="menu">
+                {bot && <button type="button" role="menuitem" onClick={() => { setMenuChat(false); alternarPc(); }}>{pcAberto ? "Recolher tela do PC" : "Tela do PC"}</button>}
+                {bot && colab && <button type="button" role="menuitem" onClick={() => { setMenuChat(false); setShowTarefas(true); setShowRoutines(false); setShowSettings(false); }}>Tarefas{tarefasDeste.length ? ` (${tarefasDeste.length})` : ""}</button>}
+                {bot && <button type="button" role="menuitem" onClick={() => { setMenuChat(false); setShowSettings(true); setShowRoutines(false); setShowTarefas(false); }}>Configurar bot</button>}
+                {bot && <button type="button" role="menuitem" onClick={() => { setMenuChat(false); setShowRoutines(true); setShowSettings(false); setShowTarefas(false); }}>Rotinas{routines.length ? ` (${routines.length})` : ""}</button>}
+                <button type="button" role="menuitem" onClick={() => { setMenuChat(false); setHandsFree(!handsFree); }}>{handsFree ? "Desligar modo conversa" : "Ligar modo conversa"}</button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -445,18 +459,18 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           <Avatar bot={bot} size={68} falando={speaking} />
           <div className="quem">
             <b>{bot.name}</b>
-            <small>{mudo ? "microfone desligado" : speaking ? "falando â€” pode interromper" : busy ? (statusText || "pensando") + "â€¦" : listening ? "pode falar" : "abrindo o microfoneâ€¦"}</small>
+            <small>{mudo ? "microfone desligado" : speaking ? "falando — pode interromper" : busy ? (statusText || "pensando") + "…" : listening ? "pode falar" : "abrindo o microfone…"}</small>
           </div>
           <div className="onda" aria-hidden>
             {ondas.map((h, i) => <i key={i} style={{ height: `${Math.min(100, 12 + h * 240)}%` }} />)}
           </div>
           <span className="relogio num">{Math.floor(agoraChamada / 60)}:{String(agoraChamada % 60).padStart(2, "0")}</span>
-          <button className="bola" title={tts ? "Desligar a voz dele" : "Ligar a voz dele"} onClick={() => setTts(!tts)}>{tts ? "ðŸ”Š" : "ðŸ”‡"}</button>
-          <button className={"bola" + (mudo ? " off" : "")} title={mudo ? "Ligar meu microfone" : "Desligar meu microfone"} onClick={() => setMudo(!mudo)}>{mudo ? "ðŸŽ™ï¸" : "ðŸŽ¤"}</button>
+          <button className="bola" title={tts ? "Desligar a voz dele" : "Ligar a voz dele"} onClick={() => setTts(!tts)}>{tts ? "🔊" : "🔇"}</button>
+          <button className={"bola" + (mudo ? " off" : "")} title={mudo ? "Ligar meu microfone" : "Desligar meu microfone"} onClick={() => setMudo(!mudo)}>{mudo ? "🎙️" : "🎤"}</button>
           {micros.length > 1 && (
-            <select className="escolhe-mic" value={micEscolhido} title="De qual microfone eu escuto (vale a partir da prÃ³xima chamada)"
+            <select className="escolhe-mic" value={micEscolhido} title="De qual microfone eu escuto (vale a partir da próxima chamada)"
               onChange={(e) => { escolherMicrofone(e.target.value); setMicEscolhido(e.target.value); }}>
-              <option value="">Microfone padrÃ£o</option>
+              <option value="">Microfone padrão</option>
               {micros.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
           )}
@@ -467,8 +481,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       )}
 
             {(approvals.length > 0 || questions.length > 0) && (
-        <div className={"aprovacoes-stack" + (deusAqui ? " auditoria" : "")} aria-label={deusAqui ? "Auditoria de aÃ§Ãµes" : "AprovaÃ§Ãµes pendentes"}>
-          {deusAqui && <span className="aprovacoes-pill">auditoria Â· modo deus</span>}
+        <div className={"aprovacoes-stack" + (deusAqui ? " auditoria" : "")} aria-label={deusAqui ? "Auditoria de ações" : "Aprovações pendentes"}>
+          {deusAqui && <span className="aprovacoes-pill">auditoria · modo deus</span>}
           {approvals.map((a) => (
             <ApprovalCard
               key={a.id}
@@ -489,7 +503,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
         </div>
       )}
 <div className="messages" ref={listRef}>
-        {!messages.length && <div className="hint">{bot ? `Diga olÃ¡ para ${bot.name}. ${bot.role}.` : "Fale com o grupo: todos os bots recebem e cada um responde o que Ã© da sua Ã¡rea."}</div>}
+        {!messages.length && <div className="hint">{bot ? `Diga olá para ${bot.name}. ${bot.role}.` : "Fale com o grupo: todos os bots recebem e cada um responde o que é da sua área."}</div>}
         {messages.map((m) => <Fragment key={m.id}><Message m={m} showName={target.kind === "group" || m.conversationId.startsWith("pair:")} tools={tools[m.id] ?? (m.meta?.tools as ToolInfo[] | undefined)} answer={m.meta?.question ? resolvedQuestions[String(m.meta.question)] : undefined}
           onAbrirArquivo={(f, todos) => setArquivoAberto({ files: todos && todos.length ? todos : [f], index: (todos && todos.length ? Math.max(0, todos.findIndex((x) => x.id === f.id)) : 0) })}
           onAbrirTela={bot ? () => setDesktopAberto(true) : undefined}
@@ -499,7 +513,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           onSalvarEdicao={async (texto) => {
             setEditando(null); stopSpeaking();
             const r = await api(`/messages/${m.id}/edit`, { method: "POST", body: JSON.stringify({ text: texto }) });
-            if (!r.ok) avisar("nÃ£o consegui editar o pedido");
+            if (!r.ok) avisar("não consegui editar o pedido");
           }}
           onSpeak={m.sender.kind === "bot" ? () => { if (isSpeaking()) stopSpeaking(); else void speak(m.text, m.sender.id, voice, bots.find((b) => b.id === m.sender.id)?.voice, true); } : undefined} />{trocas[m.id]?.length ? <ChipTrocas trocas={trocas[m.id]} bots={bots} Avatar={Avatar} onAbrir={(ts) => ts.length === 1 ? onAbrirTroca(ts[0].conversationId) : setFolha(ts)} /> : null}</Fragment>)}
       </div>
@@ -510,7 +524,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
             ? <span className={fase === "trabalhando" ? "gira" : "av"}><Avatar bot={target.bot} size={22} /></span>
             : <Bolha />}
           {fase === "trabalhando"
-            ? <span>{title} estÃ¡ trabalhando</span>
+            ? <span>{title} está trabalhando</span>
             : <><span>Digitando</span><span className="pontos" aria-hidden><i /><i /><i /></span></>}
         </div>
       )}
@@ -523,7 +537,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           <button className="link" onClick={async () => {
             const t = desfazer.token; setDesfazer(null);
             const r = await api(`/conversations/${encodeURIComponent(conversationId)}/unrewind`, { method: "POST", body: JSON.stringify({ token: t }) });
-            if (!r.ok) avisar("nÃ£o consegui desfazer");
+            if (!r.ok) avisar("não consegui desfazer");
           }}>Desfazer</button>
         </div>
       )}
@@ -533,9 +547,9 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
         <div className="modal-bg" onClick={() => setDetalhes(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head"><b>Detalhes da mensagem</b><button className="link" onClick={() => setDetalhes(null)}>fechar</button></div>
-            <p><b>De:</b> {detalhes.sender.name} Â· <b>quando:</b> {new Date(detalhes.createdAt).toLocaleString("pt-BR")}</p>
-            {(() => { const b = bots.find((x) => x.id === detalhes.sender.id); return b ? <p><b>Modelo:</b> {b.provider}/{b.model} Â· <b>motor:</b> {b.engine}</p> : null; })()}
-            <p><b>Caracteres:</b> {detalhes.text.length}{detalhes.editOf ? " Â· versÃ£o de um pedido editado" : ""}{detalhes.pinned ? " Â· fixada" : ""}</p>
+            <p><b>De:</b> {detalhes.sender.name} · <b>quando:</b> {new Date(detalhes.createdAt).toLocaleString("pt-BR")}</p>
+            {(() => { const b = bots.find((x) => x.id === detalhes.sender.id); return b ? <p><b>Modelo:</b> {b.provider}/{b.model} · <b>motor:</b> {b.engine}</p> : null; })()}
+            <p><b>Caracteres:</b> {detalhes.text.length}{detalhes.editOf ? " · versão de um pedido editado" : ""}{detalhes.pinned ? " · fixada" : ""}</p>
             {(() => {
               const ts = (tools[detalhes.id] ?? (detalhes.meta?.tools as ToolInfo[] | undefined)) ?? [];
               return ts.length ? <><p><b>Ferramentas deste turno:</b></p><ul>{ts.map((t) => <li key={t.callId}>{t.tool}{t.ok === false ? " (falhou)" : ""}</li>)}</ul></> : <p>Nenhuma ferramenta neste turno.</p>;
@@ -547,14 +561,14 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       {(listening || speaking) && (
         <div className={"voice-bar" + (listening ? " listening" : " speaking") + (vozAberta ? "" : " recolhida")}>
           <span className="voice-dot" style={{ transform: `scale(${1 + level * 1.5})` }} />
-          <span className="voice-texto">{listening ? (voice.stt ? "Ouvindoâ€¦ pode falar; quando vocÃª parar, eu envio." : "Ouvindoâ€¦ quando vocÃª parar de falar, eu envio.") : `${title} estÃ¡ falandoâ€¦`}</span>
+          <span className="voice-texto">{listening ? (voice.stt ? "Ouvindo… pode falar; quando você parar, eu envio." : "Ouvindo… quando você parar de falar, eu envio.") : `${title} está falando…`}</span>
           <button className="link" type="button" onClick={() => setVozAberta((v) => !v)}>{vozAberta ? "recolher" : "voz"}</button>
-          <button className="link" onClick={() => stopEverything("â¹ na barra de voz")}>parar</button>
+          <button className="link" onClick={() => stopEverything("⏹ na barra de voz")}>parar</button>
         </div>
       )}
 
       {attachments.length > 0 && (
-        <div className="attachments">{attachments.map((a, i) => <span key={i} className="chip">ðŸ“Ž {a.name} <button className="link" onClick={() => setAttachments(attachments.filter((_, j) => j !== i))}>Ã—</button></span>)}</div>
+        <div className="attachments">{attachments.map((a, i) => <span key={i} className="chip">📎 {a.name} <button className="link" onClick={() => setAttachments(attachments.filter((_, j) => j !== i))}>×</button></span>)}</div>
       )}
 
       <footer className="composer">
@@ -563,12 +577,12 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
         <textarea
           ref={textRef}
           value={text}
-          placeholder={bot && !bot.online ? `${bot.name} estÃ¡ offline â€” a mensagem fica salva` : `Escreva para ${title}`}
+          placeholder={bot && !bot.online ? `${bot.name} está offline — a mensagem fica salva` : `Escreva para ${title}`}
           rows={1}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); return; }
-            // campo vazio + seta pra cima = editar o Ãºltimo pedido, como no WhatsApp.
+            // campo vazio + seta pra cima = editar o último pedido, como no WhatsApp.
             if (e.key === "ArrowUp" && !text.trim()) {
               const ultimo = [...messages].reverse().find((m) => m.sender.kind === "user" && m.sender.id === "user");
               if (ultimo) { e.preventDefault(); stopSpeaking(); setEditando(ultimo.id); }
@@ -580,7 +594,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 12l16-8-6 16-2-6z"/></svg>
           </button>
         ) : speechSupported(voice) ? (
-          <button className={"icon-btn mic" + (listening ? " rec" : "")} type="button" title={listening ? "Parar de ouvir" : "Falar (envia sozinho quando vocÃª parar)"} aria-label="Microfone" onClick={toggleMic}>
+          <button className={"icon-btn mic" + (listening ? " rec" : "")} type="button" title={listening ? "Parar de ouvir" : "Falar (envia sozinho quando você parar)"} aria-label="Microfone" onClick={toggleMic}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg>
           </button>
         ) : (

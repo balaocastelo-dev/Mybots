@@ -2411,22 +2411,41 @@ main.chat > .colab-quadro,
   }
 
   .sidebar-head {
-    padding: 10px 12px;
-    padding-top: max(10px, env(safe-area-inset-top, 0px));
-    min-height: 56px;
-  }
-  .sidebar-head .brand b { font-size: 22px; letter-spacing: -.03em; }
-  .icon-btn.canto { width: 44px; height: 44px; border-radius: 12px; }
-  .icon-btn, .chat-actions .icon-btn, .aba-tarefas {
-    min-width: 44px; min-height: 44px;
-  }
-  .chat-head {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px;
     padding: 8px 10px;
     padding-top: max(8px, env(safe-area-inset-top, 0px));
-    gap: 8px;
+    min-height: 52px;
+    overflow: hidden;
   }
-  .chat-actions { gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
-  .chat-actions .parar-tudo { font-size: 12px; padding: 0 10px; }
+  .sidebar-head .brand { flex: 1; min-width: 0; gap: 8px; }
+  .sidebar-head .brand-titulo b { font-size: 18px; letter-spacing: -.02em; }
+  .sidebar-canto { flex: none; gap: 2px; }
+  .icon-btn.canto { width: 40px; height: 40px; border-radius: 12px; }
+  .icon-btn, .chat-actions .icon-btn, .aba-tarefas {
+    min-width: 40px; min-height: 40px;
+  }
+  .chat-head {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    min-height: 52px;
+    overflow: hidden;
+  }
+  .chat-head .avatar { width: 36px !important; height: 36px !important; flex: none; }
+  .chat-title { flex: 1; min-width: 0; overflow: hidden; }
+  .chat-title small { display: none; }
+  .chat-title .chip, .chat-title .chip-trocas { display: none; }
+  .chat-actions {
+    gap: 2px; flex-wrap: nowrap !important; justify-content: flex-end; flex: none;
+  }
+  .chat-actions .parar-tudo { font-size: 12px; padding: 0 8px; min-width: 40px; }
+  .chat-actions .head-more-item,
+  .chat-actions .aba-tarefas.head-more-item { display: none !important; }
+  .chat-actions .head-overflow { display: block; }
+  .chat-actions .icon-btn, .chat-actions .head-overflow-btn {
+    width: 40px; height: 40px; min-width: 40px; min-height: 40px;
+  }
+  .sidebar-canto .head-overflow-btn { display: grid; }
 
   .grade-fixados { gap: 4px; padding: 4px 6px 10px; }
   .grade-fixados li { padding: 12px 4px 10px; border-radius: 20px; gap: 8px; }
@@ -2471,6 +2490,12 @@ main.chat > .colab-quadro,
 
 /* Tablet: lista + chat lado a lado; PC/kanban em gaveta */
 @media (min-width: 768px) and (max-width: 1180px) {
+  /* tablet header */
+  .sidebar-canto .head-overflow-btn { display: none; }
+  .chat-actions { flex-wrap: nowrap; }
+  .chat-actions .head-overflow { display: none; }
+  .chat-actions .head-more-item { display: inline-flex !important; }
+  .sidebar-head, .chat-head { flex-wrap: nowrap; }
   .only-mobile { display: none !important; }
   .app {
     grid-template-columns: minmax(240px, 34vw) minmax(0, 1fr) !important;
@@ -2492,6 +2517,10 @@ main.chat > .colab-quadro,
 @media (min-width: 1181px) {
   .only-mobile { display: none !important; }
   .chat { min-width: 420px; }
+  /* desktop header */
+  .chat-actions .head-overflow { display: none; }
+  .chat-actions .head-more-item { display: inline-flex !important; }
+  .sidebar-canto .head-overflow-btn { display: none; }
 }
 
 @media (hover: none) and (pointer: coarse) {
@@ -2940,3 +2969,29 @@ main.chat > .colab-quadro,
 .logo-img.logo-chefe > img { width: 100%; height: 100%; object-fit: contain; animation: respira 5s ease-in-out infinite; transform-origin: 50% 60%; }
 @media (max-width: 760px) { .logo-img.logo-chefe { width: 32px; height: 32px; } }
 
+
+
+/* ---- header overflow (lista + chat) ---- */
+.brand { min-width: 0; flex: 1; }
+.brand-titulo { min-width: 0; overflow: hidden; }
+.brand-titulo b {
+  display: block; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chat-titulo-nome {
+  display: block; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.head-overflow { position: relative; display: none; flex: none; }
+.head-overflow-btn { font-size: 20px; line-height: 1; }
+.chat-mais-menu { right: 0; left: auto; min-width: 200px; }
+.sidebar-head, .chat-head {
+  flex-wrap: nowrap;
+  overflow: visible;
+}
+.chat-actions {
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+}

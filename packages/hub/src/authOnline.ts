@@ -69,6 +69,42 @@ export function cookieDe(req: FastifyRequest, nome: string): string {
   return "";
 }
 
+
+const WS_TICKET_TTL_MS = 90_000;
+
+/** Ticket curto para abrir /ws/ui cross-origin (cookie nao cruza o tunel). Nunca e o Bearer do hub. */
+export function emitirTicketWs(usuario: string): { ticket: string; expiresIn: number } {
+  const exp = Date.now() + WS_TICKET_TTL_MS;
+  const payload = Buffer.from(JSON.stringify({ u: usuario, exp, k: "ws" }), "utf8").toString("base64url");
+  return { ticket: assinar(payload), expiresIn: Math.floor(WS_TICKET_TTL_MS / 1000) };
+}
+
+export function ticketWsValido(ticket: string): boolean {
+  if (!authOnlineAtivo() || !ticket) return false;
+  const i = ticket.lastIndexOf(".");
+  if (i < 0) return false;
+  const payload = ticket.slice(0, i);
+  const sig = ticket.slice(i + 1);
+  const esperado = crypto.createHmac("sha256", config.sessionSecret).update(payload).digest("base64url");
+  const aBuf = Buffer.from(sig);
+  const bBuf = Buffer.from(esperado);
+  if (aBuf.length !== bBuf.length || !crypto.timingSafeEqual(aBuf, bBuf)) return false;
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { u: string; exp: number; k?: string };
+    if (data?.k !== "ws") return false;
+    if (!data?.u || !data?.exp || Date.now() > data.exp) return false;
+    return data.u === config.usuarioOnline;
+  } catch {
+    return false;
+  }
+}
+
+export function ticketWsDoReq(req: FastifyRequest): boolean {
+  const q = (req.query as Record<string, unknown> | undefined)?.ticket;
+  if (!q) return false;
+  return ticketWsValido(String(q));
+}
+
 export function sessaoValida(req: FastifyRequest): boolean {
   if (!authOnlineAtivo()) return false;
   const tok = cookieDe(req, SESSION_COOKIE);

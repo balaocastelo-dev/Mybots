@@ -150,23 +150,177 @@ export function useHub() {
   const [state, dispatch] = useReducer(reducer, initial);
   const wsRef = useRef<WebSocket | null>(null);
   const listeners = useRef(new Set<(m: HubToUi) => void>());
+  const httpModeRef = useRef(false);
 
   useEffect(() => {
     let closed = false;
     let retry = 1000;
-    const connect = () => {
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${proto}://${location.host}${UI_BASE}/ws/ui${location.search}`);
-      wsRef.current = ws;
-      ws.onopen = () => { retry = 1000; dispatch({ type: "connected", value: true }); ws.send(JSON.stringify({ type: "subscribe" } satisfies UiToHub)); };
-      ws.onmessage = (ev) => { const m = JSON.parse(ev.data) as HubToUi; dispatch({ type: "ws", msg: m }); for (const l of listeners.current) l(m); };
-      ws.onclose = () => { dispatch({ type: "connected", value: false }); if (!closed) { setTimeout(connect, retry); retry = Math.min(retry * 2, 15000); } };
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let tunnelTried = false;
+    let sameOriginFails = 0;
+
+    const emit = (m: HubToUi) => {
+      dispatch({ type: "ws", msg: m });
+      for (const l of listeners.current) l(m);
     };
-    connect();
-    return () => { closed = true; wsRef.current?.close(); };
+
+    const fetchSnapshot = async (): Promise<boolean> => {
+      try {
+        const r = await fetch(`${UI_BASE}/api/ui/snapshot${location.search}`, { credentials: "include" });
+        if (!r.ok) return false;
+        const data = (await r.json()) as HubToUi;
+        dispatch({ type: "connected", value: true });
+        emit(data);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const startHttpFallback = () => {
+      httpModeRef.current = true;
+      if (pollTimer) return;
+      void fetchSnapshot();
+      pollTimer = setInterval(() => { void fetchSnapshot(); }, 2500);
+    };
+
+    const stopHttpFallback = () => {
+      httpModeRef.current = false;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    };
+
+    const attach = (ws: WebSocket, via: "same" | "tunnel") => {
+      wsRef.current = ws;
+      ws.onopen = () => {
+        retry = 1000;
+        sameOriginFails = 0;
+        stopHttpFallback();
+        dispatch({ type: "connected", value: true });
+        ws.send(JSON.stringify({ type: "subscribe" } satisfies UiToHub));
+      };
+      ws.onmessage = (ev) => {
+        const m = JSON.parse(String(ev.data)) as HubToUi;
+        emit(m);
+      };
+      ws.onclose = () => {
+        if (wsRef.current === ws) wsRef.current = null;
+        dispatch({ type: "connected", value: false });
+        if (closed) return;
+        startHttpFallback();
+        if (via === "same") {
+          sameOriginFails += 1;
+          if (!tunnelTried) {
+            tunnelTried = true;
+            void connectTunnel();
+            return;
+          }
+        }
+        setTimeout(() => { void connect(); }, retry);
+        retry = Math.min(retry * 2, 15_000);
+      };
+    };
+
+    const connectSame = () => {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      attach(new WebSocket(`${proto}://${location.host}${UI_BASE}/ws/ui${location.search}`), "same");
+    };
+
+    const connectTunnel = async () => {
+      try {
+        const [urlRes, tickRes] = await Promise.all([
+          fetch(`${UI_BASE}/api/ui/ws-url${location.search}`, { credentials: "include" }),
+          fetch(`${UI_BASE}/api/ui/ws-ticket${location.search}`, { method: "POST", credentials: "include" }),
+        ]);
+        if (!urlRes.ok) { startHttpFallback(); scheduleRetry(); return; }
+        const { wsUrl } = (await urlRes.json()) as { wsUrl?: string | null };
+        if (!wsUrl) { startHttpFallback(); scheduleRetry(); return; }
+        let ticket = "";
+        if (tickRes.ok) {
+          const t = (await tickRes.json()) as { ticket?: string };
+          ticket = t.ticket || "";
+        }
+        const sep = wsUrl.includes("?") ? "&" : "?";
+        const full = ticket ? `${wsUrl}${sep}ticket=${encodeURIComponent(ticket)}` : wsUrl;
+        attach(new WebSocket(full), "tunnel");
+      } catch {
+        startHttpFallback();
+        scheduleRetry();
+      }
+    };
+
+    const scheduleRetry = () => {
+      if (closed) return;
+      setTimeout(() => { void connect(); }, retry);
+      retry = Math.min(retry * 2, 15_000);
+    };
+
+    const connect = async () => {
+      if (closed) return;
+      if (tunnelTried || sameOriginFails > 0) await connectTunnel();
+      else connectSame();
+    };
+
+    // Lista via HTTP ja; WS (same-origin ou tunel) sobe em paralelo.
+    startHttpFallback();
+    void connect();
+
+    return () => {
+      closed = true;
+      stopHttpFallback();
+      wsRef.current?.close();
+    };
   }, []);
 
-  const send = (m: UiToHub) => wsRef.current?.readyState === WebSocket.OPEN && wsRef.current.send(JSON.stringify(m));
+  const send = (m: UiToHub) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(m));
+      return;
+    }
+    // Fallback HTTP quando o WS nao sobe (Vercel rewrite).
+    if (m.type === "send") {
+      void (async () => {
+        try {
+          const r = await fetch(`${UI_BASE}/api/send${location.search}`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ conversationId: m.conversationId, text: m.text, attachments: m.attachments }),
+          });
+          if (!r.ok) return;
+          const reload = async () => {
+            const hist = await fetch(`${UI_BASE}/api/conversations/${encodeURIComponent(m.conversationId)}/messages${location.search}`, { credentials: "include" });
+            if (hist.ok) dispatch({ type: "history", conversationId: m.conversationId, messages: await hist.json() });
+          };
+          await reload();
+          let n = 0;
+          const t = setInterval(() => {
+            n += 1;
+            void reload();
+            if (n >= 40) clearInterval(t);
+          }, 1500);
+        } catch { /* ignore */ }
+      })();
+      return;
+    }
+    if (m.type === "approval.response") {
+      void fetch(`${UI_BASE}/api/approvals/${encodeURIComponent(m.requestId)}${location.search}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ allow: m.allow, remember: m.remember }),
+      }).catch(() => {});
+      return;
+    }
+    if (m.type === "question.answer") {
+      void fetch(`${UI_BASE}/api/questions/${encodeURIComponent(m.questionId)}${location.search}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ answer: m.answer }),
+      }).catch(() => {});
+    }
+  };
+
   const loadHistory = async (conversationId: string) => {
     const r = await fetch(`${UI_BASE}/api/conversations/${encodeURIComponent(conversationId)}/messages${location.search}`, { credentials: "include" });
     if (r.ok) dispatch({ type: "history", conversationId, messages: await r.json() });
@@ -181,5 +335,3 @@ export function useHub() {
   const setImport = (file: { name: string; mime: string; dataBase64: string }) => dispatch({ type: "import.set", file });
   return { state, send, loadHistory, onEvent, removeToast, clearImport, setImport };
 }
-
-

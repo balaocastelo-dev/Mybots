@@ -267,27 +267,26 @@ export function PainelDoPc({
 }) {
   const [aba, setAba] = useState<AbaLado>("pc");
   const [largura, setLargura] = useState(() => {
-    try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 280 && n <= 900 ? n : 420; } catch { return 420; }
+    try { const n = Number(localStorage.getItem("mybots-pc-largura")); return n >= 360 && n <= 980 ? n : 640; } catch { return 640; }
   });
   const larguraRef = useRef(largura);
   larguraRef.current = largura;
 
-  // Aba Celular precisa de painel mais largo para a moldura do aparelho ficar legível.
+  // Celular e Meu PC precisam de painel largo para a tela ficar bem visível.
   useEffect(() => {
-    if (aba !== "celular") return;
-    if (larguraRef.current >= 380) return;
-    const w = 400;
-    setLargura(w);
-    larguraRef.current = w;
-    try { localStorage.setItem("mybots-pc-largura", String(w)); } catch { /* ok */ }
+    const min = aba === "celular" ? 480 : aba === "pc" ? 560 : 0;
+    if (!min || larguraRef.current >= min) return;
+    setLargura(min);
+    larguraRef.current = min;
+    try { localStorage.setItem("mybots-pc-largura", String(min)); } catch { /* ok */ }
   }, [aba]);
   const aoPuxar = (e: ReactPointerEvent) => {
     e.preventDefault();
     const inicioX = e.clientX;
     const inicioW = larguraRef.current;
     const mover = (ev: PointerEvent) => {
-      const teto = Math.min(900, Math.max(280, window.innerWidth * 0.7));
-      const w = Math.min(teto, Math.max(280, inicioW + (inicioX - ev.clientX)));
+      const teto = Math.min(980, Math.max(360, window.innerWidth * 0.75));
+      const w = Math.min(teto, Math.max(360, inicioW + (inicioX - ev.clientX)));
       setLargura(w);
     };
     const soltar = () => {
@@ -317,15 +316,15 @@ export function PainelDoPc({
           </button>
         ))}
       </div>
-            {aba === "pc" && (
-        <TelasDoBot botId={botId} nome={nome} modo="pc" />
-      )}
-      {aba === "celular" && (
-        <TelasDoBot botId={botId} nome={nome} modo="celular" mostrarPareamento />
-      )}
-      {aba === "trabalho" && (
-        <Trabalhos bots={bots} botInicial={botId} embutido filtroBotPadrao onAbrirBot={onAbrirBot} />
-      )}
+            {aba === "pc" && (
+        <TelasDoBot botId={botId} nome={nome} modo="pc" />
+      )}
+      {aba === "celular" && (
+        <TelasDoBot botId={botId} nome={nome} modo="celular" mostrarPareamento />
+      )}
+      {aba === "trabalho" && (
+        <Trabalhos bots={bots} botInicial={botId} embutido filtroBotPadrao onAbrirBot={onAbrirBot} />
+      )}
     </aside>
   );
 }

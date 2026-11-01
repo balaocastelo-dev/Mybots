@@ -665,26 +665,26 @@ h1, h2, h3, .bot-name, .chat-title b, .card-title, .modal h3 {
 
 /* ---- Menu de botão direito no chat (30/10/2026) ---- */
 .ctx-menu.ctx-msg button { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.ctx-menu.ctx-msg .atalho { color: var(--muted); font-size: 11px; }
-
-/* Menu da mensagem: NÃO usar a classe .chat (herda height:100% / inset:0). */
-.ctx-menu.ctx-msg {
-  height: auto !important;
-  max-width: min(320px, calc(100vw - 16px));
-  width: max-content;
-  min-width: 220px;
-  inset: auto;
-  bottom: auto;
-  right: auto;
-  flex: none;
-  overflow-x: hidden;
-}
-.ctx-menu.ctx-msg.ctx-folha {
-  border-radius: 16px 16px 12px 12px;
-  box-shadow: 0 -8px 40px rgba(0,0,0,.5), 0 14px 40px rgba(0,0,0,.45);
-  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
-}
-.ctx-menu.ctx-msg.ctx-folha button { padding: 12px 14px; font-size: 15px; }
+.ctx-menu.ctx-msg .atalho { color: var(--muted); font-size: 11px; }
+
+/* Menu da mensagem: NÃO usar a classe .chat (herda height:100% / inset:0). */
+.ctx-menu.ctx-msg {
+  height: auto !important;
+  max-width: min(320px, calc(100vw - 16px));
+  width: max-content;
+  min-width: 220px;
+  inset: auto;
+  bottom: auto;
+  right: auto;
+  flex: none;
+  overflow-x: hidden;
+}
+.ctx-menu.ctx-msg.ctx-folha {
+  border-radius: 16px 16px 12px 12px;
+  box-shadow: 0 -8px 40px rgba(0,0,0,.5), 0 14px 40px rgba(0,0,0,.45);
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+}
+.ctx-menu.ctx-msg.ctx-folha button { padding: 12px 14px; font-size: 15px; }
 
 .msg .bubble { position: relative; }
 .msg-menu-btn {
@@ -2068,7 +2068,7 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
   overflow: hidden;
   min-width: 0;
 }
-.quadro-pc { aspect-ratio: 16 / 9; border-radius: 8px; box-shadow: 0 0 0 1px #2a2a2e; }
+.quadro-pc { aspect-ratio: 16 / 10; border-radius: 8px; box-shadow: 0 0 0 1px #2a2a2e; }
 .quadro-android { aspect-ratio: 9 / 18.5; border-radius: 18px; box-shadow: 0 0 0 3px #1a1a1e; }
 .telas-par.empilhado .quadro { width: 100%; height: auto; }
 .quadro iframe,
@@ -2112,13 +2112,13 @@ main.chat .conversa-miolo > .messages > :last-child { scroll-margin-bottom: 8px;
 }
 .android-parear { flex: none; }
 .android-dica { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
-.android-erro { margin: 0; color: var(--danger, #d4453c); font-size: 13px; }
-
-.android-parear-bloco { display: flex; flex-direction: column; gap: 10px; }
-.android-ja-conectados { display: flex; flex-direction: column; gap: 6px; }
-.android-lista-adb { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.android-lista-adb li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--border, #333); border-radius: 8px; font-size: 12px; }
-.android-lista-adb li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.android-erro { margin: 0; color: var(--danger, #d4453c); font-size: 13px; }
+
+.android-parear-bloco { display: flex; flex-direction: column; gap: 10px; }
+.android-ja-conectados { display: flex; flex-direction: column; gap: 6px; }
+.android-lista-adb { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.android-lista-adb li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--border, #333); border-radius: 8px; font-size: 12px; }
+.android-lista-adb li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .pc-ampliado-fundo {
   position: fixed;
@@ -2519,12 +2519,12 @@ main.chat > .colab-quadro,
 }
 
 /* Tablet: lista + chat lado a lado; PC/kanban em gaveta */
-@media (min-width: 768px) and (max-width: 1180px) {
-  /* tablet header */
-  .sidebar-canto .head-overflow-btn { display: none; }
-  .chat-actions { flex-wrap: nowrap; }
-  .chat-actions .head-overflow { display: none; }
-  .chat-actions .head-more-item { display: inline-flex !important; }
+@media (min-width: 768px) and (max-width: 1180px) {
+  /* tablet header */
+  .sidebar-canto .head-overflow-btn { display: none; }
+  .chat-actions { flex-wrap: nowrap; }
+  .chat-actions .head-overflow { display: none; }
+  .chat-actions .head-more-item { display: inline-flex !important; }
   .sidebar-head, .chat-head { flex-wrap: nowrap; }
   .only-mobile { display: none !important; }
   .app {
@@ -3009,35 +3009,35 @@ main.chat > .colab-quadro,
 }
 @media (max-width: 760px) { .logo-img.logo-chefe { width: 32px; height: 32px; } }
 
-
-
-/* ---- header overflow (lista + chat) ---- */
-.brand { min-width: 0; flex: 1; }
-.brand-titulo { min-width: 0; overflow: hidden; }
-.brand-titulo b {
-  display: block; max-width: 100%;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.chat-titulo-nome {
-  display: block; max-width: 100%;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.head-overflow { position: relative; display: none; flex: none; }
-.head-overflow-btn { font-size: 20px; line-height: 1; }
-.chat-mais-menu { right: 0; left: auto; min-width: 200px; }
-.sidebar-head, .chat-head {
-  flex-wrap: nowrap;
-  overflow: visible;
-}
-.chat-actions {
-  flex: none;
-  flex-wrap: nowrap;
-  align-items: center;
-  min-width: 0;
-}
-
-
-/* --- ovo roxo / nascer (amebas v2) --- */
+
+
+/* ---- header overflow (lista + chat) ---- */
+.brand { min-width: 0; flex: 1; }
+.brand-titulo { min-width: 0; overflow: hidden; }
+.brand-titulo b {
+  display: block; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chat-titulo-nome {
+  display: block; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.head-overflow { position: relative; display: none; flex: none; }
+.head-overflow-btn { font-size: 20px; line-height: 1; }
+.chat-mais-menu { right: 0; left: auto; min-width: 200px; }
+.sidebar-head, .chat-head {
+  flex-wrap: nowrap;
+  overflow: visible;
+}
+.chat-actions {
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+}
+
+
+/* --- ovo roxo / nascer (amebas v2) --- */
 @keyframes mybots-ovo-balanca {
   0%, 100% { transform: rotate(0deg) scale(1); }
   20% { transform: rotate(-9deg) scale(1.02); }
@@ -3171,115 +3171,114 @@ main.chat > .colab-quadro,
   display: grid; gap: 18px;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   max-width: 920px;
-}
-
-
-/* --- seletor de amebas v2 --- */
-.ameba-picker { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; width: 100%; }
-.ameba-picker-topo { display: flex; gap: 14px; align-items: center; min-width: 0; }
-.ameba-picker-acoes { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
-.ameba-picker-acoes .btn { align-self: flex-start; }
-.ameba-grade {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 12px;
-  max-height: min(42vh, 360px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 6px 2px;
-  min-width: 0;
-}
-.ameba-opcao {
-  border: 2px solid transparent;
-  border-radius: 14px;
-  padding: 4px;
-  background: var(--panel-2, #1a1a22);
-  cursor: pointer;
-  aspect-ratio: 1;
-  overflow: hidden;
-}
-.ameba-opcao.on { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed55; }
-.ameba-opcao img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
-
-/* modal sem overflow horizontal no celular */
-.modal-bg { padding: 12px; box-sizing: border-box; }
-.modal {
-  width: min(92vw, 420px);
-  max-width: calc(100vw - 24px);
-  box-sizing: border-box;
-  overflow-x: hidden;
-  overflow-y: auto;
-  max-height: min(90vh, 820px);
-}
-.modal.wide {
-  width: min(94vw, 820px);
-  max-width: calc(100vw - 24px);
-  max-height: 90vh;
-  overflow-y: auto;
-}
-.modal input, .modal select, .modal textarea { max-width: 100%; box-sizing: border-box; }
-.modal .seg { flex-wrap: wrap; }
-.modal .seg button { flex: 1 1 auto; min-width: 0; }
-@media (max-width: 520px) {
-  .modal-bg { padding: 0; align-items: stretch; }
-  .modal, .modal.wide {
-    width: 100vw;
-    max-width: 100vw;
-    min-height: 100vh;
-    max-height: 100vh;
-    border-radius: 0;
-    padding: 16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
-  }
-  .ameba-grade {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    max-height: min(48vh, 320px);
-  }
-}
-@media (max-width: 360px) {
-  .ameba-grade { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
-  .ameba-picker-topo { gap: 8px; }
-}
-
-
-/* Painel direito: 3 abas, resize contínuo, telefone */
-.quadro.sozinho { width: 100% !important; height: 100% !important; flex: 1 1 auto; }
-.telas-par.empilhado .quadro.sozinho { min-height: min(52vh, 520px); }
-.pc-pega {
-  width: 8px;
-  cursor: col-resize;
-  touch-action: none;
-  background: color-mix(in srgb, var(--border, #2a3344) 80%, transparent);
-}
-.pc-pega:hover, .pc-pega:active {
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-.pc-segmento.varias button { flex: 1 1 calc(33.33% - 4px); min-height: 48px; font-size: 12px; }
-.trab-tipo.on { outline: 2px solid var(--accent); }
-.especialidade-picker { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-.especialidade-picker .esp-busca { width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #2a3344); background: var(--panel-2, #1a1f2b); color: inherit; font-size: 15px; }
-.especialidade-cats { display: flex; flex-wrap: wrap; gap: 6px; }
-.especialidade-cats button { min-height: 36px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border, #2a3344); background: transparent; color: inherit; font-size: 12px; }
-.especialidade-cats button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); }
-.especialidade-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; max-height: min(42vh, 320px); overflow: auto; padding: 4px 2px 8px; }
-.especialidade-card { text-align: left; min-height: 64px; padding: 10px; border-radius: 12px; border: 1px solid var(--border, #2a3344); background: var(--panel-2, #121722); color: inherit; display: flex; flex-direction: column; gap: 4px; }
-.especialidade-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.especialidade-card b { font-size: 13px; line-height: 1.25; }
-.especialidade-card span { font-size: 18px; }
-@media (max-width: 767px) {
-  .pc-lado { width: 100% !important; max-width: 100%; border-left: none; border-top: 1px solid var(--border, #2a3344); }
-  .pc-pega { display: none !important; }
-  .especialidade-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 50vh; }
-  .pc-segmento.varias button { min-height: 52px; }
-}
-
-
-/* Plano / quadro de tarefas */
-.plano-passos { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: rgba(127,127,127,.08); }
-.plano-passos ol { margin: 8px 0 0; padding-left: 18px; }
-.plano-passos li { margin: 6px 0; display: grid; gap: 2px; }
-.plano-passos .colab-selo { justify-self: start; }
-.kanban-decidir { margin: 6px 8px 8px; }
+}
+
+
+/* --- seletor de amebas v2 --- */
+.ameba-picker { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; width: 100%; }
+.ameba-picker-topo { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.ameba-picker-acoes { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.ameba-picker-acoes .btn { align-self: flex-start; }
+.ameba-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 12px;
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 2px;
+  min-width: 0;
+}
+.ameba-opcao {
+  border: 2px solid transparent;
+  border-radius: 14px;
+  padding: 4px;
+  background: var(--panel-2, #1a1a22);
+  cursor: pointer;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+.ameba-opcao.on { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed55; }
+.ameba-opcao img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+
+/* modal sem overflow horizontal no celular */
+.modal-bg { padding: 12px; box-sizing: border-box; }
+.modal {
+  width: min(92vw, 420px);
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: min(90vh, 820px);
+}
+.modal.wide {
+  width: min(94vw, 820px);
+  max-width: calc(100vw - 24px);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal input, .modal select, .modal textarea { max-width: 100%; box-sizing: border-box; }
+.modal .seg { flex-wrap: wrap; }
+.modal .seg button { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 520px) {
+  .modal-bg { padding: 0; align-items: stretch; }
+  .modal, .modal.wide {
+    width: 100vw;
+    max-width: 100vw;
+    min-height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    padding: 16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .ameba-grade {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    max-height: min(48vh, 320px);
+  }
+}
+@media (max-width: 360px) {
+  .ameba-grade { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+  .ameba-picker-topo { gap: 8px; }
+}
+
+
+/* Painel direito: 3 abas, resize contínuo, telefone */
+.quadro.sozinho { width: 100% !important; height: auto !important; flex: 0 0 auto; }
+.pc-pega {
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  background: color-mix(in srgb, var(--border, #2a3344) 80%, transparent);
+}
+.pc-pega:hover, .pc-pega:active {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.pc-segmento.varias button { flex: 1 1 calc(33.33% - 4px); min-height: 48px; font-size: 12px; }
+.trab-tipo.on { outline: 2px solid var(--accent); }
+.especialidade-picker { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.especialidade-picker .esp-busca { width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #2a3344); background: var(--panel-2, #1a1f2b); color: inherit; font-size: 15px; }
+.especialidade-cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.especialidade-cats button { min-height: 36px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border, #2a3344); background: transparent; color: inherit; font-size: 12px; }
+.especialidade-cats button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); }
+.especialidade-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; max-height: min(42vh, 320px); overflow: auto; padding: 4px 2px 8px; }
+.especialidade-card { text-align: left; min-height: 64px; padding: 10px; border-radius: 12px; border: 1px solid var(--border, #2a3344); background: var(--panel-2, #121722); color: inherit; display: flex; flex-direction: column; gap: 4px; }
+.especialidade-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.especialidade-card b { font-size: 13px; line-height: 1.25; }
+.especialidade-card span { font-size: 18px; }
+@media (max-width: 767px) {
+  .pc-lado { width: 100% !important; max-width: 100%; border-left: none; border-top: 1px solid var(--border, #2a3344); }
+  .pc-pega { display: none !important; }
+  .especialidade-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 50vh; }
+  .pc-segmento.varias button { min-height: 52px; }
+}
+
+
+/* Plano / quadro de tarefas */
+.plano-passos { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: rgba(127,127,127,.08); }
+.plano-passos ol { margin: 8px 0 0; padding-left: 18px; }
+.plano-passos li { margin: 6px 0; display: grid; gap: 2px; }
+.plano-passos .colab-selo { justify-self: start; }
+.kanban-decidir { margin: 6px 8px 8px; }
 
 /* Celular UI/UX — moldura mais larga e legível (2026-11-01) */
 .telas-bot.modo-celular {
@@ -3361,4 +3360,68 @@ main.chat > .colab-quadro,
   background: color-mix(in srgb, var(--panel-2, #121722) 70%, transparent);
 }
 .android-ja-conectados { display: flex; flex-direction: column; gap: 8px; }
-.telas-par.empilhado .quadro.sozinho { min-height: min(62vh, 640px); }
+/* sozinho: altura vem do aspect-ratio, sem min-height forçado */
+
+/* Telas visíveis — PC paisagem + celular grande (2026-11-01) */
+.telas-bot.modo-pc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+.telas-bot.modo-pc .telas-fit {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: stretch;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 8px;
+}
+.telas-bot.modo-pc .telas-par {
+  width: 100%;
+  max-width: 100%;
+  height: auto !important;
+}
+.telas-bot.modo-pc .quadro-pc.sozinho {
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 10;
+  height: auto !important;
+  min-height: 0;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px #2a2a2e, 0 12px 28px rgba(0,0,0,.35);
+}
+.telas-bot.modo-celular .quadro-android.sozinho {
+  min-width: min(100%, 280px);
+  max-width: 100%;
+  height: auto !important;
+}
+.android-parear-bloco > summary.android-conectar-sumario {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 4px;
+  font-size: 12.5px;
+  color: var(--text, #e8eaed);
+  user-select: none;
+}
+.android-parear-bloco > summary.android-conectar-sumario::-webkit-details-marker { display: none; }
+.android-parear-bloco .android-conectar-dica {
+  opacity: 0.65;
+  font-size: 11px;
+}
+.android-parear-bloco .android-parear-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border, #2a3344) 80%, transparent);
+}
+.android-parear-bloco.recolhido:not([open]) {
+  padding-bottom: 8px;
+}

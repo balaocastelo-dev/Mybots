@@ -3145,24 +3145,24 @@ main.chat > .colab-quadro,
 
 
 /* --- seletor de amebas v2 --- */
-.ameba-picker { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-width: 100%; }
-.ameba-picker-topo { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.ameba-picker { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; width: 100%; }
+.ameba-picker-topo { display: flex; gap: 14px; align-items: center; min-width: 0; }
 .ameba-picker-acoes { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .ameba-picker-acoes .btn { align-self: flex-start; }
 .ameba-grade {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-  gap: 6px;
-  max-height: 200px;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 12px;
+  max-height: min(42vh, 360px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 2px;
+  padding: 6px 2px;
   min-width: 0;
 }
 .ameba-opcao {
   border: 2px solid transparent;
-  border-radius: 12px;
-  padding: 2px;
+  border-radius: 14px;
+  padding: 4px;
   background: var(--panel-2, #1a1a22);
   cursor: pointer;
   aspect-ratio: 1;
@@ -3179,21 +3179,34 @@ main.chat > .colab-quadro,
   box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: auto;
-  max-height: min(92vh, 720px);
+  max-height: min(90vh, 820px);
 }
-.modal.wide { width: min(96vw, 640px); max-width: calc(100vw - 24px); }
+.modal.wide {
+  width: min(94vw, 820px);
+  max-width: calc(100vw - 24px);
+  max-height: 90vh;
+  overflow-y: auto;
+}
 .modal input, .modal select, .modal textarea { max-width: 100%; box-sizing: border-box; }
 .modal .seg { flex-wrap: wrap; }
 .modal .seg button { flex: 1 1 auto; min-width: 0; }
-@media (max-width: 420px) {
-  .modal { padding: 14px; gap: 8px; border-radius: 14px; }
-  .modal .form .row { flex-direction: column; }
-  .modal .form .row > label,
-  .modal .form .row > .ameba-picker { width: 100%; max-width: 100%; min-width: 0; flex: none; }
-  .ameba-grade { grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); max-height: 160px; }
+@media (max-width: 520px) {
+  .modal-bg { padding: 0; align-items: stretch; }
+  .modal, .modal.wide {
+    width: 100vw;
+    max-width: 100vw;
+    min-height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    padding: 16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .ameba-grade {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    max-height: min(48vh, 320px);
+  }
 }
-@media (max-width: 390px) {
-  .modal { padding: 12px; width: calc(100vw - 16px); max-width: calc(100vw - 16px); }
+@media (max-width: 360px) {
+  .ameba-grade { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
   .ameba-picker-topo { gap: 8px; }
-  .ameba-grade { grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); max-height: 140px; gap: 4px; }
 }

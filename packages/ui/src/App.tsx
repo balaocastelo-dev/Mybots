@@ -296,7 +296,10 @@ export function App() {
           </button>
           <div className="brand">
             <span className="logo-img logo-chefe"><img src={`${UI_BASE}/amebas/v2/ameba-v2-091.png`} alt="MyBots" draggable={false} /></span>
-            <div><b className="brand-desktop only-desktop">MyBots</b><b className="brand-mobile only-mobile">Bots</b></div>
+            <div className="brand-titulo">
+              <b className="brand-desktop only-desktop">MyBots</b>
+              <b className="brand-mobile only-mobile">MyBots</b>
+            </div>
           </div>
           <div className="sidebar-canto">
             <span className="only-desktop"><Tema /></span>
@@ -304,14 +307,15 @@ export function App() {
             <button className={"icon-btn canto" + (buscaAberta ? " on" : "")} type="button" title="Buscar" aria-label="Buscar" onClick={() => setBuscaAberta((v) => !v)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
             </button>
-            <button className="icon-btn canto" type="button" title="Novo" aria-label="Novo" onClick={() => setMais((v) => !v)}>+</button>
-            <button className="icon-btn canto only-mobile" type="button" title="Configurações" aria-label="Configurações"
-              onClick={() => setVerConfig((v) => (v ? null : "geral"))}>⚙</button>
+            <button className="icon-btn canto only-desktop" type="button" title="Novo" aria-label="Novo" onClick={() => setMais((v) => !v)}>+</button>
+            <button className={"icon-btn canto head-overflow-btn" + (mais ? " on" : "")} type="button" title="Mais" aria-label="Mais opções" aria-haspopup="menu" aria-expanded={mais}
+              onClick={() => setMais((v) => !v)}>⋮</button>
             {mais && (
               <div className="mais-menu" role="menu">
-                <button type="button" onClick={() => { setMais(false); setNewBot(true); }}>Novo bot</button>
-                <button type="button" onClick={() => { setMais(false); setNewGerente(true); }}>Novo gerente</button>
-                <button type="button" onClick={() => { setMais(false); setNewGroup(true); }}>Novo grupo</button>
+                <button type="button" role="menuitem" onClick={() => { setMais(false); setNewBot(true); }}>Novo bot</button>
+                <button type="button" role="menuitem" onClick={() => { setMais(false); setNewGerente(true); }}>Novo gerente</button>
+                <button type="button" role="menuitem" onClick={() => { setMais(false); setNewGroup(true); }}>Novo grupo</button>
+                <button type="button" role="menuitem" className="only-mobile" onClick={() => { setMais(false); setVerConfig("geral"); }}>Configurações</button>
               </div>
             )}
           </div>

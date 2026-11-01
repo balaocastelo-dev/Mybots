@@ -21,9 +21,9 @@ export type State = {
   importFile?: { name: string; mime: string; dataBase64: string };
 };
 
-/** No mÃ¡ximo 3 avisos na tela ao mesmo tempo. Vinte e cinco avisos empilhados
- *  tapam a coluna da direita â€” foi o que aconteceu. O mais novo fica; o mais
- *  velho sai. Aviso repetido nÃ£o vira pilha: vira contador no mesmo cartÃ£o. */
+/** No máximo 3 avisos na tela ao mesmo tempo. Vinte e cinco avisos empilhados
+ *  tapam a coluna da direita — foi o que aconteceu. O mais novo fica; o mais
+ *  velho sai. Aviso repetido não vira pilha: vira contador no mesmo cartão. */
 const MAX_AVISOS = 3;
 
 function empilha(
@@ -32,7 +32,7 @@ function empilha(
   botId?: string,
 ): State["toasts"] {
   const igual = toasts.find((t) => t.text === text && t.botId === botId);
-  // o "em" novo reinicia o relÃ³gio dos 3 segundos daquele cartÃ£o
+  // o "em" novo reinicia o relógio dos 3 segundos daquele cartão
   if (igual) return toasts.map((t) => (t === igual ? { ...t, vezes: t.vezes + 1, em: Date.now() } : t));
   return [...toasts, { id: Math.random().toString(36).slice(2), text, botId, vezes: 1, em: Date.now() }].slice(-MAX_AVISOS);
 }
@@ -62,9 +62,9 @@ function reducer(s: State, a: Action): State {
         case "groups": return { ...s, groups: m.groups };
         case "routines": return { ...s, routines: m.routines };
         case "bot.update": return { ...s, bots: upsert(s.bots, m.bot) };
-        // Excluir Ã© acabar com tudo: some o bot, somem as conversas dele, o que estava
-        // escrito nelas, as aprovaÃ§Ãµes e perguntas paradas e os avisos na tela. Antes
-        // ficava tudo isso no estado e a conversa seguia aberta com um bot que nÃ£o existe.
+        // Excluir é acabar com tudo: some o bot, somem as conversas dele, o que estava
+        // escrito nelas, as aprovações e perguntas paradas e os avisos na tela. Antes
+        // ficava tudo isso no estado e a conversa seguia aberta com um bot que não existe.
         case "bot.removed": {
           const doBot = (conv: string) => conv === `dm:${m.botId}` || (conv.startsWith("pair:") && conv.slice(5).split(":").includes(m.botId));
           const messages = { ...s.messages };
@@ -125,14 +125,14 @@ function reducer(s: State, a: Action): State {
 
 function previaDe(m: StoredMessage): string {
   const files = (m.meta?.files as Array<{ name: string }> | undefined) ?? [];
-  const quem = m.sender.kind === "user" ? "VocÃª: " : "";
+  const quem = m.sender.kind === "user" ? "Você: " : "";
   const arquivo = files[0]?.name;
   const texto = m.text.replace(/\s+/g, " ").trim();
-  const miolo = texto || (arquivo ? `ðŸ“Ž ${arquivo}` : "");
+  const miolo = texto || (arquivo ? `📎 ${arquivo}` : "");
   return (quem + miolo).slice(0, 80);
 }
 
-/** A lista acompanha o chat mesmo quando o chefe jÃ¡ saiu dele. */
+/** A lista acompanha o chat mesmo quando o chefe já saiu dele. */
 function comPrevia(bots: BotSummary[], m: StoredMessage): BotSummary[] {
   if (!m.conversationId.startsWith("dm:") || m.meta?.hidden || m.meta?.marcador) return bots;
   const id = m.conversationId.slice(3);

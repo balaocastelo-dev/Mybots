@@ -1,7 +1,7 @@
 import { UI_BASE } from "./api";
-// CrÃ©ditos: mensalidade, franquia, saldo e recarga por Pix.
-// O cliente vÃª mensagens e reais; o custo em tokens aparece sÃ³ para o dono, do lado,
-// porque Ã© ele que precisa enxergar a margem.
+// Créditos: mensalidade, franquia, saldo e recarga por Pix.
+// O cliente vê mensagens e reais; o custo em tokens aparece só para o dono, do lado,
+// porque é ele que precisa enxergar a margem.
 import { useEffect, useState } from "react";
 
 const api = (path: string, init?: RequestInit) =>
@@ -48,7 +48,7 @@ export function TelaCreditos({ empresaId, empresaNome, onClose }: { empresaId: s
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-        <h3>CrÃ©ditos â€” {empresaNome}</h3>
+        <h3>Créditos — {empresaNome}</h3>
 
         <div className={"cred-saldo " + (d.pode.ok ? "ok" : "bloq")}>
           <div><b>{reais(p.saldoCentavos)}</b><small>saldo</small></div>
@@ -57,14 +57,14 @@ export function TelaCreditos({ empresaId, empresaNome, onClose }: { empresaId: s
           <div><b>{reais(p.mensalidadeCentavos)}</b><small>mensalidade</small></div>
         </div>
         {!d.pode.ok && <div className="legal-estado bloq">{(d.pode as any).motivo}</div>}
-        {p.carenciaAte && p.carenciaAte > Date.now() && <div className="muted">CarÃªncia concedida atÃ© {new Date(p.carenciaAte).toLocaleString("pt-BR")}.</div>}
+        {p.carenciaAte && p.carenciaAte > Date.now() && <div className="muted">Carência concedida até {new Date(p.carenciaAte).toLocaleString("pt-BR")}.</div>}
 
         <label className="linha-check" style={{ marginTop: 8 }}>
           <input type="checkbox" checked={!!p.cobranca} onChange={async (e) => {
             const r = await api(`/empresas/${empresaId}/plano`, { method: "POST", body: JSON.stringify({ cobranca: e.target.checked }) });
             if (r.ok) void ler();
           }} />
-          <b>Cobrar desta empresa</b> â€” desligado, os bots trabalham sem trava (Ã© como a sua prÃ³pria empresa deve ficar)
+          <b>Cobrar desta empresa</b> — desligado, os bots trabalham sem trava (é como a sua própria empresa deve ficar)
         </label>
         <label>O plano desta empresa</label>
         <div className="cred-plano">
@@ -72,14 +72,14 @@ export function TelaCreditos({ empresaId, empresaNome, onClose }: { empresaId: s
             onBlur={(e) => void salvarPlano("mensalidadeCentavos", Math.round(Number(e.target.value) * 100))} /></label>
           <label>Franquia (mensagens)<input type="number" defaultValue={p.franquiaMensagens}
             onBlur={(e) => void salvarPlano("franquiaMensagens", Math.round(Number(e.target.value)))} /></label>
-          <label>PreÃ§o por mensagem (R$)<input type="number" step="0.01" defaultValue={p.precoMensagemCentavos / 100}
+          <label>Preço por mensagem (R$)<input type="number" step="0.01" defaultValue={p.precoMensagemCentavos / 100}
             onBlur={(e) => void salvarPlano("precoMensagemCentavos", Math.round(Number(e.target.value) * 100))} /></label>
         </div>
 
         <div className="cred-margem">
-          <b>Ciclo:</b> {d.ciclo.mensagens} mensagens Â· vocÃª cobrou {reais(d.ciclo.cobradoCentavos)} Â· custou {reais(custo)}
-          {margem ? <> Â· margem <b>{margem.toFixed(1)}Ã—</b></> : null}
-          <br /><small className="muted">Cache de prompt lido no ciclo: {d.ciclo.cacheLido.toLocaleString("pt-BR")} tokens â€” Ã© o que derruba o custo.</small>
+          <b>Ciclo:</b> {d.ciclo.mensagens} mensagens · você cobrou {reais(d.ciclo.cobradoCentavos)} · custou {reais(custo)}
+          {margem ? <> · margem <b>{margem.toFixed(1)}×</b></> : null}
+          <br /><small className="muted">Cache de prompt lido no ciclo: {d.ciclo.cacheLido.toLocaleString("pt-BR")} tokens — é o que derruba o custo.</small>
         </div>
 
         {!pix.configurado && (
@@ -107,13 +107,13 @@ export function TelaCreditos({ empresaId, empresaNome, onClose }: { empresaId: s
           <div className="cred-cobranca">
             {cobranca.qr && <img src={cobranca.qr} alt="QR do Pix" />}
             <div>
-              <b>{reais(cobranca.valorCentavos)} Â· recarga {cobranca.id}</b>
+              <b>{reais(cobranca.valorCentavos)} · recarga {cobranca.id}</b>
               <textarea readOnly rows={3} value={cobranca.copiaECola} onFocus={(e) => e.currentTarget.select()} />
               <div className="card-actions">
-                <button className="btn" onClick={() => navigator.clipboard?.writeText(cobranca.copiaECola)}>Copiar cÃ³digo</button>
-                <button className="btn primary" onClick={() => void confirmar(cobranca.id)}>JÃ¡ caiu â€” creditar</button>
+                <button className="btn" onClick={() => navigator.clipboard?.writeText(cobranca.copiaECola)}>Copiar código</button>
+                <button className="btn primary" onClick={() => void confirmar(cobranca.id)}>Já caiu — creditar</button>
               </div>
-              <small className="muted">Confirme sÃ³ quando o Pix aparecer na sua conta. Depois dÃ¡ para ligar um provedor e creditar sozinho.</small>
+              <small className="muted">Confirme só quando o Pix aparecer na sua conta. Depois dá para ligar um provedor e creditar sozinho.</small>
             </div>
           </div>
         )}
@@ -137,7 +137,7 @@ export function TelaCreditos({ empresaId, empresaNome, onClose }: { empresaId: s
         {err && <div className="err">{err}</div>}
         <div className="modal-foot">
           <button className="btn" onClick={async () => { await api(`/empresas/${empresaId}/carencia`, { method: "POST", body: JSON.stringify({ horas: 24 }) }); void ler(); }}>
-            Conceder 24h de carÃªncia
+            Conceder 24h de carência
           </button>
           <button className="btn" onClick={async () => { await api(`/empresas/${empresaId}/ciclo`, { method: "POST", body: "{}" }); void ler(); }}>Fechar ciclo</button>
           <button className="btn" onClick={onClose}>Fechar</button>

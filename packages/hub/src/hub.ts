@@ -1951,10 +1951,11 @@ export class Hub {
 
   // ---------- rotinas ----------
 
-  createRoutine(botId: string, name: string, cron: string, prompt: string): Routine | { error: string } {
+  createRoutine(botId: string, name: string, cron: string, prompt: string, opts?: { enabled?: boolean }): Routine | { error: string } {
     const err = validateCron(cron);
     if (err) return { error: `cron inválido (${cron}): ${err}` };
-    const r: Routine = { id: newId("r"), botId, name: name.trim() || prompt.slice(0, 40), cron, prompt, enabled: true, nextRun: nextRunOf(cron), createdAt: Date.now() };
+    const enabled = opts?.enabled !== false;
+    const r: Routine = { id: newId("r"), botId, name: name.trim() || prompt.slice(0, 40), cron, prompt, enabled, nextRun: enabled ? nextRunOf(cron) : undefined, createdAt: Date.now() };
     this.db.insertRoutine(r);
     this.db.audit(botId, "routine.created", { id: r.id, cron, name: r.name });
     this.broadcastRoutines();
@@ -2040,7 +2041,9 @@ export class Hub {
     }
     const sender: Sender = { kind: "system", id: `routine:${r.id}`, name: `Rotina: ${r.name}` };
     this.db.audit(r.botId, "routine.fired", { id: r.id, how });
-    this.sendUserMessage(dmConversation(r.botId), `[Rotina "${r.name}" (${how})]\n${r.prompt}`, undefined, sender);
+    const texto = `[Rotina "${r.name}" (${how})]\n${r.prompt}`;
+    this.broadcastUi({ type: "notify", botId: r.botId, text: `Rotina "${r.name}" disparou (${how})` });
+    this.sendUserMessage(dmConversation(r.botId), texto, undefined, sender);
   }
 
   /**

@@ -1465,9 +1465,9 @@ export async function startServer(hub: Hub) {
 
   app.get("/api/routines", async (req) => hub.db.listRoutines((req.query as any).bot));
   app.post("/api/routines", async (req, reply) => {
-    const b = req.body as { botId?: string; name?: string; cron?: string; prompt?: string };
+    const b = req.body as { botId?: string; name?: string; cron?: string; prompt?: string; enabled?: boolean; paused?: boolean };
     if (!b?.botId || !b?.cron || !b?.prompt) return reply.code(400).send({ error: "botId, cron e prompt são obrigatórios" });
-    const r = hub.createRoutine(b.botId, b.name ?? "", b.cron, b.prompt);
+    const r = hub.createRoutine(b.botId, b.name ?? "", b.cron, b.prompt, { enabled: b.enabled !== false && b.paused !== true });
     return "error" in r ? reply.code(400).send(r) : r;
   });
   app.patch("/api/routines/:id", async (req, reply) => {

@@ -344,7 +344,7 @@ export function App() {
         </div>
         {(buscaAberta || filter) && <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />}
         <ul className="bots">
-          <li className="section secao-ativos" data-colab="ativos">Ativos</li>
+          <li className="section secao-ativos" data-colab="ativos">Bots ativos</li>
           {!ativos.length && <li className="empty ativos-vazio">Ninguém trabalhando agora.</li>}
           {ativos.map((b) => {
             const ajuda = pacote?.ajudando[b.id];
@@ -362,6 +362,8 @@ export function App() {
               </li>
             );
           })}
+          <li className="separador-lista" aria-hidden="true" />
+          <li className="section secao-seus-bots">Seus bots</li>
           {listaPronta.fixados.length > 0 && (
             <li className="grade-wrap">
               <ul className="grade-fixados">

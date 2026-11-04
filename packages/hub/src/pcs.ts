@@ -442,6 +442,27 @@ async function acordarMesmo(botId: string, agora: number): Promise<EstadoPc | nu
   return { ...atual, estado: "ligada", telaUrl: `http://127.0.0.1:${reg.portaTela}/` };
 }
 
+/**
+ * Bot excluido: o PC dele vai junto. Remove o container (docker rm -f -v) e tira o
+ * registro do pcs.json, para ele nunca mais subir com o Windows nem com o Hub.
+ * A pasta do volume (arquivos que o bot criou) fica no disco.
+ */
+export async function removerPc(botId: string): Promise<{ removido: boolean; container?: string; erro?: string }> {
+  const reg = lerRegistro(botId);
+  if (!reg) return { removido: false };
+  let erro: string | undefined;
+  if (/^mybots-bot-[a-zA-Z0-9_.-]+$/.test(reg.container)) {
+    const r = await docker(["rm", "-f", "-v", reg.container], 60000);
+    if (!r.ok && !/No such container/i.test(r.saida)) erro = "docker rm falhou (container pode nao existir)";
+  }
+  const mapa = lerMapa();
+  delete mapa[botId];
+  gravarMapa(mapa);
+  ultimoErro.delete(botId);
+  void avisarAndroid("desligar", botId);
+  return { removido: true, container: reg.container, erro };
+}
+
 /** Para o container. O volume e o registro ficam. */
 export async function pararPc(botId: string): Promise<EstadoPc | null> {
   const atual = await estadoDoPc(botId);

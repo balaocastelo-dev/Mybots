@@ -3425,3 +3425,13 @@ main.chat > .colab-quadro,
 .android-parear-bloco.recolhido:not([open]) {
   padding-bottom: 8px;
 }
+
+
+/* ---- Arquivos do MyBots + puxador da lista de bots ---- */
+.arquivos-modal { width: min(1100px, 96vw); max-height: 90vh; overflow: auto; }
+.trab-caminho { opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.sidebar-pega { width: 12px !important; right: -6px !important; }
+.sidebar-pega::after { content: ""; position: absolute; left: 5px; top: 50%; height: 40px; margin-top: -20px; width: 2px; border-radius: 2px; background: var(--line); }
+.sidebar-pega:hover::after, .sidebar-pega:active::after, .sidebar-pega:focus-visible::after { background: var(--accent); }
+body.puxando-sidebar { cursor: col-resize !important; user-select: none !important; }
+body.puxando-sidebar * { user-select: none !important; }

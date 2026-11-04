@@ -509,10 +509,8 @@ export class Db {
         this.db.prepare(`DELETE FROM messages WHERE conversation_id=?`).run(c);
         this.db.prepare(`DELETE FROM reads WHERE conversation_id=?`).run(c);
       }
-      if (purge) {
-        this.db.prepare(`DELETE FROM memory WHERE bot_id=?`).run(id);
-        this.db.prepare(`DELETE FROM files WHERE bot_id=?`).run(id);
-      }
+      // Memoria e arquivos que o bot criou ficam no sistema mesmo com purge (pedido do dono).
+      void purge;
       // sai dos grupos de que participava
       for (const g of this.listGroups()) {
         if (g.members.includes(id)) {

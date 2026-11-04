@@ -16,7 +16,7 @@ import { Avatar } from "./avatar";
 
 export type Trabalho = {
   id: string; nome: string; mime: string; tamanho: number; botId: string;
-  quando: number; tipo: string; url: string;
+  quando: number; tipo: string; url: string; origem?: string; caminho?: string;
 };
 
 const TIPOS: Array<{ id: string; nome: string; icone: string }> = [
@@ -50,7 +50,9 @@ function quandoLegivel(ts: number) {
   return mesmoDia ? `hoje ${hora}` : `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ${hora}`;
 }
 
-export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, filtroBotPadrao = false, onAbrirBot }: {
+export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, filtroBotPadrao = false, onAbrirBot, endpoint = "/api/trabalhos", titulo = "Trabalho" }: {
+  endpoint?: string;
+  titulo?: string;
   bots: BotSummary[];
   onClose?: () => void;
   botInicial?: string;
@@ -73,16 +75,17 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, fi
   const [bot, setBot] = useState(() => (filtroBotPadrao && botInicial ? botInicial : ""));
   const [busca, setBusca] = useState("");
   const [recado, setRecado] = useState("");
+  const [botIds, setBotIds] = useState<string[]>([]);
 
   const carregar = async () => {
     const p = new URLSearchParams();
     if (tipo) p.set("tipo", tipo);
     if (bot) p.set("bot", bot);
     if (busca.trim()) p.set("q", busca.trim());
-    const r = await fetch(`${UI_BASE}/api/trabalhos?` + p.toString());
+    const r = await fetch(`${UI_BASE}${endpoint}?` + p.toString(), { credentials: "include" });
     if (!r.ok) { setItens([]); return; }
     const d = await r.json();
-    setItens(d.itens); setContagem(d.contagem ?? {}); setTotal(d.total ?? 0);
+    setItens(d.itens); setContagem(d.contagem ?? {}); setTotal(d.total ?? 0); if (Array.isArray(d.botIds)) setBotIds(d.botIds);
   };
   useEffect(() => {
     if (filtroBotPadrao) setBot(soDesteBot ? botInicial : "");
@@ -112,7 +115,7 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, fi
     <div className={"trabalhos" + (embutido ? " embutido" : "")}>
       <header className="trab-head">
         <div>
-          <h2>📂 Trabalho</h2>
+          <h2>📂 {titulo}</h2>
           <small>{total} {total === 1 ? "arquivo" : "arquivos"}{soDesteBot && botInicial ? " deste bot" : " de todos os bots"}</small>
         </div>
         <div className="trab-acoes">
@@ -149,6 +152,7 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, fi
         <select value={bot} onChange={(e) => setBot(e.target.value)} className="trab-bot">
           <option value="">Qualquer bot</option>
           {bots.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          {botIds.filter((id) => !bots.some((b) => b.id === id)).map((id) => <option key={id} value={id}>{id === "user" ? "você" : `${id} (excluído)`}</option>)}
         </select>
         <input className="trab-busca" placeholder="Buscar pelo nome…" aria-label="Buscar trabalho pelo nome" value={busca} onChange={(e) => setBusca(e.target.value)} />
       </div>
@@ -173,6 +177,7 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, fi
             </a>
             <figcaption>
               <b title={f.nome}>{f.nome}</b>
+              {f.origem === "workspace" && f.caminho && f.caminho !== f.nome && <small className="trab-caminho" title={f.caminho}>{f.caminho}</small>}
               <small>{quandoLegivel(f.quando)} · {tamanhoLegivel(f.tamanho)}</small>
               <div className="trab-origem">
                 {bots.find((b) => b.id === f.botId) ? <Avatar bot={bots.find((b) => b.id === f.botId)!} size={18} /> : <span className="trab-vazio-icone" aria-hidden style={{ fontSize: 18 }}>📎</span>}
@@ -180,7 +185,7 @@ export function Trabalhos({ bots, onClose, botInicial = "", embutido = false, fi
                 {onAbrirBot && f.botId && f.botId !== "user" && <button type="button" className="link" onClick={() => onAbrirBot(f.botId)}>Ver conversa</button>}
               </div>
               <div className="trab-botoes">
-                <a className="btn fraco" href={f.url} download={f.nome}>Baixar</a>
+                <a className="btn fraco" href={f.origem === "workspace" ? f.url + "?baixar=1" : f.url} download={f.nome}>Baixar</a>
                 <a className="btn fraco" href={f.url} target="_blank" rel="noopener">Abrir</a>
                 <button className="btn fraco" onClick={() => void navigator.clipboard?.writeText(location.origin + f.url)}>Copiar link</button>
               </div>

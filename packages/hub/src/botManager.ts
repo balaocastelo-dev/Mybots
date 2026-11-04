@@ -9,7 +9,7 @@ import { config } from "./config.js";
 import { motivoDaQueda, recadoDaQueda } from "./diagnostico.js";
 import type { Hub } from "./hub.js";
 import { estadoDaChave } from "./chaves.js";
-import { pararPc, registrarPc } from "./pcs.js";
+import { pararPc, registrarPc, removerPc } from "./pcs.js";
 
 export type ManagedBotDef = {
   id: string;
@@ -212,12 +212,16 @@ export class BotManager {
     // "olá" dele é recusado no Hub e o bot não reaparece no painel.
     this.hub.db.marcarExcluido(id, d?.name);
     const r = await this.stop(id);
-    void pararPc(id).catch(() => { /* sem PC registrado, ou o Docker nem está no ar */ });
+    void removerPc(id).then((pc) => { if (pc.removido) this.hub.db.audit(id, "bot.pc.removido", { container: pc.container, erro: pc.erro }); }).catch(() => { /* sem PC registrado, ou o Docker nem está no ar */ });
     this.hub.db.deleteManaged(id);
     this.hub.db.audit(id, "bot.removed", { purge, morreu: r.morreu, pids: r.pids });
     this.hub.removeBot(id, purge); // tira da lista do painel, senão ele continua aparecendo
     const pasta = path.join(this.botsDir, id);
-    if (purge) fs.rmSync(pasta, { recursive: true, force: true });
+    // Mesmo com purge, o que o bot criou (workspace) fica no sistema: so a configuracao sai.
+    if (purge && fs.existsSync(pasta)) {
+      for (const nome of fs.readdirSync(pasta)) if (nome !== "workspace") fs.rmSync(path.join(pasta, nome), { recursive: true, force: true });
+      fs.writeFileSync(path.join(pasta, ".removido"), new Date().toISOString() + "\n");
+    }
     // Sem purgar, a pasta fica (o histórico é dele), mas marcada: senão o adoptExisting
     // adota a pasta no próximo restart e o bot excluído volta sozinho.
     else if (fs.existsSync(pasta)) fs.writeFileSync(path.join(pasta, ".removido"), new Date().toISOString() + "\n");

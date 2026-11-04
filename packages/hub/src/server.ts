@@ -1642,6 +1642,92 @@ export async function startServer(hub: Hub) {
     return "outro";
   }
 
+  // --- Arquivos: tudo que os bots criaram (banco + workspace de cada bot, inclusive excluidos) ---
+  const MAX_WS = 3000;
+  const PULAR = new Set(["node_modules", ".git", ".cache", "__pycache__", ".venv", ".next", "dist"]);
+  const SEGREDO = /^\.env|\.(sqlite|sqlite3|db|bak|key|pem)$|cofre|secret|token/i;
+  const botIdOk = (id: string) => /^[a-zA-Z0-9_.-]{1,80}$/.test(id);
+  const mimeDaExt: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", m4a: "audio/mp4",
+    pdf: "application/pdf", html: "text/html", htm: "text/html", txt: "text/plain", md: "text/markdown", csv: "text/csv", json: "application/json",
+  };
+  /** Resolve <bot>/workspace/<rel> sem deixar sair da pasta (path traversal e symlink). */
+  function caminhoDoWorkspace(botId: string, rel: string): string | null {
+    if (!botIdOk(botId)) return null;
+    const base = path.resolve(manager.botsDir, botId, "workspace");
+    const alvo = path.resolve(base, rel);
+    if (alvo !== base && !alvo.startsWith(base + path.sep)) return null;
+    try {
+      const real = fs.realpathSync(alvo), realBase = fs.realpathSync(base);
+      if (!real.startsWith(realBase + path.sep)) return null;
+      if (rel.split(/[\\/]/).some((p) => SEGREDO.test(p))) return null;
+      return fs.statSync(real).isFile() ? real : null;
+    } catch { return null; }
+  }
+  function listarWorkspaces() {
+    const out: Array<{ id: string; nome: string; mime: string; tamanho: number; botId: string; quando: number; tipo: string; url: string; origem: string; caminho: string }> = [];
+    let dirs: string[] = [];
+    try { dirs = fs.readdirSync(manager.botsDir).filter(botIdOk); } catch { return out; }
+    for (const botId of dirs) {
+      const base = path.join(manager.botsDir, botId, "workspace");
+      const pilha: Array<[string, number]> = [[base, 0]];
+      while (pilha.length && out.length < MAX_WS) {
+        const [dir, nivel] = pilha.pop()!;
+        let ents: fs.Dirent[] = [];
+        try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+        for (const e of ents) {
+          if (e.isSymbolicLink() || SEGREDO.test(e.name)) continue;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) { if (!PULAR.has(e.name) && nivel < 6) pilha.push([full, nivel + 1]); continue; }
+          if (!e.isFile()) continue;
+          let st: fs.Stats; try { st = fs.statSync(full); } catch { continue; }
+          const rel = path.relative(base, full).split(path.sep).join("/");
+          const ext = (e.name.split(".").pop() ?? "").toLowerCase();
+          const mime = mimeDaExt[ext] ?? "application/octet-stream";
+          out.push({
+            id: "ws:" + botId + ":" + rel, nome: e.name, mime, tamanho: st.size, botId, quando: st.mtimeMs,
+            tipo: tipoDoArquivo(e.name, mime), origem: "workspace", caminho: rel,
+            url: `/api/arquivos/ws/${encodeURIComponent(botId)}/${rel.split("/").map(encodeURIComponent).join("/")}`,
+          });
+          if (out.length >= MAX_WS) break;
+        }
+      }
+    }
+    return out;
+  }
+  /** Lista arquivos de todos os bots (mesmo excluidos). Online exige login (hook de /api). */
+  app.get("/api/arquivos", async (req) => {
+    const q = String((req.query as any).q ?? "").trim().toLowerCase();
+    const tipo = String((req.query as any).tipo ?? "").trim();
+    const bot = String((req.query as any).bot ?? "").trim();
+    const doBanco = hub.db.listFiles(5000).filter((f) => fs.existsSync(f.path)).map((f) => ({
+      id: f.id, nome: f.name, mime: f.mime, tamanho: f.size, botId: f.bot_id, quando: f.created_at,
+      tipo: tipoDoArquivo(f.name, f.mime), url: `/api/files/${f.id}/${encodeURIComponent(f.name)}`, origem: "chat", caminho: f.name,
+    }));
+    const todos = [...doBanco, ...listarWorkspaces()].sort((a, b) => b.quando - a.quando);
+    const contagem: Record<string, number> = {};
+    for (const f of todos) contagem[f.tipo] = (contagem[f.tipo] ?? 0) + 1;
+    const botIds = [...new Set(todos.map((f) => f.botId))].sort();
+    const itens = todos.filter((f) => (!tipo || f.tipo === tipo) && (!bot || f.botId === bot) && (!q || f.nome.toLowerCase().includes(q) || f.caminho.toLowerCase().includes(q))).slice(0, 1500);
+    return { itens, contagem, total: todos.length, botIds };
+  });
+  app.get("/api/arquivos/ws/:bot/*", async (req, reply) => {
+    const botId = String((req.params as any).bot ?? "");
+    const rel = String((req.params as any)["*"] ?? "");
+    const real = caminhoDoWorkspace(botId, rel);
+    if (!real) return reply.code(404).send({ error: "arquivo nao encontrado" });
+    const ext = (real.split(".").pop() ?? "").toLowerCase();
+    const mime = mimeDaExt[ext] ?? "application/octet-stream";
+    const baixar = (req.query as any).baixar === "1";
+    // HTML de bot abre como texto puro: sem rodar script dentro do painel.
+    reply.header("content-type", mime === "text/html" ? "text/plain; charset=utf-8" : mime);
+    reply.header("x-content-type-options", "nosniff");
+    reply.header("content-disposition", `${baixar ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(path.basename(real))}`);
+    reply.header("content-length", String(fs.statSync(real).size));
+    return reply.send(fs.createReadStream(real));
+  });
+
   /** Lista o que os bots produziram. Filtra por tipo, por bot e por pedaço do nome. */
   app.get("/api/trabalhos", async (req) => {
     const q = String((req.query as any).q ?? "").trim().toLowerCase();

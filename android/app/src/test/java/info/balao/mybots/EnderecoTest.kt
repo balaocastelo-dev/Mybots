@@ -7,6 +7,14 @@ import org.junit.Test
 
 class EnderecoTest {
     @Test
+    fun marcaOAplicativoNoAgente() {
+        assertEquals("MyBotsApp", Endereco.agente(null))
+        assertEquals("MyBotsApp", Endereco.agente("  "))
+        assertEquals("Chrome MyBotsApp", Endereco.agente("Chrome"))
+        assertEquals("Chrome MyBotsApp", Endereco.agente("Chrome MyBotsApp"))
+    }
+
+    @Test
     fun abreOPainelPublico() {
         assertEquals("https://www.balao.info/mybots", Endereco.INICIO)
     }

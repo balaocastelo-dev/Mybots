@@ -159,6 +159,7 @@ class MainActivity : AppCompatActivity() {
             displayZoomControls = false
             cacheMode = WebSettings.LOAD_DEFAULT
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            userAgentString = Endereco.agente(userAgentString)
         }
 
         vista.webViewClient = cliente

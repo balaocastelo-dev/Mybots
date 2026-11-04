@@ -42,6 +42,7 @@ import { spawn } from "node:child_process";
 import { ehHumano, FilaDeTarefas } from "./colab/fila.js";
 import { ServicoPlanos } from "./planos.js";
 import { notificarParada, registrarAoParar } from "./colab/parar.js";
+import { getUsuariosRepo } from "./authOnline.js";
 
 type NodeConn = {
   ws: WebSocket;
@@ -510,13 +511,11 @@ export class Hub {
         continue;
       }
       if (botId && typeof botId === "string" && botId !== "system" && botId !== "user") {
-        const { getUsuariosRepo } = require("./authOnline.js") as typeof import("./authOnline.js");
         const owner = getUsuariosRepo()?.ownerUserIdDoBot(botId) || null;
         if (sess.role !== "owner" && owner && owner !== sess.uid) continue;
       }
       if ((msg as any).type === "bot.update" && (msg as any).bot) {
         const id = (msg as any).bot.id;
-        const { getUsuariosRepo } = require("./authOnline.js") as typeof import("./authOnline.js");
         const owner = getUsuariosRepo()?.ownerUserIdDoBot(id) || (msg as any).bot.ownerUserId || null;
         if (sess.role !== "owner" && owner && owner !== sess.uid) continue;
       }
@@ -854,7 +853,6 @@ export class Hub {
   }
 
   summaries(): BotSummary[] {
-    const { getUsuariosRepo } = require("./authOnline.js") as typeof import("./authOnline.js");
     const repo = getUsuariosRepo();
     return this.db.listBots().map((b) => ({
       ...this.summary(b),
@@ -1912,7 +1910,6 @@ export class Hub {
     const all = this.summaries();
     if (!user) return all;
     // lazy require evita ciclo no load
-    const { getUsuariosRepo } = require("./authOnline.js") as typeof import("./authOnline.js");
     const repo = getUsuariosRepo();
     return all.filter((b) => {
       const owner = (b as any).ownerUserId || repo?.ownerUserIdDoBot(b.id) || null;

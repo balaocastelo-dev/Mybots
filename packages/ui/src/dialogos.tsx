@@ -466,6 +466,82 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
   );
 }
 
+type PreviaLink = {
+  nome: string;
+  descricao: string;
+  avatar?: string | null;
+  cor?: string | null;
+  cores?: { accent?: string | null; coatLight?: string | null; coatDark?: string | null };
+  receitaConhecida?: string | null;
+};
+
+export function ReceberPorLinkDialog({ urlInicial = "", onClose, onCreated }: { urlInicial?: string; onClose: () => void; onCreated: (id: string) => void }) {
+  const [url, setUrl] = useState(urlInicial);
+  const [previa, setPrevia] = useState<PreviaLink | null>(null);
+  const [criado, setCriado] = useState<{ id: string; nome: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const ver = async (alvo?: string) => {
+    const link = (alvo ?? url).trim();
+    setBusy(true); setErr(""); setPrevia(null); setCriado(null);
+    const r = await api("/bots/importar-link", { method: "POST", body: JSON.stringify({ url: link, modo: "preview" }) });
+    setBusy(false);
+    const j = await r.json().catch(() => ({} as any));
+    if (!r.ok) { setErr(j.error ?? "não consegui ler o link"); return; }
+    setPrevia(j);
+  };
+  useEffect(() => { if (urlInicial.trim()) void ver(urlInicial); }, []);
+  const confirmar = async () => {
+    if (!previa) return;
+    setBusy(true); setErr("");
+    const r = await api("/bots/importar-link", { method: "POST", body: JSON.stringify({ url: url.trim(), modo: "confirmar" }) });
+    setBusy(false);
+    const j = await r.json().catch(() => ({} as any));
+    if (!r.ok) { setErr(j.error ?? "não consegui criar o bot"); return; }
+    setCriado({ id: j.id, nome: j.nome || previa.nome });
+  };
+  const anel = previa?.cor || previa?.cores?.accent || "#888";
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" data-receber-link="dialogo" onClick={(e) => e.stopPropagation()}>
+        <h3>Receber por link</h3>
+        <p className="hint" style={{ textAlign: "left" }}>Cole um link https://x.ai/bot/… Eu leio o nome, a descrição e a foto antes de criar.</p>
+        <input placeholder="https://x.ai/bot/…" value={url} onChange={(e) => setUrl(e.target.value)} autoFocus disabled={!!criado} />
+        {!criado && (
+          <div className="card-actions">
+            <button className="btn" type="button" disabled={!url.trim() || busy} onClick={() => void ver()}>{busy && !previa ? "Lendo…" : "Ver prévia"}</button>
+          </div>
+        )}
+        {previa && (
+          <div className="previa-link" data-receber-link="previa">
+            {previa.avatar
+              ? <img src={previa.avatar} alt="" style={{ boxShadow: `0 0 0 3px ${anel}` }} />
+              : <span className="previa-sem-foto" style={{ boxShadow: `0 0 0 3px ${anel}` }}>{previa.nome.slice(0, 1)}</span>}
+            <div>
+              <b>{previa.nome}</b>
+              <p>{previa.descricao || "Sem descrição nesta página."}</p>
+              {previa.receitaConhecida && <p className="previa-conhecida">O MyBots já conhece este bot. Vou usar o prompt completo dele.</p>}
+              <span className="previa-cores" aria-hidden>
+                {previa.cores?.coatLight && <i style={{ background: previa.cores.coatLight }} title="casaco claro" />}
+                {previa.cor && <i style={{ background: previa.cor }} title="acento" />}
+                {previa.cores?.coatDark && <i style={{ background: previa.cores.coatDark }} title="casaco escuro" />}
+              </span>
+            </div>
+          </div>
+        )}
+        {criado && <div className="previa-pronta" data-receber-link="pronto">Bot recebido. <b>{criado.nome}</b> entrou na sua equipe.</div>}
+        {err && <div className="err">{err}</div>}
+        <div className="card-actions">
+          <button className="btn" type="button" onClick={onClose}>{criado ? "Fechar" : "Cancelar"}</button>
+          {criado
+            ? <button className="btn primary" type="button" data-receber-link="abrir-conversa" onClick={() => onCreated(criado.id)}>Abrir conversa</button>
+            : <button className="btn primary" type="button" data-receber-link="confirmar" disabled={!previa || busy} onClick={() => void confirmar()}>{busy ? "Criando…" : "Confirmar"}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BotSettingsPanel({ bot, onClose }: { bot: BotSummary; onClose: () => void }) {
   const { providers, voices } = usePresets();
   const [def, setDef] = useState<any | null>(null);

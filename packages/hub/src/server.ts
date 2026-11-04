@@ -31,6 +31,7 @@ import { registrarAlmas } from "./almas.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA, soulBlock } from "./botManager.js";
 import { listarEspecialidades, detectarEspecialidade, porId, montarPersonaComEspecialidade, idPadrao, categoriasDoCatalogo, resumoParaUi, carregarSkillsDaEspecialidade, recarregarEspecialidades } from "./especialidades.js";
 import { carregarReceita, idsEquipeInicial, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, reaplicarReceitaEmBot, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
+import { registrarRotaImportarLink } from "./importarLink.js";
 import { dmConversation, newId } from "@mybots/shared";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
 import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
@@ -53,6 +54,7 @@ import { config as hubConfig } from "./config.js";
 
 export async function startServer(hub: Hub) {
   instalarRedacao();
+  hub.db.ensureManagedTable();
   const usuarios = new UsuariosRepo(hub.db.db);
   const donosPendentes = new Map<string, string>();
   usuarios.ensure();
@@ -1358,6 +1360,74 @@ export async function startServer(hub: Hub) {
     }
     return bot;
   });
+  registrarRotaImportarLink(app, {
+    authOnlineAtivo,
+    usuarioDoReq: (req) => usuarioDoReq(req),
+    nodeAuthorized: (req) => nodeAuthorized(req),
+    existe: (id) => !!manager.get(id),
+    empresaDe: (req) => {
+      const criador = nodeAuthorized(req);
+      const empresas = hub.db.listEmpresas();
+      let empresa = (criador ? hub.empresaDe(criador).id : null) || empresas[0]?.id || null;
+      if (empresa && !hub.db.getEmpresa(empresa)) empresa = empresas[0]?.id ?? null;
+      return empresa;
+    },
+    criar: async (plano) => {
+      const receita = plano.receitaId ? carregarReceita(plano.receitaId) : null;
+      const r = manager.create({
+        id: plano.id,
+        name: plano.nome,
+        role: plano.role,
+        avatar: plano.avatar || undefined,
+        color: plano.cor || undefined,
+        cores: {
+          ...(plano.cores.accent ? { accent: plano.cores.accent } : {}),
+          ...(plano.cores.coatLight ? { coatLight: plano.cores.coatLight } : {}),
+          ...(plano.cores.coatDark ? { coatDark: plano.cores.coatDark } : {}),
+        },
+        persona: plano.persona,
+        ownerUserId: plano.ownerUserId,
+        controlMode: "supervisionado",
+        engine: PADRAO_DA_CASA.engine,
+        provider: { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model },
+        autoStart: true,
+      });
+      if ("error" in r) return r;
+      if (plano.ownerUserId) {
+        usuarios.setOwnerUserIdManaged(r.id, plano.ownerUserId);
+        try { hub.db.db.prepare(`UPDATE bots SET owner_user_id=? WHERE id=?`).run(plano.ownerUserId, r.id); } catch { /* coluna via ensure */ }
+      }
+      hub.db.setEmpresaDoBot(r.id, r.name, plano.empresaId, false);
+      if (receita) {
+        try {
+          const applied = aplicarReceitaNoNascimento(hub.db, {
+            botId: r.id, botName: r.name, empresaId: plano.empresaId, receita,
+          });
+          hub.db.audit(r.id, "receita.importar-link", applied);
+          try { hub.storeMessage(dmConversation(r.id), hub.botSender(r.id), saudacaoDeReceita(receita, r.name)); } catch { /* conversa ainda vazia */ }
+        } catch (e) { console.warn("[importar-link] receita", (e as Error).message); }
+      }
+      try { aplicarCapacidadesBase(hub.db); } catch (e) { console.warn("[capacidades-base]", (e as Error).message); }
+      hub.db.upsertBot(
+        { id: r.id, name: r.name, role: r.role, avatar: r.avatar, color: r.color, voice: r.voice },
+        { engine: r.engine, provider: r.provider?.kind, model: r.provider?.model },
+      );
+      if (plano.ownerUserId) {
+        try { hub.db.db.prepare(`UPDATE bots SET owner_user_id=? WHERE id=?`).run(plano.ownerUserId, r.id); } catch { /* coluna via ensure */ }
+      }
+      try {
+        registrarPc({ botId: r.id, empresaId: plano.empresaId, nome: r.name });
+        marcarSempreLigado(r.id, true);
+        definirAcessoPc(r.id, true);
+        void ligarPc(r.id).catch(() => {});
+      } catch (e) { console.error(`[pc] importar-link ${r.id}: ${(e as Error).message}`); }
+      hub.broadcastKnowledge();
+      hub.botUpdate(r.id);
+      hub.db.audit(r.id, "bot.importar-link", { url: plano.url, receita: plano.receitaId, owner: plano.ownerUserId ?? null });
+      return r;
+    },
+  });
+
     app.post("/api/managed", async (req, reply) => {
     const b = req.body as any;
     if (!b?.name?.trim()) return reply.code(400).send({ error: "name é obrigatório" });

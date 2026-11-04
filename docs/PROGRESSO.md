@@ -1,5 +1,14 @@
 # Progresso
 
+## 2026-11-04 — Receber bot por link
+
+- `POST /api/bots/importar-link` com `modo: preview` (só lê) e `modo: confirmar` (cria o managed bot do usuário logado). Só aceita `https://x.ai/bot/<id>`, busca com timeout de 8s e teto de 1 MB, e não segue redirect para outro domínio.
+- Lê `og:title` (tira o sufixo “by …”, ex. “Director by Balão” → Director), `og:description`, `og:image` e as cores `--share-accent`, `--share-coat-light`, `--share-coat-dark`. A descrição vira a base do prompt; se o nome for Director, PROGRAMADOR ou SEO & AEO Desk, entra a receita completa da equipe inicial.
+- Na UI, “Receber por link” fica ao lado de “Novo bot”, com prévia e Confirmar. Colar `https://x.ai/bot/…` no chat abre a mesma prévia.
+- Arquivos: `packages/hub/src/importarLink.ts`, `server.ts`, `botManager.ts`, `packages/ui/src/dialogos.tsx`, `App.tsx`, `conversa.tsx`, `avatar.tsx`, `linkBot.ts`, `styles.css`, `tests/importarLink.test.ts`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- A coluna `owner_user_id` passa a ser criada depois da tabela `managed_bots`, senão um banco novo quebrava a lista (`no such column`).
+- Teste: `node --import tsx --test tests/importarLink.test.ts` passou (parser, domínio, redirect, tenant). Exemplo real `https://x.ai/bot/jSCXcQoyWa04Fgh3uTK-X` lê Director, laranja `#FF9800` e a receita `director`.
 ## 2026-11-01 — Casca Android (WebView) do painel público
 
 - App nativo em `android/`, pacote `info.balao.mybots`, minSdk 24. Abre `https://www.balao.info/mybots` com JavaScript, DOM storage, cookie de sessão (aceita cookie e cookie de terceiro, flush ao pausar), voltar no histórico, puxar no topo ou ícone para recarregar, tela “Sem conexão” com “Tentar novamente”, seletor de arquivo, download e link externo no navegador.

@@ -213,10 +213,32 @@ export const PARADO = ["👀", "🧠", "📋", "☕"];
 
 export type AvatarAnim = "dormindo" | "nascer" | "chave-nova";
 
+/** Cor vinda do bot (link importado) ou, sem isso, a cor estável do id. */
+export function corDoBot(bot: { id: string; color?: string }): string {
+  const c = String(bot.color ?? "").trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(c)) return c;
+  if (/^(rgb|hsl)a?\([\d.%\s,/+()-]+\)$/i.test(c) && !/url|expression|script/i.test(c)) return c;
+  return colorFor(bot.id);
+}
+
+/** Foto https (og:image). Qualquer outro avatar continua na ameba. */
+export function avatarRemoto(avatar?: string | null): string | null {
+  if (!avatar) return null;
+  try {
+    const u = new URL(avatar);
+    if (u.protocol !== "https:") return null;
+    if (u.username || u.password) return null;
+    return u.toString();
+  } catch { return null; }
+}
+
 export function Avatar({ bot, size = 88, falando = false, cutucadas = 0, forceAnim }: { bot: BotSummary; size?: number; falando?: boolean; cutucadas?: number; forceAnim?: AvatarAnim | null }) {
-  // So amebas v2 (PNG). Legado emoji/SVG/arte cai no sorteio estavel por id.
-  const url = amebaV2Url(bot.id, bot.avatar) || sortearAmebaV2(bot.id);
-  const style = { width: size, height: size, fontSize: size * 0.45, background: "transparent", position: "relative" as const };
+  // Foto https do link importado tem prioridade. Sem ela, ameba v2.
+  const remoto = avatarRemoto(bot.avatar);
+  const [remotoQuebrou, setRemotoQuebrou] = useState(false);
+  const url = (!remotoQuebrou && remoto) ? remoto : (amebaV2Url(bot.id, bot.avatar) || sortearAmebaV2(bot.id));
+  const anel = bot.color ? corDoBot(bot) : "";
+  const style = { width: size, height: size, fontSize: size * 0.45, background: anel || "transparent", position: "relative" as const, boxShadow: anel ? `0 0 0 2px ${anel}` : undefined };
   const bravo = cutucadas >= 5;
   const semToken = !!(bot as any).semToken
     || /429|quota|falha no modelo|rate.?limit|sem.?token|chave.*(esgot|recus|inv[aá]lid)|token.*(esgot|expir)/i.test(String(bot.status ?? ""));
@@ -242,7 +264,7 @@ export function Avatar({ bot, size = 88, falando = false, cutucadas = 0, forceAn
     <div className={"avatar" + estado} style={style} data-ameba={bot.id}>
       {animFinal === "nascer" && (<><span className="ovo-casca" aria-hidden /><span className="ovo-casca-baixo" aria-hidden /></>)}
       {animFinal === "chave-nova" && (<><i className="brilho" /><i className="brilho" /><i className="brilho" /><i className="brilho" /><i className="brilho" /></>)}
-      <img src={url} alt="" />
+      <img src={url} alt="" onError={() => { if (remoto) setRemotoQuebrou(true); }} />
       {((bot as any).gerente || (bot as any).manages?.length) ? <span className="coroa-cabeca" aria-hidden>👑</span> : null}
     </div>
   );

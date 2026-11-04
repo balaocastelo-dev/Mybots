@@ -12,6 +12,7 @@ import { Avatar } from "./avatar";
 import { ApprovalCard, Bolha, Message, QuestionCard, Visualizador, type ArquivoDoChat } from "./mensagem";
 import { DesktopAoVivo } from "./desktop";
 import { BotSettingsPanel, RoutinesPanel } from "./dialogos";
+import { acharLinkBotX } from "./linkBot";
 import { QuadroKanban } from "./colab/kanban";
 import { tarefasDoBot } from "./colab/normalizar";
 import type { PacoteColab, Tarefa } from "./colab/tipos";
@@ -24,6 +25,7 @@ export type ConvProps = {
   voice: VoiceCaps; tts: boolean; setTts: (v: boolean) => void; handsFree: boolean; setHandsFree: (v: boolean) => void;
   send: ReturnType<typeof useHub>["send"]; onEvent: ReturnType<typeof useHub>["onEvent"]; onOpenSidebar: () => void;
   onAbrirTroca: (conversationId: string) => void;
+  onLinkDeBot?: (url: string) => void;
   onAbrirEquipe?: () => void;
   onAbrirBot?: (botId: string) => void;
   control: ControlState;
@@ -42,7 +44,7 @@ export type ConvProps = {
   };
 };
 
-export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, onAbrirEquipe, onAbrirBot, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, colab }: ConvProps) {
+export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, onLinkDeBot, onAbrirEquipe, onAbrirBot, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, colab }: ConvProps) {
   const [text, setText] = useState("");
   const [vozAberta, setVozAberta] = useState(true);
   const [listening, setListening] = useState(false);
@@ -593,8 +595,21 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           placeholder={bot && !bot.online ? `${bot.name} está offline — a mensagem fica salva` : `Escreva para ${title}`}
           rows={1}
           onChange={(e) => setText(e.target.value)}
+          onPaste={(e) => {
+            const colado = e.clipboardData?.getData("text") ?? "";
+            const link = acharLinkBotX(colado);
+            if (!link || !onLinkDeBot) return;
+            if (colado.trim() === link || colado.trim() === link + "/") e.preventDefault();
+            onLinkDeBot(link);
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); return; }
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              const link = acharLinkBotX(text);
+              if (link && onLinkDeBot && text.trim().replace(/\/$/, "") === link) { onLinkDeBot(link); setText(""); return; }
+              submit();
+              return;
+            }
             // campo vazio + seta pra cima = editar o último pedido, como no WhatsApp.
             if (e.key === "ArrowUp" && !text.trim()) {
               const ultimo = [...messages].reverse().find((m) => m.sender.kind === "user" && m.sender.id === "user");

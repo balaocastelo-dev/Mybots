@@ -461,7 +461,7 @@ export class Hub {
     return [];
   }
 
-  private sendNode(botId: string, msg: HubToNode): boolean {
+  sendNode(botId: string, msg: HubToNode): boolean {
     // Chamadas feitas pelo servidor MCP não têm nó atrás: resolvem promessas locais.
     if (msg.type === "result") {
       const w = this.mcpWaiters.get(msg.callId);
@@ -485,7 +485,7 @@ export class Hub {
     return true;
   }
 
-  private broadcastUi(msg: HubToUi) {
+  broadcastUi(msg: HubToUi) {
     const data = JSON.stringify(msg);
     for (const ws of this.uis) if (ws.readyState === ws.OPEN) ws.send(data);
   }
@@ -1973,7 +1973,7 @@ export class Hub {
   }
 
   /** Grava um arquivo em data/files e registra no banco. */
-  saveFile(botId: string, name: string, mime: string, data: Buffer): { id: string; name: string; mime: string; size: number; url: string } {
+  saveFile(botId: string, name: string, mime: string, data: Buffer): { id: string; name: string; mime: string; size: number; url: string; path: string } {
     const id = newId("f");
     const safe = name.replace(/[^\w.\-\u00C0-\u024F ]+/g, "_").slice(0, 120) || "arquivo";
     const dir = path.join(path.dirname(config.dbFile), "files");

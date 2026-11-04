@@ -4,6 +4,10 @@
 //   TTS: "edge" (vozes neurais da Microsoft, grátis, sem chave — padrão),
 //        "piper" (servidor local http: POST text → wav), "openai" (/v1/audio/speech) ou "none".
 import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { VoiceConfig } from "@mybots/shared";
 import { cleanForSpeech as cleanSharedForSpeech } from "@mybots/shared";
 
@@ -77,7 +81,12 @@ async function falaClonada(texto: string, perfil: string, velocidade = 1.0): Pro
 }
 
 /** Vozes pt-BR do Edge: cada bot ganha uma diferente (ou a configurada em bot.voice). */
-export const EDGE_PT_BR_VOICES = ["pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-ThalitaNeural", "pt-BR-ThalitaMultilingualNeural", "pt-BR-MacerioMultilingualNeural"];
+// So as vozes neurais pt-BR testadas no Edge. A MacerioMultilingual cortava o audio
+// no meio (sem turn.end) e a interface caia na voz robotica do navegador.
+export const EDGE_VOZES_FEMININAS = ["pt-BR-FranciscaNeural", "pt-BR-ThalitaNeural"];
+export const EDGE_VOZES_MASCULINAS = ["pt-BR-AntonioNeural"];
+export const EDGE_PT_BR_VOICES = [...EDGE_VOZES_FEMININAS, ...EDGE_VOZES_MASCULINAS, "pt-BR-ThalitaMultilingualNeural"];
+const VOZES_QUEBRADAS = new Set(["pt-BR-MacerioMultilingualNeural"]);
 
 export function voiceConfig(): VoiceConfig {
   return {
@@ -88,11 +97,70 @@ export function voiceConfig(): VoiceConfig {
   };
 }
 
+/**
+ * Voz fixa por bot: o mesmo bot fala sempre com a mesma voz.
+ * bot.voice pode ser o nome exato ("pt-BR-AntonioNeural"), "clone:...", ou so o
+ * genero ("masculina"/"homem"/"feminina"/"mulher"). Sem nada, o id decide (hash estavel).
+ */
 export function pickVoice(botId: string, preferred?: string): string {
-  if (preferred) return preferred;
   let h = 0;
   for (const c of botId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return EDGE_PT_BR_VOICES[h % EDGE_PT_BR_VOICES.length];
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; // espalha os bits: ids parecidos nao caem todos na mesma voz
+  const p = (preferred ?? "").trim();
+  if (/^(masc|homem|male|m$)/i.test(p)) return EDGE_VOZES_MASCULINAS[h % EDGE_VOZES_MASCULINAS.length];
+  if (/^(fem|mulher|female|f$)/i.test(p)) return EDGE_VOZES_FEMININAS[h % EDGE_VOZES_FEMININAS.length];
+  if (p && !VOZES_QUEBRADAS.has(p) && (/Neural$/.test(p) || /^clone:/i.test(p))) return p;
+  // metade dos bots com voz de homem, metade com voz de mulher
+  return h % 2 ? EDGE_VOZES_MASCULINAS[(h >>> 1) % EDGE_VOZES_MASCULINAS.length] : EDGE_VOZES_FEMININAS[(h >>> 1) % EDGE_VOZES_FEMININAS.length];
+}
+
+// ---- cache de audio: a mesma frase com a mesma voz nao vai ao Edge de novo ----
+const CACHE_DIR = path.join(os.tmpdir(), "mybots-tts-cache");
+const CACHE_MAX_ARQ = 2000;
+const cacheMem = new Map<string, { audio: Buffer; mime: string; vel: number }>();
+function chaveCache(voz: string, vel: number, texto: string) {
+  return crypto.createHash("sha1").update(voiceSettings.tts + "|" + voz + "|" + vel + "|" + texto).digest("hex");
+}
+function lerCache(k: string) {
+  const m = cacheMem.get(k);
+  if (m) return m;
+  try {
+    const audio = fs.readFileSync(path.join(CACHE_DIR, k + ".mp3"));
+    if (audio.length > 500) return { audio, mime: "audio/mpeg", vel: 0 };
+  } catch { /* nao tem */ }
+  return null;
+}
+function gravarCache(k: string, r: { audio: Buffer; mime: string; vel: number }) {
+  cacheMem.set(k, r);
+  if (cacheMem.size > 200) cacheMem.delete(cacheMem.keys().next().value as string);
+  try {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    fs.writeFileSync(path.join(CACHE_DIR, k + ".mp3"), r.audio);
+    if (Math.random() < 0.02) {
+      const arqs = fs.readdirSync(CACHE_DIR).map((n) => ({ n, t: fs.statSync(path.join(CACHE_DIR, n)).mtimeMs })).sort((a, b) => a.t - b.t);
+      for (const a of arqs.slice(0, Math.max(0, arqs.length - CACHE_MAX_ARQ))) fs.rmSync(path.join(CACHE_DIR, a.n), { force: true });
+    }
+  } catch { /* cache e opcional */ }
+}
+
+async function falaEdge(texto: string, voz: string, vel: number): Promise<Buffer> {
+  const tts = new MsEdgeTTS();
+  try {
+    await tts.setMetadata(voz, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
+    const { audioStream } = tts.toStream(texto, { rate: vel });
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("Edge TTS demorou demais")), 30_000);
+      audioStream.on("data", (d) => chunks.push(Buffer.from(d)));
+      audioStream.on("end", () => { clearTimeout(t); resolve(); });
+      audioStream.on("error", (e) => { clearTimeout(t); reject(e); });
+    });
+    const audio = Buffer.concat(chunks);
+    if (audio.length < 500) throw new Error("Edge devolveu audio vazio");
+    return audio;
+  } finally {
+    try { tts.close(); } catch { /* ja fechado */ }
+  }
 }
 
 /** Transcreve um áudio (webm/opus, wav, mp3...) usando o servidor STT configurado. */
@@ -120,7 +188,8 @@ const cleanForSpeech = (t: string) => cleanSharedForSpeech(t).slice(0, 2500);
 /** Sintetiza fala. Devolve o áudio e o mime. */
 // 1,4x: a fala em velocidade normal faz a pessoa desligar o som. Aplicamos no SSML do
 // motor (nao no playbackRate do navegador) para a voz acelerar sem ficar fina.
-export const VELOCIDADE_FALA = 1.4;
+// 1,4x deixava a voz com cara de robo. 1,1x fica natural e ainda agil.
+export const VELOCIDADE_FALA = 1.1;
 
 export async function synthesize(text: string, voice: string, velPedida?: number): Promise<{ audio: Buffer; mime: string; vel: number }> {
   // Quem chama pode pedir a cadencia (a narracao da abertura e mais lenta que a
@@ -144,17 +213,22 @@ export async function synthesize(text: string, voice: string, velPedida?: number
 
   switch (voiceSettings.tts) {
     case "edge": {
-      const tts = new MsEdgeTTS();
-      await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-      const { audioStream } = tts.toStream(clean, { rate: VEL });
-      const chunks: Buffer[] = [];
-      await new Promise<void>((resolve, reject) => {
-        audioStream.on("data", (d) => chunks.push(Buffer.from(d)));
-        audioStream.on("end", () => resolve());
-        audioStream.on("error", reject);
-      });
-      tts.close();
-      return { audio: Buffer.concat(chunks), mime: "audio/mpeg", vel: VEL };
+      if (VOZES_QUEBRADAS.has(voice) || !/Neural$/.test(voice)) voice = pickVoice(voice);
+      const k = chaveCache(voice, VEL, clean);
+      const c = lerCache(k);
+      if (c) return { ...c, vel: VEL };
+      // tenta a voz do bot 2x; se o Edge falhar, tenta outra voz neural do mesmo genero
+      const masc = EDGE_VOZES_MASCULINAS.includes(voice);
+      const tentativas = [voice, voice, ...(masc ? EDGE_VOZES_MASCULINAS : EDGE_VOZES_FEMININAS).filter((v) => v !== voice)];
+      let erro: unknown;
+      for (const v of tentativas) {
+        try {
+          const r = { audio: await falaEdge(clean, v, VEL), mime: "audio/mpeg", vel: VEL };
+          gravarCache(k, r);
+          return r;
+        } catch (e) { erro = e; }
+      }
+      throw erro instanceof Error ? erro : new Error("Edge TTS falhou");
     }
     case "piper": {
       const res = await fetch(voiceSettings.ttsUrl.replace(/\/$/, "") + "/", { method: "POST", headers: { "content-type": "text/plain" }, body: clean, signal: AbortSignal.timeout(60_000) });

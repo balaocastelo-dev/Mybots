@@ -121,7 +121,7 @@ export function emPedacos(texto: string, primeiro = 90, depois = 320): string[] 
  *  velocidade, como o piper. Reaplicamos no loadedmetadata porque o algoritmo de
  *  carga do elemento de audio devolve o playbackRate para o default -- era por isso
  *  que o 1.4 escrito direto no construtor nao valia nada. */
-export const VEL_ALVO = 1.4;
+export const VEL_ALVO = 1.1;
 let velDoServidor = VEL_ALVO;
 function aplicarVel(audio: HTMLAudioElement) {
   const r = Math.max(1, Math.min(4, VEL_ALVO / (velDoServidor || 1)));
@@ -190,7 +190,10 @@ function pickBrowserVoice(botId: string, preferred?: string): SpeechSynthesisVoi
   if (!all.length) return undefined;
   if (preferred) { const v = all.find((v) => v.name.toLowerCase().includes(preferred.toLowerCase())); if (v) return v; }
   const pt = all.filter((v) => v.lang.toLowerCase().startsWith("pt"));
-  const pool = pt.length ? pt : all;
+  // so em ultimo caso: prefere as vozes neurais do navegador (Edge "Online (Natural)", Google)
+  const natural = pt.filter((v) => /natural|neural|online|google/i.test(v.name));
+  const br = (natural.length ? natural : pt).filter((v) => /br/i.test(v.lang));
+  const pool = br.length ? br : natural.length ? natural : pt.length ? pt : all;
   let h = 0; for (const c of botId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return pool[h % pool.length];
 }

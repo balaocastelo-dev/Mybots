@@ -3435,3 +3435,33 @@ main.chat > .colab-quadro,
 .sidebar-pega:hover::after, .sidebar-pega:active::after, .sidebar-pega:focus-visible::after { background: var(--accent); }
 body.puxando-sidebar { cursor: col-resize !important; user-select: none !important; }
 body.puxando-sidebar * { user-select: none !important; }
+
+
+/* ---- Sidebar: Bots ativos / Seus bots (separacao visual) ---- */
+.bots li.separador-lista {
+  display: block;
+  height: 0;
+  margin: 16px 8px 10px;
+  padding: 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  cursor: default;
+  pointer-events: none;
+  background: transparent;
+  box-shadow: none;
+}
+.bots li.separador-lista:hover {
+  background: transparent;
+  box-shadow: none;
+}
+.bots li.section.secao-seus-bots {
+  margin-top: 2px;
+  padding-top: 10px;
+}
+.bots li.section.secao-ativos {
+  padding-top: 10px;
+}
+.bots li.empty.ativos-vazio {
+  margin-bottom: 2px;
+}

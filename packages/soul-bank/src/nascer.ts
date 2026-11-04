@@ -109,7 +109,7 @@ export function prepararNascimento(pedido: PedidoNascimento): Nascimento {
       apagar: "apagar",
       publicar: "publicar",
     };
-    const quais = (Object.keys(rotulo) as Array<keyof typeof rotulo>).filter((k) => permissoes[k] === "confirma").map((k) => rotulo[k]);
+    const quais = (Object.keys(rotulo) as Array<keyof typeof rotulo>).filter((k) => permissoes[k as keyof Permissoes] === "confirma").map((k) => rotulo[k]);
     return {
       ok: false,
       erro: `Esta alma pode ${quais.join(", ")}. Confirme o nascimento (confirmarAlma: true) antes de criar o bot.`,

@@ -10,7 +10,7 @@ import { LendoSite } from "./lendo";
 import { ArteDoBot, EscolhaAparencia, lerAparencia } from "./aparencia";
 import { Abertura, PrimeiraEmpresa, EscolhaIdioma } from "./abertura";
 import { TelaLegal } from "./legal";
-import { TelaCreditos } from "./creditos";
+import { TelaCreditos } from "./creditos";
 import { usePainelPrefs, nomeNaTela, ChipTrocas, FolhaAbrirTroca, TrocaEntreBots, DialogoTexto, type Troca, type PrefDoBot } from "./painel";
 import { ehGerente, montarLista } from "./lista";
 import { lerLinkGuia } from "./guiaPainel";
@@ -20,11 +20,11 @@ import { TelaConfiguracoes, type AbaConfig } from "./configuracoes/Tela";
 import { Maquina } from "./maquina";
 import { Aviso, GlobalControl, notify } from "./controles";
 import { BotMenu, ImportDialog } from "./menuBot";
-import { Ameba, Avatar, colorFor, definirTonsDaEquipe } from "./avatar";
+import { Ameba, Avatar, corDoBot, definirTonsDaEquipe } from "./avatar";
 import { TimeAmebas, TituloMyBots } from "./timeAmebas";
 import { Conversation } from "./conversa";
 import { Trabalhos } from "./trabalhos";
-import { EmpresasDialog, ExcluirBotDialog, NewBotDialog, NewGerenteDialog, NewGroupDialog } from "./dialogos";
+import { EmpresasDialog, ExcluirBotDialog, NewBotDialog, NewGerenteDialog, NewGroupDialog, ReceberPorLinkDialog } from "./dialogos";
 import { Icone } from "./icones";
 import { BOTS_EXEMPLO, EMPRESA_EXEMPLO } from "./colab/amostra";
 import { useColab } from "./colab/estado";
@@ -121,6 +121,7 @@ export function App({ authRole, authUid }: { authRole?: string; authUid?: string
   const [verArquivos, setVerArquivos] = useState(false);
   const [newGroup, setNewGroup] = useState(false);
   const [newBot, setNewBot] = useState(false);
+  const [receberLink, setReceberLink] = useState<string | null>(null);
   const [nascendoId, setNascendoId] = useState<string | null>(null);
   // Empresas: cada uma com seus bots, gerentes e regras. O conhecimento continua universal.
   const [empresas, setEmpresas] = useState<Array<{ id: string; nome: string; regras: string; idioma?: string; bots: number }>>([]);
@@ -340,6 +341,7 @@ export function App({ authRole, authUid }: { authRole?: string; authUid?: string
             {mais && (
               <div className="mais-menu" role="menu">
                 <button type="button" role="menuitem" onClick={() => { setMais(false); setNewBot(true); }}>Novo bot</button>
+                <button type="button" role="menuitem" onClick={() => { setMais(false); setReceberLink(""); }}>Receber por link</button>
                 <button type="button" role="menuitem" onClick={() => { setMais(false); setNewGerente(true); }}>Novo gerente</button>
                 <button type="button" role="menuitem" onClick={() => { setMais(false); setNewGroup(true); }}>Novo grupo</button>
                 <button type="button" role="menuitem" className="only-mobile" onClick={() => { setMais(false); setVerConfig("geral"); }}>Configurações</button>
@@ -368,6 +370,10 @@ export function App({ authRole, authUid }: { authRole?: string; authUid?: string
         <div className="only-desktop barra-desktop-extra">
           <Tamanho />
           <GlobalControl control={state.control} />
+        </div>
+        <div className="acoes-bots">
+          <button type="button" className="btn" onClick={() => setNewBot(true)}>Novo bot</button>
+          <button type="button" className="btn" data-receber-link="abrir" onClick={() => setReceberLink("")}>Receber por link</button>
         </div>
         {(buscaAberta || filter) && <input className="search" placeholder="Buscar bot…" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />}
         <ul className="bots">
@@ -463,7 +469,7 @@ export function App({ authRole, authUid }: { authRole?: string; authUid?: string
           aria-label="Largura da lista de bots" aria-valuemin={200} aria-valuemax={900} aria-valuenow={Math.round(sidebarW)} />
       </aside>
 
-      <main className="chat" style={target?.kind === "bot" ? ({ "--bot": colorFor(target.bot.id) } as any) : undefined}>
+      <main className="chat" style={target?.kind === "bot" ? ({ "--bot": corDoBot(target.bot) } as any) : undefined}>
         {verTroca ? (
           <TrocaEntreBots conversationId={verTroca} bots={equipe} Avatar={Avatar} onFechar={() => setVerTroca(null)} />
         ) : verQuadro ? (
@@ -516,6 +522,7 @@ export function App({ authRole, authUid }: { authRole?: string; authUid?: string
             send={send}
             onEvent={onEvent}
             onOpenSidebar={() => { setSidebarOpen(true); setSelected(null); setVerQuadro(false); setVerGrafo(false); setVerTroca(null); }}
+            onLinkDeBot={(url) => setReceberLink(url)}
             onAbrirTroca={(conv) => { setVerTroca(conv); }}
             onAbrirEquipe={() => { setVerGrafo(true); setVerQuadro(false); setVerTroca(null); }}
             onAbrirBot={(id) => { setVerQuadro(false); setVerGrafo(false); setVerTroca(null); setSelected(dmConversation(id)); }}
@@ -594,6 +601,7 @@ export function App({ authRole, authUid }: { authRole?: string; authUid?: string
           </div>
         )}
         {newBot && <NewBotDialog empresas={empresas} empresaAtiva={empresaAtiva} onCriou={() => void carregarEmpresas()} onClose={() => setNewBot(false)} onCreated={(id) => { setNewBot(false); setNascendoId(id); window.setTimeout(() => setNascendoId((cur) => cur === id ? null : cur), 2800); setSelected(dmConversation(id)); if (window.innerWidth < 768) setSidebarOpen(true); }} />}
+        {receberLink !== null && <ReceberPorLinkDialog urlInicial={receberLink} onClose={() => setReceberLink(null)} onCreated={(id) => { setReceberLink(null); setNascendoId(id); window.setTimeout(() => setNascendoId((cur) => cur === id ? null : cur), 2800); setSelected(dmConversation(id)); if (window.innerWidth < 768) setSidebarOpen(true); }} />}
 
       {dialogo?.tipo === "aparencia" && (
         <EscolhaAparencia id={dialogo.bot.id} valor={dialogo.bot.avatar} onFechar={() => setDialogo(null)}

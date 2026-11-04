@@ -18,6 +18,8 @@ export type ManagedBotDef = {
   avatar?: string;
   voice?: string;
   color?: string;
+  /** Cores vindas de um link (acento e casaco). O acento também fica em `color`. */
+  cores?: { accent?: string; coatLight?: string; coatDark?: string };
   engine: "direct" | "opencode";
   provider: { kind: string; model: string; apiKey?: string; baseURL?: string };
   persona: string;
@@ -137,6 +139,7 @@ export class BotManager {
       avatar: input.avatar?.trim() || defaultAmebaV2(id),
       voice: input.voice?.trim() || undefined,
       color: input.color,
+      cores: input.cores,
       engine,
       provider: { kind, model: (input.provider?.model ?? preset?.defaultModel ?? "").trim(), apiKey: input.provider?.apiKey?.trim() || undefined, baseURL: input.provider?.baseURL?.trim() || (preset as any)?.defaultBaseURL },
       manages: input.manages?.length ? [...new Set(input.manages.filter((x) => x && x !== id))] : undefined,

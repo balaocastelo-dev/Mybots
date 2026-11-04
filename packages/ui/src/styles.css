@@ -3465,3 +3465,15 @@ body.puxando-sidebar * { user-select: none !important; }
 .bots li.empty.ativos-vazio {
   margin-bottom: 2px;
 }
+
+.acoes-bots { display: flex; gap: 8px; padding: 8px 12px 0; }
+.acoes-bots .btn { flex: 1; font-size: 13px; padding: 7px 8px; }
+.previa-link { display: flex; gap: 12px; align-items: flex-start; margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.previa-link img, .previa-sem-foto { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; flex: none; background: var(--panel); }
+.previa-sem-foto { display: grid; place-items: center; font-weight: 700; }
+.previa-link b { display: block; }
+.previa-link p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.previa-conhecida { color: var(--text) !important; }
+.previa-cores { display: flex; gap: 6px; margin-top: 8px; }
+.previa-cores i { width: 16px; height: 16px; border-radius: 50%; display: block; border: 1px solid var(--line); }
+.previa-pronta { margin: 8px 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }

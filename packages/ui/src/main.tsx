@@ -8,7 +8,7 @@ import { LoginOnline } from "./loginOnline";
 import "./styles.css";
 
 type Gate = { phase: "checking" } | { phase: "leader" } | { phase: "duplicate" } | { phase: "replaced" };
-type Auth = { phase: "loading" } | { phase: "login" } | { phase: "ok"; usuario?: string };
+type Auth = { phase: "loading" } | { phase: "login" } | { phase: "ok"; usuario?: string; role?: string; uid?: string };
 
 const icon = (nome: string) => `${UI_BASE}/${nome}`.replace(/\/{2,}/g, "/").replace(":/", "://");
 
@@ -25,7 +25,7 @@ function Root() {
         const r = await api("/me");
         const j = await r.json().catch(() => ({} as any));
         if (!alive) return;
-        if (j?.autenticado) setAuth({ phase: "ok", usuario: j.usuario });
+        if (j?.autenticado) setAuth({ phase: "ok", usuario: j.usuario, role: j.role, uid: j.uid });
         else setAuth({ phase: "login" });
       } catch {
         if (alive) setAuth({ phase: "login" });
@@ -47,10 +47,10 @@ function Root() {
   }, [auth.phase]);
 
   if (auth.phase === "loading") return null;
-  if (auth.phase === "login") return <LoginOnline onOk={(usuario) => setAuth({ phase: "ok", usuario })} />;
+  if (auth.phase === "login") return <LoginOnline onOk={(usuario, meta) => setAuth({ phase: "ok", usuario, role: meta?.role, uid: meta?.uid })} />;
 
   if (gate.phase === "checking") return null;
-  if (gate.phase === "leader") return <App />;
+  if (gate.phase === "leader") return <App authRole={auth.phase === "ok" ? auth.role : undefined} authUid={auth.phase === "ok" ? auth.uid : undefined} />;
   if (gate.phase === "replaced") {
     return (
       <div className="gate">

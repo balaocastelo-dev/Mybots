@@ -58,7 +58,8 @@ function lerSidebarLargura() {
   } catch { return SIDEBAR_PADRAO; }
 }
 
-export function App() {
+export function App({ authRole, authUid }: { authRole?: string; authUid?: string } = {}) {
+  const [escopoOwner, setEscopoOwner] = useState<"todos" | "meus" | "clientes">("todos");
   const exemplo = new URLSearchParams(location.search).get("colab") === "exemplo";
   const tela = new URLSearchParams(location.search).get("tela");
   const pcDemo = useRef(false);
@@ -186,11 +187,19 @@ export function App() {
   const bots = useMemo(() => {
     const f = filter.trim().toLowerCase();
     return [...equipe]
+      .filter((b) => {
+        if (authRole === "owner" && escopoOwner !== "todos") {
+          const ou = (b as any).ownerUserId || null;
+          if (escopoOwner === "meus") return !ou || ou === authUid;
+          return !!ou && ou !== authUid; // clientes
+        }
+        return true;
+      })
       .filter((b) => !f || b.name.toLowerCase().includes(f) || b.role.toLowerCase().includes(f))
       .filter((b) => true /* escondidos entram na lista flat; recurso de esconder permanece no menu */)
       // Perfil unico: todos os bots na mesma lista
       .sort((a, b) => nomeNaTela(a, painel.prefs).localeCompare(nomeNaTela(b, painel.prefs), "pt"));
-  }, [equipe, filter, painel.prefs]);
+  }, [equipe, filter, painel.prefs, authRole, authUid, escopoOwner]);
 
   /** Fixados viram a grade. Na lista, cada empresa põe o gerente na frente. */
   const empresasVisiveis = empresas.length ? empresas : (exemplo ? [EMPRESA_EXEMPLO] : empresas);
@@ -338,6 +347,24 @@ export function App() {
             )}
           </div>
         </header>
+        {authRole === "owner" && (
+          <div className="escopo-owner" style={{ display: "flex", gap: 6, padding: "8px 12px", flexWrap: "wrap" }}>
+            {([
+              ["todos", "Todos"],
+              ["meus", "Meus bots"],
+              ["clientes", "Clientes"],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={escopoOwner === id ? "primary" : ""}
+                style={{ fontSize: 12, padding: "4px 10px", borderRadius: 999 }}
+                onClick={() => setEscopoOwner(id)}
+              >{label}</button>
+            ))}
+          </div>
+        )}
+
         <div className="only-desktop barra-desktop-extra">
           <Tamanho />
           <GlobalControl control={state.control} />

@@ -1,5 +1,16 @@
 # Progresso
 
+## 2026-11-04 — Perfil do bot
+
+- Clicar no nome do bot no topo do chat abre um modal com Detalhes, Biblioteca e Computador.
+- Detalhes: tarefas com check, rotinas com frequência (vazio: "Rotinas são tarefas recorrentes... peça no chat para configurar uma.") e Chat de voz (voz neural pt-BR do Edge, velocidade 0.5x–2x, idioma com Auto-detect). Salvo por bot na coluna `bots.voz_perfil`. O hello do nó não apaga.
+- Biblioteca: arquivos daquele bot em Hoje / Esta semana / Antes, miniatura de imagem e play de vídeo. A lista continua a regra de dono. O botão Arquivos do painel segue lá.
+- Computador: "Acordando computador...", acorda pelo `acordarPc` que já existia, tela em `/pc/<botId>/`, Só assistir, Assumir controle e tela cheia.
+- Ajuste de arranque: `usuarios.ensure()` roda de novo depois que a tabela `managed_bots` nasce, senão o snapshot quebrava com `no such column: owner_user_id` num banco novo.
+- Arquivos: `packages/shared/src/perfil.ts`, `packages/shared/src/index.ts`, `packages/hub/src/db.ts`, `biblioteca.ts`, `server.ts`, `botManager.ts`, `voice.ts`, `packages/ui/src/perfilBot.tsx`, `conversa.tsx`, `voice.ts`, `styles.css`, `tests/perfilBot.test.ts`, `package.json`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `tests/perfilBot.test.ts` passou (voz, agrupamento, tenant). `npm test` para em `tests/pcs.test.ts`, que já vinha assim na main (varredura não devolve a `bia`). O e2e ficou 35 ok / 11 falhas; a de voz (TTS Edge) passou. As falhas que sobraram são aprovação e ferramenta desconhecida (`run_command`, `ask_bot`, `schedule`), fora deste perfil. Sem Docker, a aba Computador não mostra pixels ao vivo.
+
 ## 2026-11-04 — Menu da conta no rodapé
 
 - Clicar no nome no rodapé da lista abre o menu: uso “Ilimitado, grátis”, baixar o celular em `/downloads/MyBots.apk`, baixar o Windows só no navegador (some no app; `MYBOTS_WINDOWS_URL` vazia deixa “ainda não publicado”), Suporte, Configurações e Sair.

@@ -169,7 +169,8 @@ export async function transcribe(audio: Buffer, mime: string, filename = "audio.
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(audio)], { type: mime }), filename);
   form.append("model", voiceSettings.sttModel);
-  form.append("language", language);
+  // "auto" deixa o Whisper escolher. Sem isto ele força português e erra inglês.
+  if (language && language !== "auto") form.append("language", language);
   form.append("response_format", "json");
   const headers: Record<string, string> = {};
   if (voiceSettings.sttKey) headers.authorization = `Bearer ${voiceSettings.sttKey}`;

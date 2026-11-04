@@ -4,7 +4,7 @@ import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
-import { botOfConversation, isControlMode } from "@mybots/shared";
+import { botOfConversation, isControlMode, normalizarPerfilVoz, vozExplicita } from "@mybots/shared";
 import { config, tokenAllows, botForToken, raizDoProjeto } from "./config.js";
 import { Hub } from "./hub.js";
 import type { FichaEmpresa } from "./db.js";
@@ -52,6 +52,7 @@ import { arquivoDoApk, fichaPublica } from "./casaArquivo.js";
 import { registrarAuthGoogle, definirAoEntrarGoogle } from "./authGoogle.js";
 import { UsuariosRepo } from "./usuarios.js";
 import { escopoDeQuery, filtrarBotsPorUsuario, filtrarPorOwnerUserId, podeAcessarBot } from "./isolamento.js";
+import { podeVerArquivo } from "./biblioteca.js";
 import { config as hubConfig } from "./config.js";
 
 export async function startServer(hub: Hub) {
@@ -629,6 +630,9 @@ export async function startServer(hub: Hub) {
 
   // --- bots criados pela interface (hospedados neste PC) ---
   const manager = new BotManager(hub);
+  // A tabela managed_bots nasce aqui. O ensure de cima rodou antes dela existir,
+  // então a coluna do dono só entra agora — senão o snapshot quebra no primeiro olá.
+  usuarios.ensure();
   registrarAlmas(app);
   hub.managedIds = () => new Set(manager.list().map((b) => b.id));
   hub.protegidosIds = () => new Set(manager.list().filter((b) => b.protegido).map((b) => b.id));
@@ -1608,6 +1612,57 @@ export async function startServer(hub: Hub) {
     ...EDGE_PT_BR_VOICES.map((v) => ({ valor: v, nome: v.replace(/^pt-BR-|Neural$/g, "").replace("Multilingual", " multilíngue"), clonada: false })),
   ]);
 
+  const acessoAoBot = (req: any, reply: any, id: string): boolean => {
+    if (!idSeguro(id)) { reply.code(400).send({ error: "id inválido" }); return false; }
+    if (!hub.db.listBots().some((b) => b.id === id) && !manager.get(id)) {
+      reply.code(404).send({ error: "bot não encontrado" });
+      return false;
+    }
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) {
+      reply.code(404).send({ error: "bot não encontrado" });
+      return false;
+    }
+    return true;
+  };
+  const respostaVoz = (id: string) => {
+    const perfil = hub.db.lerVozPerfil(id);
+    const bot = hub.db.listBots().find((b) => b.id === id);
+    const voice = perfil?.voice || (bot?.voice && vozExplicita(bot.voice) ? bot.voice : pickVoice(id, bot?.voice));
+    return { voice, rate: perfil?.rate ?? 1.1, lang: perfil?.lang ?? "auto", salvo: !!perfil };
+  };
+  app.get("/api/bots/:id/voz", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!acessoAoBot(req, reply, id)) return;
+    return respostaVoz(id);
+  });
+  app.patch("/api/bots/:id/voz", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!acessoAoBot(req, reply, id)) return;
+    const body = (req.body ?? {}) as { voice?: string; rate?: number; lang?: string };
+    const atual = hub.db.lerVozPerfil(id);
+    const n = normalizarPerfilVoz(body, atual);
+    if ("error" in n) return reply.code(400).send(n);
+    const nome = hub.db.listBots().find((b) => b.id === id)?.name ?? manager.get(id)?.name ?? id;
+    hub.db.salvarVozPerfil(id, nome, n);
+    if (n.voice) manager.definirVoz(id, n.voice);
+    hub.botUpdate(id);
+    return respostaVoz(id);
+  });
+  /** Acorda o PC deste bot (o mesmo caminho de /pc/<id>/) e devolve a URL da tela. */
+  app.get("/api/bots/:id/computador", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!acessoAoBot(req, reply, id)) return;
+    const est = await acordarPc(id);
+    if (!est) return { estado: "nao-criada", acordando: false, tela: null, erro: "Este bot ainda não tem computador registrado." };
+    const ligada = est.estado === "ligada";
+    return {
+      estado: est.estado,
+      acordando: !ligada && est.estado !== "sem-docker",
+      tela: ligada ? `/pc/${encodeURIComponent(id)}/` : null,
+      erro: est.erro ?? (est.estado === "sem-docker" ? "O Docker não está no ar nesta máquina." : null),
+    };
+  });
+
   // --- grupos ---
   app.get("/api/groups", async (req) => {
     const groups = hub.db.listGroups();
@@ -1932,18 +1987,16 @@ export async function startServer(hub: Hub) {
   const donoDoArquivo = (f: { owner_user_id?: string | null; bot_id?: string | null }): string | null =>
     (f.owner_user_id ? String(f.owner_user_id) : null) || (f.bot_id ? usuarios.ownerUserIdDoBot(f.bot_id) : null);
   const podeVerDono = (req: any, dono: string | null): boolean => {
-    if (!authOnlineAtivo()) return true;
-    if (hubTokenLoopbackOk(req)) return true;
+    if (!authOnlineAtivo()) return podeVerArquivo({ tipo: "local" }, dono);
+    if (hubTokenLoopbackOk(req)) return podeVerArquivo({ tipo: "loopback" }, dono);
     const user = sessaoValida(req) ? usuarioDoReq(req) : null;
-    if (user) return user.role === "owner" || (!!dono && dono === user.id);
+    if (user) return podeVerArquivo({ tipo: "usuario", papel: user.role, id: user.id }, dono);
     const bot = nodeAuthorized(req);
     if (bot) {
       const donoBot = usuarios.ownerUserIdDoBot(bot);
-      if (!donoBot) return false;
-      if (donoBot === dono) return true;
-      return usuarios.getById(donoBot)?.role === "owner";
+      return podeVerArquivo({ tipo: "bot", donoDoBot: donoBot, donoEhOwner: !!donoBot && usuarios.getById(donoBot)?.role === "owner" }, dono);
     }
-    return false;
+    return podeVerArquivo({ tipo: "anonimo" }, dono);
   };
   app.get("/api/files/:id/:name?", async (req, reply) => {
     const f = hub.db.getFile((req.params as any).id);
@@ -2224,7 +2277,7 @@ export async function startServer(hub: Hub) {
     if (!b?.text) return reply.code(400).send({ error: "text é obrigatório" });
     const bot = hub.summaries().find((x) => x.id === b.botId);
     try {
-      const { audio, mime, vel } = await synthesize(b.text, b.voice ?? pickVoice(b.botId ?? "bot", bot?.voice), b.vel);
+      const { audio, mime, vel } = await synthesize(b.text, b.voice ?? pickVoice(b.botId ?? "bot", bot?.voice), b.vel ?? bot?.voiceRate);
       reply.header("content-type", mime).header("cache-control", "private, max-age=86400").header("x-fala-vel", String(vel));
       return reply.send(audio);
     } catch (e) {

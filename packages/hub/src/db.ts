@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import type { Saber, SaberHit, BotInfo, Group, PendingApproval, PendingQuestion, Routine, Sender, StoredMessage, Risk, TarefaColab } from "@mybots/shared";
+import { normalizarPerfilVoz, vozExplicita, type Saber, type SaberHit, type BotInfo, type Group, type PendingApproval, type PendingQuestion, type PerfilVoz, type Routine, type Sender, type StoredMessage, type Risk, type TarefaColab } from "@mybots/shared";
 import { redigir } from "./redacao.js";
 
 /** O que a tela da primeira empresa e o Gerente guardam além do nome e das regras. */
@@ -174,6 +174,8 @@ export class Db {
     this.adicionarColuna("messages", "edit_of", "TEXT");
     this.adicionarColuna("messages", "pinned", "INTEGER DEFAULT 0");
     this.adicionarColuna("approvals", "resolved_by", "TEXT");
+    // Voz, cadência e idioma do perfil. O hello do nó não reescreve esta coluna.
+    this.adicionarColuna("bots", "voz_perfil", "TEXT");
     this.db.exec(`CREATE TABLE IF NOT EXISTS conversation_meta (
       id TEXT PRIMARY KEY, forked_from_conversation TEXT, forked_from_message TEXT,
       title TEXT, created_at INTEGER NOT NULL
@@ -453,6 +455,8 @@ export class Db {
     // Empresas: cada bot pertence a uma. empresa_id vazio = bot do sistema, acima das empresas.
     this.adicionarColuna("bots", "empresa_id", "TEXT");
     this.adicionarColuna("bots", "ponte", "INTEGER NOT NULL DEFAULT 0");
+    // Voz, cadência e idioma do perfil. O hello do nó não mexe nesta coluna.
+    this.adicionarColuna("bots", "voz_perfil", "TEXT");
     this.migrarMemoriaPorEmpresa();
   }
   listManaged(): any[] {
@@ -586,6 +590,10 @@ export class Db {
   }
 
   upsertBot(bot: BotInfo, extra: { engine?: string; provider?: string; model?: string }) {
+    // O perfil escolhido no painel ganha do hello: o nó ainda manda a voz
+    // que estava no arquivo quando ele subiu.
+    const guardado = this.lerVozPerfil(bot.id);
+    const voice = guardado?.voice ? guardado.voice : (bot.voice ?? null);
     this.db
       .prepare(
         `INSERT INTO bots (id, name, role, avatar, color, voice, engine, provider, model, last_seen, created_at)
@@ -595,9 +603,43 @@ export class Db {
       )
       .run({
         id: bot.id, name: bot.name, role: bot.role ?? "", avatar: bot.avatar ?? null, color: bot.color ?? null,
-        voice: bot.voice ?? null, engine: extra.engine ?? null, provider: extra.provider ?? null,
+        voice, engine: extra.engine ?? null, provider: extra.provider ?? null,
         model: extra.model ?? null, now: Date.now(),
       });
+  }
+
+  private perfilDaLinha(raw: unknown): PerfilVoz | null {
+    if (raw == null || raw === "") return null;
+    try {
+      const n = normalizarPerfilVoz(JSON.parse(String(raw)));
+      return "error" in n ? null : n;
+    } catch { return null; }
+  }
+
+  lerVozPerfil(id: string): PerfilVoz | null {
+    try {
+      const r = this.db.prepare(`SELECT voz_perfil FROM bots WHERE id=?`).get(id) as { voz_perfil?: string } | undefined;
+      return this.perfilDaLinha(r?.voz_perfil);
+    } catch { return null; }
+  }
+
+  salvarVozPerfil(id: string, nome: string, perfil: PerfilVoz) {
+    const json = JSON.stringify(perfil);
+    const existe = this.db.prepare(`SELECT id FROM bots WHERE id=?`).get(id);
+    if (!existe) {
+      this.db.prepare(`INSERT INTO bots (id, name, role, voice, voz_perfil, created_at) VALUES (?,?,'',?,?,?)`)
+        .run(id, nome || id, perfil.voice || null, json, Date.now());
+      return;
+    }
+    if (perfil.voice) this.db.prepare(`UPDATE bots SET voice=?, voz_perfil=? WHERE id=?`).run(perfil.voice, json, id);
+    else this.db.prepare(`UPDATE bots SET voz_perfil=? WHERE id=?`).run(json, id);
+  }
+
+  /** O painel de configurar bot mudou a voz. Mantém cadência e idioma se já havia perfil. */
+  definirVozDoPerfil(id: string, nome: string, voice: string) {
+    const atual = this.lerVozPerfil(id);
+    if (!atual) return;
+    this.salvarVozPerfil(id, nome, { ...atual, voice: vozExplicita(voice) ? voice : "" });
   }
 
   touchBot(id: string) {
@@ -605,13 +647,18 @@ export class Db {
   }
 
   listBots(): Array<BotInfo & { engine?: string; provider?: string; model?: string; lastSeen?: number; empresaId?: string; ponte?: boolean; ownerUserId?: string }> {
-    return this.db.prepare(`SELECT * FROM bots ORDER BY name`).all().map((r: any) => ({
-      id: r.id, name: r.name, role: r.role, avatar: r.avatar ?? undefined, color: r.color ?? undefined,
-      voice: r.voice ?? undefined, engine: r.engine ?? undefined, provider: r.provider ?? undefined,
-      model: r.model ?? undefined, lastSeen: r.last_seen ?? undefined,
-      empresaId: r.empresa_id ?? undefined, ponte: !!r.ponte,
-      ownerUserId: r.owner_user_id ? String(r.owner_user_id) : undefined,
-    }));
+    return this.db.prepare(`SELECT * FROM bots ORDER BY name`).all().map((r: any) => {
+      const perfil = this.perfilDaLinha(r.voz_perfil);
+      return {
+        id: r.id, name: r.name, role: r.role, avatar: r.avatar ?? undefined, color: r.color ?? undefined,
+        voice: perfil?.voice || r.voice || undefined,
+        ...(perfil ? { voiceRate: perfil.rate, voiceLang: perfil.lang } : {}),
+        engine: r.engine ?? undefined, provider: r.provider ?? undefined,
+        model: r.model ?? undefined, lastSeen: r.last_seen ?? undefined,
+        empresaId: r.empresa_id ?? undefined, ponte: !!r.ponte,
+        ownerUserId: r.owner_user_id ? String(r.owner_user_id) : undefined,
+      };
+    });
   }
 
   insertMessage(m: StoredMessage) {

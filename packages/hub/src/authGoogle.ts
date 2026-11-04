@@ -115,7 +115,7 @@ export function registrarAuthGoogle(app: FastifyInstance) {
       googleSub: String(info.sub),
       ownerEmail,
     });
-    setSessionCookie(reply, { u: user.email, uid: user.id, role: user.role });
+    setSessionCookie(reply, { u: user.email, uid: user.id, role: user.role, m: "google" });
     return reply.redirect("/");
   });
 }

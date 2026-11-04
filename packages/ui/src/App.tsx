@@ -58,7 +58,7 @@ function lerSidebarLargura() {
   } catch { return SIDEBAR_PADRAO; }
 }
 
-export function App({ authRole, authUid }: { authRole?: string; authUid?: string } = {}) {
+export function App({ authRole, authUid, authEmail, onSair }: { authRole?: string; authUid?: string; authEmail?: string; onSair?: () => void } = {}) {
   const [escopoOwner, setEscopoOwner] = useState<"todos" | "meus" | "clientes">("todos");
   const exemplo = new URLSearchParams(location.search).get("colab") === "exemplo";
   const tela = new URLSearchParams(location.search).get("tela");
@@ -457,6 +457,12 @@ export function App({ authRole, authUid }: { authRole?: string; authUid?: string
           )}
           {gruposVisiveis.map(linhaGrupo)}
         </ul>
+        {authEmail && onSair ? (
+          <div className="sidebar-conta" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderTop: "1px solid rgba(255,255,255,.08)", fontSize: 13 }}>
+            <span title={authEmail} style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: .8 }}>{authEmail}</span>
+            <button type="button" className="sidebar-sair" onClick={onSair} title="Sair da conta Google">Sair</button>
+          </div>
+        ) : null}
         <footer className="sidebar-foot only-desktop">{equipe.filter((b) => b.online).length} de {equipe.length} online · voz: {state.voice.tts ? state.voice.ttsEngine : "navegador"} / {state.voice.stt ? "whisper" : "navegador"}</footer>
         <div className="sidebar-pega only-desktop" role="separator" aria-orientation="vertical" title="Arraste para mudar a largura; clique duplo para voltar"
           onPointerDown={aoPuxarSidebar} onDoubleClick={resetSidebarW} onKeyDown={teclaSidebar} tabIndex={0}

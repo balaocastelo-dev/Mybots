@@ -15,6 +15,8 @@ export type SessaoOnline = {
   uid: string;
   role: RoleUsuario;
   exp: number;
+  /** Metodo de login. Online so vale sessao Google ("google"). */
+  m?: "google";
 };
 
 type Tentativa = { n: number; desde: number; bloqueadoAte: number };
@@ -87,7 +89,9 @@ function lerSessao(token: string): SessaoOnline | null {
       if (owner) { uid = owner.id; role = "owner"; }
     }
     if (!uid) return null;
-    return { u: String(data.u), uid, role, exp: Number(data.exp) };
+    // Online e so Google: sessoes antigas de senha deixam de valer.
+    if (googleOAuthAtivo() && data.m !== "google") return null;
+    return { u: String(data.u), uid, role, exp: Number(data.exp), m: data.m === "google" ? "google" : undefined };
   } catch {
     return null;
   }
@@ -180,9 +184,9 @@ function appendSetCookie(reply: FastifyReply, cookie: string) {
   reply.header("set-cookie", arr);
 }
 
-export function setSessionCookie(reply: FastifyReply, sessao: { u: string; uid: string; role: RoleUsuario }) {
+export function setSessionCookie(reply: FastifyReply, sessao: { u: string; uid: string; role: RoleUsuario; m?: "google" }) {
   const exp = Date.now() + SESSION_TTL_MS;
-  const payload = Buffer.from(JSON.stringify({ u: sessao.u, uid: sessao.uid, role: sessao.role, exp }), "utf8").toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ u: sessao.u, uid: sessao.uid, role: sessao.role, m: sessao.m, exp }), "utf8").toString("base64url");
   const token = assinar(payload);
   appendSetCookie(
     reply,
@@ -230,7 +234,7 @@ export function rotaPublicaOnline(url: string): boolean {
   const caminho = url.split("?")[0];
   if (caminho === "/api/health") return true;
   if (caminho === "/api/login" || caminho === "/api/logout" || caminho === "/api/me") return true;
-  if (caminho === "/api/auth/google" || caminho === "/api/auth/google/callback") return true;
+  if (caminho === "/api/auth/google" || caminho === "/api/auth/google/callback" || caminho === "/api/auth/logout") return true;
   if (caminho === "/api/channels/incoming") return true;
   if (caminho.startsWith("/pc/") || caminho.startsWith("/android/")) return false;
   if (caminho === "/" || caminho === "/index.html") return true;
@@ -242,6 +246,9 @@ export function rotaPublicaOnline(url: string): boolean {
 
 export function registrarAuthOnline(app: FastifyInstance) {
   app.post("/api/login", async (req, reply) => {
+    if (googleOAuthAtivo()) {
+      return reply.code(403).send({ error: "login online somente com Google" });
+    }
     if (!senhaOnlineAtiva()) {
       return reply.code(400).send({ error: "login com senha nao configurado" });
     }
@@ -270,10 +277,12 @@ export function registrarAuthOnline(app: FastifyInstance) {
     return { ok: true, usuario: owner.email, uid: owner.id, role: "owner" as const };
   });
 
-  app.post("/api/logout", async (_req, reply) => {
+  const sair = async (_req: FastifyRequest, reply: FastifyReply) => {
     clearSessionCookie(reply);
     return { ok: true };
-  });
+  };
+  app.post("/api/logout", sair);
+  app.post("/api/auth/logout", sair);
 
   app.get("/api/me", async (req) => {
     if (!authOnlineAtivo()) return { autenticado: true, modo: "local", google: false, senha: false };
@@ -287,9 +296,9 @@ export function registrarAuthOnline(app: FastifyInstance) {
         role: s.role,
         name: u?.name ?? s.u,
         google: googleOAuthAtivo(),
-        senha: senhaOnlineAtiva(),
+        senha: !googleOAuthAtivo() && senhaOnlineAtiva(),
       };
     }
-    return { autenticado: false, google: googleOAuthAtivo(), senha: senhaOnlineAtiva() };
+    return { autenticado: false, google: googleOAuthAtivo(), senha: !googleOAuthAtivo() && senhaOnlineAtiva() };
   });
 }

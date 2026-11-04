@@ -1976,6 +1976,7 @@ export async function startServer(hub: Hub) {
     };
     let copiados = 0, pulados = 0;
     for (const f of hub.db.listFiles(2000)) {
+      if (!podeVerDono(req, donoDoArquivo(f))) continue; // so copia arquivos do proprio usuario (owner ve tudo)
       const tipo = tipoDoArquivo(f.name, f.mime);
       if (corpo.tipo && tipo !== corpo.tipo) continue;
       if (corpo.ids?.length && !corpo.ids.includes(f.id)) continue;

@@ -42,7 +42,9 @@ export function AbaGeral({
 
   const guardarNome = (valor: string) => {
     setNome(valor);
-    try { localStorage.setItem(CHAVE_NOME, valor.slice(0, 80)); } catch { /* privado */ }
+    const gravado = valor.slice(0, 80);
+    try { localStorage.setItem(CHAVE_NOME, gravado); } catch { /* privado */ }
+    window.dispatchEvent(new CustomEvent("mybots-conta-nome", { detail: gravado }));
   };
 
   const escolherTema = (t: TemaNome) => {
@@ -74,7 +76,7 @@ export function AbaGeral({
     <div className="ajustes-aba" data-aba="geral">
       <section className="ajustes-grupo">
         <h3>Conta</h3>
-        <p className="ajustes-lead">O nome que os avisos deste navegador usam. O login da casa ainda não entra nesta versão: fica só aqui.</p>
+        <p className="ajustes-lead">O nome que aparece no rodapé e nos avisos deste navegador.</p>
         <label className="ajustes-linha">
           <span>Seu nome</span>
           <input value={nome} maxLength={80} placeholder="Chefe" autoComplete="nickname" onChange={(e) => guardarNome(e.target.value)} />

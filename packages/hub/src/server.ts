@@ -48,6 +48,7 @@ import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
 import { authOnlineAtivo, cookieDe, emitirTicketWs, hubTokenLoopbackOk, lerTicketWs, registrarAuthOnline, rotaPublicaOnline, sessaoDoReq, sessaoValida, SESSION_COOKIE, setUsuariosRepo, ticketWsDoReq, usuarioDoReq } from "./authOnline.js";
+import { arquivoDoApk, fichaPublica } from "./casaArquivo.js";
 import { registrarAuthGoogle, definirAoEntrarGoogle } from "./authGoogle.js";
 import { UsuariosRepo } from "./usuarios.js";
 import { escopoDeQuery, filtrarBotsPorUsuario, filtrarPorOwnerUserId, podeAcessarBot } from "./isolamento.js";
@@ -359,6 +360,13 @@ export async function startServer(hub: Hub) {
   registrarAuthOnline(app);
   registrarAuthGoogle(app);
   app.get("/api/health", async () => ({ ok: true, version: config.version, online: hub.onlineBots(), chaveDaCasa: estadoDaChave() }));
+  app.get("/api/casa", async () => fichaPublica());
+  app.get("/downloads/MyBots.apk", async (_req, reply) => {
+    const arquivo = arquivoDoApk();
+    if (!arquivo) return reply.code(404).send({ error: "O aplicativo para celular ainda não foi publicado." });
+    reply.header("content-disposition", "attachment; filename=\"MyBots.apk\"");
+    return reply.type("application/vnd.android.package-archive").send(fs.createReadStream(arquivo));
+  });
   // o painel mostra a reserva do sistema (percentual desta maquina): numero real, lido na hora
   app.get("/api/maquina", async () => ({ ...(await lerMaquina()), saberes: hub.db.contarSaberes() }));
   // Estado de saude de cada bot gerenciado, com a causa de quem nao subiu.

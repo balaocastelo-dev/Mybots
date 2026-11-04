@@ -1,5 +1,15 @@
 # Progresso
 
+## 2026-11-04 — Menu da conta no rodapé
+
+- Clicar no nome no rodapé da lista abre o menu: uso “Ilimitado, grátis”, baixar o celular em `/downloads/MyBots.apk`, baixar o Windows só no navegador (some no app; `MYBOTS_WINDOWS_URL` vazia deixa “ainda não publicado”), Suporte, Configurações e Sair.
+- Configurações ganhou as abas Computador, Permissões, Uso e Atualizações. O cofre que já existia continua: a lista mostra nome e máscara, nunca a senha.
+- O app Android marca o user agent com `MyBotsApp` para o menu saber que não é o navegador.
+- Não reiniciei Hub nem nó e não usei as portas 8787/8791.
+- Arquivos: `packages/shared/src/casa.ts`, `packages/ui/src/menuPerfil.tsx`, `perfil.ts`, `configuracoes/*`, `App.tsx`, `main.tsx`, `styles.css`, `packages/hub/src/casaArquivo.ts`, `server.ts`, `authOnline.ts`, `android/`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `tests/perfil.test.ts` (6) passou. Prints do menu no computador e no celular.
+
 ## 2026-11-04 — 20 bots iniciais em toda conta
 
 - Toda conta nova nasce com os 20 ofícios além de PROGRAMADOR, SEO & AEO Desk e Director. O id continua `receita-sufixo` (8 caracteres do usuário, sem `usr_`, ou o id da empresa).

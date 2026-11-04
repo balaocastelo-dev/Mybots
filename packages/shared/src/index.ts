@@ -354,3 +354,4 @@ export type Empresa = { id: string; nome: string; regras: string; cor?: string; 
 export * from "./cotas.js";
 export * from "./colab.ts";
 export * from "./padrao.ts";
+export * from "./casa.ts";

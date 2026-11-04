@@ -342,9 +342,12 @@ export function exportarBotComoReceita(
 }
 
 export function saudacaoDeReceita(receita: Receita, botName: string): string {
-  const gs = (receita.gettingStarted || "").replace(/\s+/g, " ").trim().slice(0, 160);
-  if (gs) return `Oi — sou ${botName}. ${gs}`;
-  return `Oi — sou ${botName} (${receita.profile.name}). Pronto para começar.`;
+  // gettingStarted/onboarding e INSTRUCAO para o modelo (vai no prompt de sistema),
+  // nunca texto para o usuario: nao pode aparecer no chat nem ser falado (TTS).
+  const papel = String(receita.profile?.name || "").replace(/\s+/g, " ").trim();
+  const nome = String(botName || "").trim() || "seu novo bot";
+  const quem = papel && papel.toLowerCase() !== nome.toLowerCase() ? `${nome}, seu ${papel.toLowerCase()}` : nome;
+  return `Oi! Eu sou ${quem}. Estou pronto para te ajudar. No que posso ajudar hoje?`;
 }
 
 /**

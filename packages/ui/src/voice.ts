@@ -10,6 +10,15 @@ export type VoiceCaps = { stt: boolean; tts: boolean; ttsEngine: string; sttEngi
 
 const q = () => location.search; // mantém ?k=senha
 
+/** Idioma da escuta deste bot. "" = o Hub continua no padrão (pt). "auto" = o Whisper escolhe. */
+let idiomaStt = "";
+export function definirIdiomaStt(lang: string) { idiomaStt = lang; }
+function urlStt() {
+  const s = q();
+  if (!idiomaStt) return `${UI_BASE}/api/stt${s}`;
+  return `${UI_BASE}/api/stt${s}${s ? "&" : "?"}lang=${encodeURIComponent(idiomaStt)}`;
+}
+
 // ---------------- MICROFONE ----------------
 // Numa máquina com webcam, headset e placa de som, o navegador usa a "entrada padrão
 // do sistema" — que quase nunca é o microfone em que a pessoa está falando. Daí o
@@ -307,7 +316,7 @@ function listenWithRecorder(h: ListenHandlers): () => void {
       if (spoke && chunks.length) {
         const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
         try {
-          const res = await fetch(`${UI_BASE}/api/stt${q()}`, { method: "POST", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
+          const res = await fetch(urlStt(), { method: "POST", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
           if (res.ok) { const j = await res.json(); if (j.text?.trim()) h.onFinal(j.text.trim()); }
         } catch { /* ignora */ }
       }
@@ -510,7 +519,7 @@ function escutaComGravador(_caps: VoiceCaps, h: EscutaHandlers): EscutaViva {
     const blob = new Blob(t.pedacos, { type: t.rec.mimeType || "audio/webm" });
     if (blob.size < 2000) return h.onFalsoAlarme?.();   // nem meio segundo de som: não vale transcrever
     try {
-      const res = await fetch(`${UI_BASE}/api/stt${q()}`, { method: "POST", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
+      const res = await fetch(urlStt(), { method: "POST", headers: { "content-type": blob.type || "audio/webm" }, body: blob });
       const texto = res.ok ? String((await res.json()).text ?? "").trim() : "";
       if (!texto || ehRuido(texto) || pareceEco(texto, h.ecoDoBot?.() ?? "")) return h.onFalsoAlarme?.();
       h.onFinal(texto);

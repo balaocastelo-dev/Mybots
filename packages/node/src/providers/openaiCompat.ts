@@ -10,7 +10,14 @@ export class OpenAICompatProvider implements Provider {
       if (m.role === "user") {
         // imagem anexada: o formato multimodal da OpenAI (vale para Ollama, OpenRouter, Groq…)
         messages.push(m.media?.length
-          ? { role: "user", content: [{ type: "text", text: m.content }, ...m.media.filter((x) => /^image\//i.test(x.mime)).map((x) => ({ type: "image_url", image_url: { url: `data:${x.mime};base64,${x.dataBase64}` } }))] }
+          ? {
+              role: "user",
+              content: [
+                { type: "text", text: m.content },
+                ...m.media.filter((x) => /^image\//i.test(x.mime)).map((x) => ({ type: "image_url", image_url: { url: `data:${x.mime};base64,${x.dataBase64}` } })),
+                ...m.media.filter((x) => /^video\//i.test(x.mime)).map((x) => ({ type: "video_url", video_url: { url: `data:${x.mime};base64,${x.dataBase64}` } })),
+              ],
+            }
           : { role: "user", content: m.content });
       }
       else if (m.role === "assistant") {

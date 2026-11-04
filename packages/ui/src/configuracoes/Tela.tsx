@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
+import { normalizarFicha, type FichaCasa } from "@mybots/shared";
+import { api } from "../api";
+import { aplicativoAqui } from "../perfil";
 import { AbaGeral } from "./Geral";
 import { AbaComputadores } from "./Computadores";
 import { AbaCofre } from "./CofrePainel";
+import { AbaPermissoes } from "./Permissoes";
+import { AbaUso } from "./Uso";
+import { AbaAtualizacoes } from "./Atualizacoes";
+import { ABAS_CONFIG, type AbaConfig } from "./abas";
 
-export type AbaConfig = "geral" | "computadores" | "cofre";
-
-const ABAS: { id: AbaConfig; nome: string; detalhe: string }[] = [
-  { id: "geral", nome: "Geral", detalhe: "Tema, escala, voz e idioma" },
-  { id: "computadores", nome: "Computadores", detalhe: "PC, celular e pareamento" },
-  { id: "cofre", nome: "Cofre", detalhe: "Chaves, logins e cartões" },
-];
+export type { AbaConfig };
 
 export function TelaConfiguracoes({
   bots, empresas, onClose, tts, setTts, handsFree, setHandsFree, avisos, setAvisos, abaInicial,
@@ -26,6 +27,19 @@ export function TelaConfiguracoes({
   abaInicial?: AbaConfig;
 }) {
   const [aba, setAba] = useState<AbaConfig>(abaInicial ?? "geral");
+  const [casa, setCasa] = useState<FichaCasa>(() => normalizarFicha(null));
+  const noApp = aplicativoAqui();
+
+  useEffect(() => {
+    let vivo = true;
+    void (async () => {
+      try {
+        const r = await api("/casa");
+        if (vivo && r.ok) setCasa(normalizarFicha(await r.json()));
+      } catch { /* o padrão grátis continua */ }
+    })();
+    return () => { vivo = false; };
+  }, []);
 
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -50,8 +64,8 @@ export function TelaConfiguracoes({
         </header>
         <div className="ajustes-miolo">
           <nav className="ajustes-nav" aria-label="Seções">
-            {ABAS.map((a) => (
-              <button key={a.id} type="button" className={aba === a.id ? "on" : ""} aria-current={aba === a.id ? "page" : undefined} onClick={() => setAba(a.id)}>
+            {ABAS_CONFIG.map((a) => (
+              <button key={a.id} type="button" data-aba={a.id} className={aba === a.id ? "on" : ""} aria-current={aba === a.id ? "page" : undefined} onClick={() => setAba(a.id)}>
                 <b>{a.nome}</b>
                 <small>{a.detalhe}</small>
               </button>
@@ -69,7 +83,10 @@ export function TelaConfiguracoes({
               />
             )}
             {aba === "computadores" && <AbaComputadores bots={bots} empresas={empresas} />}
+            {aba === "permissoes" && <AbaPermissoes bots={bots} />}
             {aba === "cofre" && <AbaCofre bots={bots} />}
+            {aba === "uso" && <AbaUso />}
+            {aba === "atualizacoes" && <AbaAtualizacoes casa={casa} noApp={noApp} />}
           </div>
         </div>
       </div>

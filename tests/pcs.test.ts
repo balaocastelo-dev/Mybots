@@ -8,7 +8,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { idDoAndroid, limparProvedoresAndroid, registrarProvedorAndroid, resolverAlvoAndroid } from "../packages/hub/src/android.ts";
 import { definirDocker, docker, nomesDeContainerEmpresa, portaIntocavel, portasDaChave, type ExecDocker } from "../packages/hub/src/dockerPc.ts";
-import { NAVEGADOR_DO_PC, acessoAberto, acordarPc, abrirTela, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, deveParar, espectadores, fecharTela, lerRegistro, listarMaquinas, migrarRegistros, politicaDoPc, registrarPc, varrerOciosos, zerarUsoParaTeste } from "../packages/hub/src/pcs.ts";
+import { NAVEGADOR_DO_PC, acessoAberto, acordarPc, abrirTela, botPadraoDaEmpresa, classificarRotaPc, definirAcessoPc, deveParar, espectadores, fecharTela, lerRegistro, listarMaquinas, marcarSempreLigado, migrarRegistros, politicaDoPc, registrarPc, varrerOciosos, zerarUsoParaTeste } from "../packages/hub/src/pcs.ts";
 import { botsDaPasta, botsDoBanco, executarMigracao } from "../scripts/migrar-pcs-por-bot.ts";
 
 function pasta(): string {
@@ -126,6 +126,8 @@ describe("pc por bot", { concurrency: 1 }, () => {
       assert.equal(deveParar({ agora: 60 * minuto, ultimoUso: 0, espectadores: 0, ociosoMs: pol.ociosoMs, rodando: false }), false);
 
       const bia = registrarPc({ botId: "bia", empresaId: "balao", nome: "Bia" });
+      assert.equal(lerRegistro("bia")?.sempreLigado, true);
+      marcarSempreLigado("bia", false);
       ligados.add(bia.container);
       criados.add(bia.container);
       const ociosoMs = pol.ociosoMs;
@@ -151,7 +153,7 @@ describe("pc por bot", { concurrency: 1 }, () => {
       assert.ok(run, "faltou o docker run");
       assert.equal(run.includes("--pull=never"), true);
       assert.equal(run.includes("--restart"), true);
-      assert.equal(run[run.indexOf("--restart") + 1], "no");
+      assert.equal(run[run.indexOf("--restart") + 1], "unless-stopped");
       assert.equal(run[run.indexOf("--memory") + 1], "2560m");
       assert.equal(run[run.indexOf("--cpus") + 1], "1");
       assert.equal(run.some((p) => p.startsWith("127.0.0.1:") && p.includes(":3000")), true);

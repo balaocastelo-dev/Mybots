@@ -6,10 +6,11 @@ import {
   type PendingApproval, type PendingQuestion, type Routine, type Sender, type StoredMessage, type UiToHub,
   type Saber,
   type SaberTipo,
-  botOfConversation, cortarFala, dmConversation, effectiveControl, faseDoStatus, groupOfConversation, isControlMode, needsHumanApproval, newId, pairConversation, PROTOCOL_VERSION, SABER_LABELS,
+  botOfConversation, cortarFala, dmConversation, effectiveControl, faseDoStatus, groupOfConversation, isControlMode, modeloAceitaVideo, needsHumanApproval, newId, pairConversation, PROTOCOL_VERSION, SABER_LABELS,
 } from "@mybots/shared";
 import { Db } from "./db.js";
 import { Cofre } from "./cofre.js";
+import { Conectores } from "./conectores.js";
 import { alvoDoNavegador } from "./cofreCdp.js";
 import { ehDocumentoLivel, ehImagem, extrairTextoDoArquivo } from "./extrairAnexo.js";
 import { redigir, semSegredo, textoSeguro } from "./redacao.js";
@@ -247,9 +248,13 @@ export class Hub {
   /** Credenciais cifradas. O valor não volta para bot nem para a interface. */
   readonly cofre: Cofre;
 
+  /** Aplicativos MCP da conta. O token fica no mesmo cofre e não volta para a interface. */
+  readonly conectores: Conectores;
+
   constructor(dbFile: string, public readonly userName = process.env.MYBOTS_USER_NAME ?? "o chefe") {
     this.db = new Db(dbFile);
     this.cofre = new Cofre(this.db.sqlite);
+    this.conectores = new Conectores(this.db.sqlite);
     this.whats = new WhatsAppDasEmpresas(path.dirname(dbFile), (estado) => this.broadcastUi({ type: "whatsapp", estado }));
     // Sessao ja escaneada volta sozinha quando o Hub sobe: ninguem escaneia duas vezes.
     setTimeout(() => { for (const id of this.whats.salvas()) void this.whats.conectar(id).catch(() => {}); }, 1500);
@@ -2177,7 +2182,10 @@ export class Hub {
     // videos/audios: quadros + transcicao; documentos: texto extraido no Hub
     if (atts.some((a) => /^(video|audio)\//i.test(a.mime))) {
       const owner = botOfConversation(conversationId) ?? from.id;
-      void this.media.enrich(owner, atts)
+      const alvo = botOfConversation(conversationId);
+      const cadastro = alvo ? this.db.listBots().find((b) => b.id === alvo) : undefined;
+      const aceitaVideo = !!(cadastro && modeloAceitaVideo(cadastro.provider || "", cadastro.model || ""));
+      void this.media.enrich(owner, atts, { aceitaVideo })
         .then((m) => enriquecerAnexos(m))
         .then(deliver, (e) => { console.error(`[hub] preparo de midia: ${(e as Error).message}`); void enriquecerAnexos(atts).then(deliver); });
     } else if (atts.some((a) => ehDocumentoLivel(a.mime || "", a.name))) {

@@ -12,7 +12,11 @@ export type BotInfo = {
   role: string;      // "Videomaker da empresa"
   avatar?: string;   // emoji ou URL
   color?: string;    // cor do avatar (#hex)
-  voice?: string;    // nome da voz TTS preferida (ex.: "pt-BR-AntonioNeural" ou "Google português do Brasil")
+  voice?: string;    // nome da voz TTS preferida (ex.: "pt-BR-AntonioNeural" ou "clone:chefe")
+  /** Cadência salva no perfil (0.5 a 2). Sem isto, a fala usa o padrão da casa. */
+  voiceRate?: number;
+  /** Idioma da escuta: "auto" ou código (pt, en, es...). */
+  voiceLang?: string;
 };
 
 export type Sender = { kind: "user" | "bot" | "system"; id: string; name: string };
@@ -340,6 +344,7 @@ export function faseDoStatus(text: string, busy: boolean, fase?: FaseAtividade):
 }
 
 export * from "./control.ts";
+export * from "./perfil.ts";
 export * from "./colab.ts";
 export * from "./redacao.ts";
 export * from "./media.ts";
@@ -353,3 +358,5 @@ export const IDIOMAS: Array<{ id: Idioma; nome: string }> = [
 export type Empresa = { id: string; nome: string; regras: string; cor?: string; idioma: Idioma; criadaEm: number; bots: number };
 export * from "./cotas.js";
 export * from "./colab.ts";
+export * from "./padrao.ts";
+export * from "./casa.ts";

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BotSummary, ControlMode, Group, Routine } from "@mybots/shared";
-import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, CONTROL_MODES } from "@mybots/shared";
+import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, CONTROL_MODES, PADRAO_DA_CASA as PADRAO_SHARED } from "@mybots/shared";
 import { desintegrarAvatar } from "./particulas";
 import { LendoSite } from "./lendo";
 import { PcDaEmpresa } from "./pc";
@@ -103,7 +103,7 @@ export function usePresets() {
 
 /** Como todo bot nasce: no Claude, motor direto, sem ninguem digitar chave.
  *  A chave fica no .env do Hub e chega ao bot pelo ambiente do processo. */
-export const PADRAO_DA_CASA = { engine: "direct", provider: { kind: "zai", model: "glm-4.5-flash" } };
+export const PADRAO_DA_CASA = { engine: PADRAO_SHARED.engine, provider: { kind: PADRAO_SHARED.provider, model: PADRAO_SHARED.model, baseURL: PADRAO_SHARED.baseURL } };
 
 export type EspecialidadeResumo = { id: string; nome: string; emoji?: string; cor?: string; categoria?: string; skills?: string[]; ferramentas?: string[]; keywords?: string[]; onboarding?: string; aviso?: string | null };
 
@@ -181,7 +181,7 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
           <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
             <div className="ameba-picker">
               <div className="ameba-picker-topo">
-                <RetratoPreview id={value.id ?? value.name ?? "novo"} avatar={value.avatar} size={64} />
+                <RetratoPreview id={value.id ?? value.name ?? "novo"} avatar={value.avatar} size={64} cor={value.color} />
                 <div className="ameba-picker-acoes">
                   <b>Ameba</b>
                   <small className="muted">So as amebas novas. Sorteie ou escolha uma.</small>
@@ -244,7 +244,7 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
         <>
           <div className="row">
             <label>Provedor do modelo
-              <select value={value.provider?.kind ?? "anthropic"} onChange={(e) => { const p = providers.find((x) => x.kind === e.target.value); setProv({ kind: e.target.value, model: p?.defaultModel ?? "", baseURL: p?.defaultBaseURL ?? "" }); if (e.target.value === "opencode") set({ engine: "opencode", provider: { kind: "opencode", model: p?.defaultModel ?? "big-pickle" } }); }}>
+              <select value={value.provider?.kind ?? PADRAO_SHARED.provider} onChange={(e) => { const p = providers.find((x) => x.kind === e.target.value); setProv({ kind: e.target.value, model: p?.defaultModel ?? "", baseURL: p?.defaultBaseURL ?? "" }); if (e.target.value === "opencode") set({ engine: "opencode", provider: { kind: "opencode", model: p?.defaultModel ?? "big-pickle" } }); }}>
                 {/* quem ja tem chave no Hub vem marcado: evita escolher um provedor que nao responde */}
                 {providers.map((p) => <option key={p.kind} value={p.kind}>{p.label}{p.chaveDaCasa ? "  \u2713 chave pronta" : p.needsKey ? "  (sem chave)" : ""}</option>)}
               </select>

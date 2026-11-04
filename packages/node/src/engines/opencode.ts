@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type ControlMode, type HubToNode, type Risk, controlPromptLine, effectiveControl, needsHumanApproval, resourcePromptLine } from "@mybots/shared";
+import { type ControlMode, type HubToNode, type Risk, blocoVisaoEWeb, controlPromptLine, effectiveControl, MARCA_VISAO_WEB, needsHumanApproval, resourcePromptLine } from "@mybots/shared";
 import { mcpsDaAlma, textoDaAlma } from "../almaPrompt.js";
 import { OPENAI_COMPAT_PRESETS, type NodeConfig, readPersona } from "../config.js";
 import { Aquecedor, preaquecer } from "../aquecer.js";
@@ -136,8 +136,11 @@ export class OpenCodeEngine implements Engine {
     }
     const hubHttp = (this.cfg.opencode.hubHttp ?? this.cfg.hub.replace(/^ws/, "http")).replace(/\/$/, "");
     const blocoAlma = textoDaAlma(this.cfg.workspace);
+    const personaLida = readPersona(this.cfg);
+    const olhos = personaLida.includes(MARCA_VISAO_WEB) ? "" : blocoVisaoEWeb();
     const personaCheia = [
-      readPersona(this.cfg).trim(),
+      personaLida.trim(),
+      ...(olhos ? ["", olhos] : []),
       "",
       "## Contexto do MyBots",
       `- Você é o Bot "${this.cfg.bot.name}" (id ${this.cfg.bot.id}) da equipe MyBots. Seu chefe é ${process.env.MYBOTS_USER_NAME ?? "o chefe"}.`,

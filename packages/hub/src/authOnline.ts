@@ -233,7 +233,8 @@ function limparFalhas(ip: string) {
 export function rotaPublicaOnline(url: string): boolean {
   const caminho = url.split("?")[0];
   if (caminho === "/api/health") return true;
-  if (caminho === "/api/login" || caminho === "/api/logout" || caminho === "/api/me") return true;
+  if (caminho === "/api/login" || caminho === "/api/logout" || caminho === "/api/me" || caminho === "/api/casa") return true;
+  if (caminho === "/downloads/MyBots.apk") return true;
   if (caminho === "/api/auth/google" || caminho === "/api/auth/google/callback" || caminho === "/api/auth/logout") return true;
   if (caminho === "/api/channels/incoming") return true;
   if (caminho.startsWith("/pc/") || caminho.startsWith("/android/")) return false;

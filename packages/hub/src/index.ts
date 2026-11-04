@@ -12,9 +12,9 @@ await startServer(hub);
 
 await startSttIfNeeded(process.env.MYBOTS_STT_URL ?? "");
 
-// Todo bot nasce no Claude: o veredito da chave da casa sai no boot, não num bot mudo.
+// Todo bot nasce no 8Token: o veredito da chave da casa sai no boot, não num bot mudo.
 void checarChaveDaCasa().then((e) => {
-  console.log(`[hub] chave da casa (Claude): ${e}`);
+  console.log(`[hub] chave da casa (8token): ${e}`);
   hub.db.audit("hub", "chave.checada", { estado: e });
 });
 

@@ -4,7 +4,7 @@ import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
-import { botOfConversation, isControlMode } from "@mybots/shared";
+import { botOfConversation, isControlMode, normalizarPerfilVoz, vozExplicita } from "@mybots/shared";
 import { config, tokenAllows, botForToken, raizDoProjeto } from "./config.js";
 import { Hub } from "./hub.js";
 import type { FichaEmpresa } from "./db.js";
@@ -31,6 +31,7 @@ import { registrarAlmas } from "./almas.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA, soulBlock } from "./botManager.js";
 import { listarEspecialidades, detectarEspecialidade, porId, montarPersonaComEspecialidade, idPadrao, categoriasDoCatalogo, resumoParaUi, carregarSkillsDaEspecialidade, recarregarEspecialidades } from "./especialidades.js";
 import { carregarReceita, idsEquipeInicial, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, reaplicarReceitaEmBot, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
+import { aplicarSeed, camposDoNascimento, lerOferecidas, marcarOferecida, sufixoDaConta } from "./equipeInicial.js";
 import { registrarRotaImportarLink } from "./importarLink.js";
 import { dmConversation, newId } from "@mybots/shared";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
@@ -45,11 +46,14 @@ import { registerPainel } from "./painel.js";
 import { estadoDaChave } from "./chaves.js";
 import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
+import { registrarConectores } from "./conectoresRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
 import { authOnlineAtivo, cookieDe, emitirTicketWs, hubTokenLoopbackOk, lerTicketWs, registrarAuthOnline, rotaPublicaOnline, sessaoDoReq, sessaoValida, SESSION_COOKIE, setUsuariosRepo, ticketWsDoReq, usuarioDoReq } from "./authOnline.js";
+import { arquivoDoApk, fichaPublica } from "./casaArquivo.js";
 import { registrarAuthGoogle, definirAoEntrarGoogle } from "./authGoogle.js";
 import { UsuariosRepo } from "./usuarios.js";
 import { escopoDeQuery, filtrarBotsPorUsuario, filtrarPorOwnerUserId, podeAcessarBot } from "./isolamento.js";
+import { podeVerArquivo } from "./biblioteca.js";
 import { config as hubConfig } from "./config.js";
 
 export async function startServer(hub: Hub) {
@@ -358,6 +362,13 @@ export async function startServer(hub: Hub) {
   registrarAuthOnline(app);
   registrarAuthGoogle(app);
   app.get("/api/health", async () => ({ ok: true, version: config.version, online: hub.onlineBots(), chaveDaCasa: estadoDaChave() }));
+  app.get("/api/casa", async () => fichaPublica());
+  app.get("/downloads/MyBots.apk", async (_req, reply) => {
+    const arquivo = arquivoDoApk();
+    if (!arquivo) return reply.code(404).send({ error: "O aplicativo para celular ainda não foi publicado." });
+    reply.header("content-disposition", "attachment; filename=\"MyBots.apk\"");
+    return reply.type("application/vnd.android.package-archive").send(fs.createReadStream(arquivo));
+  });
   // o painel mostra a reserva do sistema (percentual desta maquina): numero real, lido na hora
   app.get("/api/maquina", async () => ({ ...(await lerMaquina()), saberes: hub.db.contarSaberes() }));
   // Estado de saude de cada bot gerenciado, com a causa de quem nao subiu.
@@ -620,6 +631,9 @@ export async function startServer(hub: Hub) {
 
   // --- bots criados pela interface (hospedados neste PC) ---
   const manager = new BotManager(hub);
+  // A tabela managed_bots nasce aqui. O ensure de cima rodou antes dela existir,
+  // então a coluna do dono só entra agora — senão o snapshot quebra no primeiro olá.
+  usuarios.ensure();
   registrarAlmas(app);
   hub.managedIds = () => new Set(manager.list().map((b) => b.id));
   hub.protegidosIds = () => new Set(manager.list().filter((b) => b.protegido).map((b) => b.id));
@@ -690,7 +704,7 @@ export async function startServer(hub: Hub) {
       empresa: empresaId ?? undefined,
       autoStart: true,
       engine: PADRAO_DA_CASA.engine,
-      provider: { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model },
+      provider: { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model, baseURL: PADRAO_DA_CASA.baseURL },
     } as any);
     if ("error" in r) return { ok: false, msg: r.error };
     if (empresaId) hub.db.setEmpresaDoBot(r.id, r.name, empresaId, false);
@@ -1374,22 +1388,32 @@ export async function startServer(hub: Hub) {
     },
     criar: async (plano) => {
       const receita = plano.receitaId ? carregarReceita(plano.receitaId) : null;
+      const campos = camposDoNascimento(receita, {});
       const r = manager.create({
         id: plano.id,
         name: plano.nome,
         role: plano.role,
-        avatar: plano.avatar || undefined,
-        color: plano.cor || undefined,
+        avatar: plano.avatar || campos.avatar,
+        color: plano.cor || campos.color,
         cores: {
           ...(plano.cores.accent ? { accent: plano.cores.accent } : {}),
           ...(plano.cores.coatLight ? { coatLight: plano.cores.coatLight } : {}),
           ...(plano.cores.coatDark ? { coatDark: plano.cores.coatDark } : {}),
+          ...(!plano.cores.accent && campos.cores ? campos.cores : {}),
         },
-        persona: plano.persona,
+        persona: receita?.persona?.trim() || plano.persona,
         ownerUserId: plano.ownerUserId,
         controlMode: "supervisionado",
-        engine: PADRAO_DA_CASA.engine,
-        provider: { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model },
+        engine: campos.engine,
+        provider: {
+          kind: campos.provider.kind,
+          model: campos.provider.model,
+          ...(campos.provider.kind === PADRAO_DA_CASA.provider ? { baseURL: PADRAO_DA_CASA.baseURL } : {}),
+        },
+        capacidades: { visao: campos.visao, navegacaoWeb: campos.navegacao },
+        visao: campos.visao,
+        navegacao: campos.navegacao,
+        voice: campos.voice,
         autoStart: true,
       });
       if ("error" in r) return r;
@@ -1589,6 +1613,57 @@ export async function startServer(hub: Hub) {
     ...EDGE_PT_BR_VOICES.map((v) => ({ valor: v, nome: v.replace(/^pt-BR-|Neural$/g, "").replace("Multilingual", " multilíngue"), clonada: false })),
   ]);
 
+  const acessoAoBot = (req: any, reply: any, id: string): boolean => {
+    if (!idSeguro(id)) { reply.code(400).send({ error: "id inválido" }); return false; }
+    if (!hub.db.listBots().some((b) => b.id === id) && !manager.get(id)) {
+      reply.code(404).send({ error: "bot não encontrado" });
+      return false;
+    }
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) {
+      reply.code(404).send({ error: "bot não encontrado" });
+      return false;
+    }
+    return true;
+  };
+  const respostaVoz = (id: string) => {
+    const perfil = hub.db.lerVozPerfil(id);
+    const bot = hub.db.listBots().find((b) => b.id === id);
+    const voice = perfil?.voice || (bot?.voice && vozExplicita(bot.voice) ? bot.voice : pickVoice(id, bot?.voice));
+    return { voice, rate: perfil?.rate ?? 1.1, lang: perfil?.lang ?? "auto", salvo: !!perfil };
+  };
+  app.get("/api/bots/:id/voz", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!acessoAoBot(req, reply, id)) return;
+    return respostaVoz(id);
+  });
+  app.patch("/api/bots/:id/voz", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!acessoAoBot(req, reply, id)) return;
+    const body = (req.body ?? {}) as { voice?: string; rate?: number; lang?: string };
+    const atual = hub.db.lerVozPerfil(id);
+    const n = normalizarPerfilVoz(body, atual);
+    if ("error" in n) return reply.code(400).send(n);
+    const nome = hub.db.listBots().find((b) => b.id === id)?.name ?? manager.get(id)?.name ?? id;
+    hub.db.salvarVozPerfil(id, nome, n);
+    if (n.voice) manager.definirVoz(id, n.voice);
+    hub.botUpdate(id);
+    return respostaVoz(id);
+  });
+  /** Acorda o PC deste bot (o mesmo caminho de /pc/<id>/) e devolve a URL da tela. */
+  app.get("/api/bots/:id/computador", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!acessoAoBot(req, reply, id)) return;
+    const est = await acordarPc(id);
+    if (!est) return { estado: "nao-criada", acordando: false, tela: null, erro: "Este bot ainda não tem computador registrado." };
+    const ligada = est.estado === "ligada";
+    return {
+      estado: est.estado,
+      acordando: !ligada && est.estado !== "sem-docker",
+      tela: ligada ? `/pc/${encodeURIComponent(id)}/` : null,
+      erro: est.erro ?? (est.estado === "sem-docker" ? "O Docker não está no ar nesta máquina." : null),
+    };
+  });
+
   // --- grupos ---
   app.get("/api/groups", async (req) => {
     const groups = hub.db.listGroups();
@@ -1653,48 +1728,76 @@ export async function startServer(hub: Hub) {
     for (const k of ["cookie", "authorization", "x-mybots-key", "x-hub-token"]) if (typeof h[k] === "string") out[k] = h[k] as string;
     return out;
   }
+  async function semearEscopo(opts: {
+    escopo: "usuario" | "empresa";
+    dono: string;
+    sufixo: string;
+    empresa: string;
+    userId?: string;
+    auth?: Record<string, unknown>;
+  }): Promise<Array<{ receita: string; bot?: string; status: string }>> {
+    const oferecidas = lerOferecidas(hub.db.db, opts.escopo, opts.dono);
+    const existentes = new Set<string>([...hub.db.listBots().map((b) => b.id), ...manager.list().map((b) => b.id)]);
+    const out = await aplicarSeed({
+      receitas: idsEquipeInicial(),
+      sufixo: opts.sufixo,
+      existentes,
+      oferecidas,
+      marcar: (receita, botId) => marcarOferecida(hub.db.db, opts.escopo, opts.dono, receita, botId),
+      criar: async (receitaId, botId) => {
+        const receita = carregarReceita(receitaId);
+        if (!receita) return { ok: false, detalhe: "receita ausente" };
+        const nonce = opts.userId ? crypto.randomBytes(16).toString("hex") : "";
+        if (nonce && opts.userId) donosPendentes.set(nonce, opts.userId);
+        try {
+          const res = await app.inject({
+            method: "POST",
+            url: "/api/receitas/import",
+            headers: {
+              ...(opts.auth ? repassarAuth(opts.auth) : { authorization: `Bearer ${config.hubToken}` }),
+              "x-mybots-interno": "equipe-inicial",
+              ...(nonce ? { "x-mybots-dono-nonce": nonce } : {}),
+            },
+            payload: {
+              receita,
+              id: botId,
+              empresa: opts.empresa,
+              autoStart: process.env.MYBOTS_EQUIPE_AUTOSTART === "0" ? false : true,
+            },
+          });
+          if (res.statusCode === 200) return { ok: true };
+          return { ok: false, detalhe: `erro ${res.statusCode}: ${res.body.slice(0, 200)}` };
+        } catch (err) {
+          return { ok: false, detalhe: `erro: ${(err as Error).message}` };
+        } finally {
+          if (nonce) donosPendentes.delete(nonce);
+        }
+      },
+    });
+    return out.map((x) => ({ receita: x.receita, bot: x.botId, status: x.status }));
+  }
   async function provisionarEquipeInicial(empresa: string, auth: Record<string, unknown> = {}): Promise<Array<{ receita: string; bot?: string; status: string }>> {
-    const out: Array<{ receita: string; bot?: string; status: string }> = [];
-    const doEmpresa = hub.db.listBots().filter((b) => b.empresaId === empresa);
-    for (const rid of idsEquipeInicial()) {
-      const botId = `${rid}-${empresa}`.slice(0, 40).replace(/-$/, "");
-      if (doEmpresa.some((b) => b.id === botId)) { out.push({ receita: rid, bot: botId, status: "ja_existe" }); continue; }
-      try {
-        const res = await app.inject({ method: "POST", url: "/api/receitas/import", headers: { ...repassarAuth(auth), "x-mybots-interno": "equipe-inicial" }, payload: { receita: carregarReceita(rid), id: botId, empresa } });
-        out.push({ receita: rid, bot: botId, status: res.statusCode === 200 ? "criado" : `erro ${res.statusCode}: ${res.body.slice(0, 200)}` });
-      } catch (err) {
-        out.push({ receita: rid, status: `erro: ${(err as Error).message}` });
-      }
-    }
-    hub.db.audit(null, "empresa.equipe-inicial", { empresa, out });
+    const out = await semearEscopo({ escopo: "empresa", dono: empresa, sufixo: empresa, empresa, auth });
+    if (out.some((x) => x.status !== "ja_oferecido")) hub.db.audit(null, "empresa.equipe-inicial", { empresa, out });
     return out;
   }
-  // Equipe inicial por conta Google de cliente: nasce com os bots de equipe-inicial.json, todos dele.
+  // Equipe inicial por conta: nasce com os bots de equipe-inicial.json, id receita-sufixo, todos do usuário.
   // O dono vai por nonce de uso unico (so em memoria) na chamada interna; nunca por header livre.
-  definirAoEntrarGoogle(async (user) => {
+  // Conta que já tem o bot (mesmo editado) não é reescrita. Cada receita entra uma vez só.
+  async function provisionarEquipeDaConta(user: { id: string; role: string }) {
     if (user.role === "owner") return;
-    const sufixo = user.id.replace(/^usr_/, "").slice(0, 8);
-    const jaTem = new Set(hub.db.listBots().map((b) => b.id));
     const empresa = hub.db.listEmpresas()[0]?.id;
     if (!empresa) return;
-    const out: Array<{ receita: string; status: string }> = [];
-    for (const rid of idsEquipeInicial()) {
-      const botId = `${rid}-${sufixo}`.slice(0, 40).replace(/-$/, "");
-      if (jaTem.has(botId)) continue;
-      const nonce = crypto.randomBytes(16).toString("hex");
-      donosPendentes.set(nonce, user.id);
-      try {
-        const res = await app.inject({
-          method: "POST", url: "/api/receitas/import",
-          headers: { "x-mybots-interno": "equipe-inicial", "x-mybots-dono-nonce": nonce, authorization: `Bearer ${config.hubToken}` },
-          payload: { receita: carregarReceita(rid), id: botId, empresa },
-        });
-        out.push({ receita: rid, status: String(res.statusCode) });
-      } catch (e) { out.push({ receita: rid, status: (e as Error).message }); }
-      finally { donosPendentes.delete(nonce); }
-    }
-    if (out.length) hub.db.audit(null, "usuario.equipe-inicial", { uid: user.id, out });
-  });
+    const out = await semearEscopo({
+      escopo: "usuario",
+      dono: user.id,
+      sufixo: sufixoDaConta(user.id),
+      empresa,
+      userId: user.id,
+    });
+    if (out.some((x) => x.status !== "ja_oferecido")) hub.db.audit(null, "usuario.equipe-inicial", { uid: user.id, out });
+  }
+  definirAoEntrarGoogle(async (user) => { await provisionarEquipeDaConta(user); });
   app.get("/api/equipe-inicial", async () => ({ receitas: idsEquipeInicial() }));
   app.post("/api/equipe-inicial", async (req, reply) => {
     const empresa = String((req.body as any)?.empresa || hub.db.listEmpresas()[0]?.id || "");
@@ -1758,24 +1861,16 @@ export async function startServer(hub: Hub) {
     const empresa = body?.empresa || empresas[0]?.id;
     if (!empresa) return reply.code(400).send({ error: "Crie a primeira empresa antes." });
     const espId = receita.especialidadeId || receita.id || idPadrao();
-    const basePadrao = PADRAO_DA_CASA as { engine?: string; provider?: string | { kind: string; model?: string }; model?: string };
-    const padraoKind = typeof basePadrao.provider === "string" ? basePadrao.provider : basePadrao.provider?.kind || "zai";
-    const padraoModel = (typeof basePadrao.provider === "object" && basePadrao.provider?.model) || basePadrao.model || "glm-4.5-flash";
-    const reqProvider = body.provider;
-    const pKind = (typeof reqProvider === "string" ? reqProvider : reqProvider?.kind) || padraoKind;
-    const pModel = (typeof reqProvider === "object" && reqProvider?.model) || body.model || padraoModel;
+    const campos = camposDoNascimento(receita, body);
     const createBody: any = {
       id,
       name,
-      role: receita.profile.description || receita.profile.name,
-      avatar: receita.profile.ameba,
-      voice: body.voice || receita.profile.voice,
+      ...campos,
+      capacidades: { visao: campos.visao, navegacaoWeb: campos.navegacao },
       especialidadeId: espId,
       receitaId: receita.id,
       receita,
       controlMode: "supervisionado",
-      engine: body.engine || basePadrao.engine || "direct",
-      provider: { kind: pKind, model: pModel },
     };
     // reuse POST managed logic via internal call shape
     const r = manager.create(createBody);
@@ -1893,18 +1988,16 @@ export async function startServer(hub: Hub) {
   const donoDoArquivo = (f: { owner_user_id?: string | null; bot_id?: string | null }): string | null =>
     (f.owner_user_id ? String(f.owner_user_id) : null) || (f.bot_id ? usuarios.ownerUserIdDoBot(f.bot_id) : null);
   const podeVerDono = (req: any, dono: string | null): boolean => {
-    if (!authOnlineAtivo()) return true;
-    if (hubTokenLoopbackOk(req)) return true;
+    if (!authOnlineAtivo()) return podeVerArquivo({ tipo: "local" }, dono);
+    if (hubTokenLoopbackOk(req)) return podeVerArquivo({ tipo: "loopback" }, dono);
     const user = sessaoValida(req) ? usuarioDoReq(req) : null;
-    if (user) return user.role === "owner" || (!!dono && dono === user.id);
+    if (user) return podeVerArquivo({ tipo: "usuario", papel: user.role, id: user.id }, dono);
     const bot = nodeAuthorized(req);
     if (bot) {
       const donoBot = usuarios.ownerUserIdDoBot(bot);
-      if (!donoBot) return false;
-      if (donoBot === dono) return true;
-      return usuarios.getById(donoBot)?.role === "owner";
+      return podeVerArquivo({ tipo: "bot", donoDoBot: donoBot, donoEhOwner: !!donoBot && usuarios.getById(donoBot)?.role === "owner" }, dono);
     }
-    return false;
+    return podeVerArquivo({ tipo: "anonimo" }, dono);
   };
   app.get("/api/files/:id/:name?", async (req, reply) => {
     const f = hub.db.getFile((req.params as any).id);
@@ -2185,7 +2278,7 @@ export async function startServer(hub: Hub) {
     if (!b?.text) return reply.code(400).send({ error: "text é obrigatório" });
     const bot = hub.summaries().find((x) => x.id === b.botId);
     try {
-      const { audio, mime, vel } = await synthesize(b.text, b.voice ?? pickVoice(b.botId ?? "bot", bot?.voice), b.vel);
+      const { audio, mime, vel } = await synthesize(b.text, b.voice ?? pickVoice(b.botId ?? "bot", bot?.voice), b.vel ?? bot?.voiceRate);
       reply.header("content-type", mime).header("cache-control", "private, max-age=86400").header("x-fala-vel", String(vel));
       return reply.send(audio);
     } catch (e) {
@@ -2195,6 +2288,10 @@ export async function startServer(hub: Hub) {
 
 
   registrarCofre(app, hub);
+  registrarConectores(app, {
+    conectores: hub.conectores,
+    contaDe: (req) => (authOnlineAtivo() ? (usuarioDoReq(req)?.id ?? null) : "local"),
+  });
 
   // --- MCP (ferramentas para os Bots, usado pelo engine opencode) ---
   await registerMcp(app, hub);
@@ -2237,6 +2334,17 @@ export async function startServer(hub: Hub) {
     });
   } else {
     app.get("/", async () => ({ ok: true, aviso: `Interface não compilada: rode "npm run build:ui". UI esperada em ${config.uiDist}` }));
+  }
+
+  // Contas e empresas que já existem recebem, uma vez, os bots iniciais que ainda faltam.
+  // Bot que o dono já editou fica como está: o seed só cria id que não existe e não chama update.
+  try {
+    for (const e of hub.db.listEmpresas()) {
+      await provisionarEquipeInicial(e.id, { authorization: `Bearer ${config.hubToken}` });
+    }
+    for (const u of usuarios.list()) await provisionarEquipeDaConta(u);
+  } catch (e) {
+    console.error(`[equipe-inicial] seed: ${(e as Error).message}`);
   }
 
   await app.listen({ host: config.host, port: config.port });

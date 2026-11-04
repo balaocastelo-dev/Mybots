@@ -1,5 +1,66 @@
 # Progresso
 
+## 2026-11-04 — PRs #71 a #75 num só
+
+- Branch a partir da main (já com Receber por link do #70). Merge, sem force push, das branches dos PRs #71, #72, #73, #74 e #75.
+- Conflitos resolvidos sem perder feature: menu da conta, perfil do bot, 8Token com visão e navegação, os 20 ofícios e Conectar aplicativos.
+- Os 23 bots iniciais nascem no padrão da casa: 8Token `claude-fable-5.1`, visão e navegação ligadas. A chave continua só no `.env` do Hub.
+- "Modelos de Bots" abre o diálogo real de Receber por link. A rota `/bots/importar-link` também. A tela de fallback saiu.
+- `tests/pcs.test.ts`: a varredura de ociosidade é testada com `sempreLigado` desligado (o padrão do PC novo continua ligado) e o `docker run` espera `--restart unless-stopped`.
+- Ferramenta que existe no catálogo executa mesmo se o kit curto não a anunciou. Admin fora do kit continua recusada. Com isso o e2e de aprovação, `run_command`, `ask_bot` e `schedule` passa.
+- Imagem grátis sem chave (Pollinations) volta a ser a primeira da fila. A lista plana "Bots" é o que o teste da barra espera.
+- `npm test` e `npm run build:ui` passaram neste ambiente. Não há `EIGHTTOKEN_API_KEY`: o ensaio real com a API fica de fora. Não mexi nas portas 8787/8791.
+
+## 2026-11-04 — Conectar aplicativos (MCP por conta)
+
+- Clipe na caixa do chat abre o modal com as abas Todos, Gerenciadores de senha, Produtividade, Comunicação, Design, Código e Mais (Marketing / Finanças).
+- Catálogo declarativo. OAuth lê client id/secret do ambiente; chave vai por formulário. O token fica cifrado no cofre do Hub e não volta na API. A conexão é da conta e vale para os bots dela.
+- "Modelos de Bots" abre o fluxo real de Receber por link (prévia e confirmar), o mesmo do PR já mergeado. A rota `/bots/importar-link` também cai nesse diálogo, sem a tela de fallback.
+- Arquivos: `packages/hub/src/conectoresCatalogo.ts`, `conectores.ts`, `conectoresRotas.ts`, `mcp.ts`, `hub.ts`, `server.ts`, `packages/ui/src/conectores.tsx`, `importarLink.tsx`, `conversa.tsx`, `App.tsx`, `styles.css`, `tests/conectores.test.ts`.
+- Teste: `tests/conectores.test.ts` (isolamento de tenant e token fora da API).
+
+## 2026-11-04 — Perfil do bot
+
+- Clicar no nome do bot no topo do chat abre um modal com Detalhes, Biblioteca e Computador.
+- Detalhes: tarefas com check, rotinas com frequência (vazio: "Rotinas são tarefas recorrentes... peça no chat para configurar uma.") e Chat de voz (voz neural pt-BR do Edge, velocidade 0.5x–2x, idioma com Auto-detect). Salvo por bot na coluna `bots.voz_perfil`. O hello do nó não apaga.
+- Biblioteca: arquivos daquele bot em Hoje / Esta semana / Antes, miniatura de imagem e play de vídeo. A lista continua a regra de dono. O botão Arquivos do painel segue lá.
+- Computador: "Acordando computador...", acorda pelo `acordarPc` que já existia, tela em `/pc/<botId>/`, Só assistir, Assumir controle e tela cheia.
+- Ajuste de arranque: `usuarios.ensure()` roda de novo depois que a tabela `managed_bots` nasce, senão o snapshot quebrava com `no such column: owner_user_id` num banco novo.
+- Arquivos: `packages/shared/src/perfil.ts`, `packages/shared/src/index.ts`, `packages/hub/src/db.ts`, `biblioteca.ts`, `server.ts`, `botManager.ts`, `voice.ts`, `packages/ui/src/perfilBot.tsx`, `conversa.tsx`, `voice.ts`, `styles.css`, `tests/perfilBot.test.ts`, `package.json`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `tests/perfilBot.test.ts` passou (voz, agrupamento, tenant). `npm test` para em `tests/pcs.test.ts`, que já vinha assim na main (varredura não devolve a `bia`). O e2e ficou 35 ok / 11 falhas; a de voz (TTS Edge) passou. As falhas que sobraram são aprovação e ferramenta desconhecida (`run_command`, `ask_bot`, `schedule`), fora deste perfil. Sem Docker, a aba Computador não mostra pixels ao vivo.
+
+## 2026-11-04 — Menu da conta no rodapé
+
+- Clicar no nome no rodapé da lista abre o menu: uso “Ilimitado, grátis”, baixar o celular em `/downloads/MyBots.apk`, baixar o Windows só no navegador (some no app; `MYBOTS_WINDOWS_URL` vazia deixa “ainda não publicado”), Suporte, Configurações e Sair.
+- Configurações ganhou as abas Computador, Permissões, Uso e Atualizações. O cofre que já existia continua: a lista mostra nome e máscara, nunca a senha.
+- O app Android marca o user agent com `MyBotsApp` para o menu saber que não é o navegador.
+- Não reiniciei Hub nem nó e não usei as portas 8787/8791.
+- Arquivos: `packages/shared/src/casa.ts`, `packages/ui/src/menuPerfil.tsx`, `perfil.ts`, `configuracoes/*`, `App.tsx`, `main.tsx`, `styles.css`, `packages/hub/src/casaArquivo.ts`, `server.ts`, `authOnline.ts`, `android/`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `tests/perfil.test.ts` (6) passou. Prints do menu no computador e no celular.
+
+## 2026-11-04 — 20 bots iniciais em toda conta
+
+- Toda conta nova nasce com os 20 ofícios além de PROGRAMADOR, SEO & AEO Desk e Director. O id continua `receita-sufixo` (8 caracteres do usuário, sem `usr_`, ou o id da empresa).
+- Conta ou empresa que já existe recebe só o que falta, uma vez. Bot que já está lá não é reescrito, mesmo se o dono editou. Apagar depois não faz o bot voltar.
+- Cada um tem nome em pt-BR, foto e cor lidas das páginas `https://x.ai/bot/…` com o parser do importar-link, e instruções em pt-BR (papel, o que faz, passo a passo, limites, tom), adaptadas a R$, WhatsApp, Mercado Livre e Google Ads Brasil.
+- Regra em todos: nada de enviar mensagem, comprar, postar ou apagar sem o dono pedir com as próprias palavras.
+- Os 20 ofícios e os três que já existiam nascem no padrão da casa: 8Token (`claude-fable-5.1`), visão e navegação ligadas.
+- Arquivos: `receitas/_base/equipe-inicial.json`, `receitas/*.json` dos 20, `packages/hub/src/equipeInicial.ts`, `server.ts`, `receitas.ts`, `botManager.ts`, `importarLink.ts`, `packages/node/src/kitFerramentas.ts`, `config.ts`, `engines/direct.ts`, `packages/ui/src/avatar.tsx`, `dialogos.tsx`, `tests/equipeInicial.test.ts`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `node --import tsx --test tests/equipeInicial.test.ts tests/importarLink.test.ts` passou (catálogo, seed idempotente, isolamento por tenant, kit de visão/navegação).
+
+## 2026-11-04 — 8Token, visão e navegação no nascimento
+
+- Todo bot novo (qualquer conta, inclusive gerente, cofre, receita e link) nasce no 8Token: base `https://8token.tech/v1` (OpenAI), modelo `claude-fable-5.1`. A chave é `EIGHTTOKEN_API_KEY` no `.env` do Hub.
+- Migração idempotente da equipe inicial ainda no motor automático. Escolha manual ou chave colada no bot não é reescrita.
+- Se o 8Token falhar, o Vigia segue para Z.ai, Groq ou Ollama (`exceto` o que acabou de falhar).
+- Visão ligada: imagem multimodal; vídeo sem suporte vira quadros ffmpeg + transcrição. Navegação ligada: `buscar_web` e `navegador` no PC do próprio bot, com instruções no prompt base.
+- Arquivos: `packages/shared/src/padrao.ts`, `packages/hub/src/botManager.ts`, `videoPipeline.ts`, `media.ts`, `chaves.ts`, `packages/node/src/vision.ts`, `buscaWeb.ts`, `kitFerramentas.ts`, `continuarTarefa.ts`, `packages/ui/src/dialogos.tsx`, `.env.example`, `docs/PROVEDORES.md`, `tests/padrao8token.test.ts`.
+- `docs/HANDOFF.md` não está neste repositório.
+- `node --import tsx --test tests/padrao8token.test.ts`: 9 testes ok (padrão, migração, Vigia, visão, pipeline falso e ffmpeg, kit, busca, mock multimodal). O e2e de adoção também passou no 8Token. `EIGHTTOKEN_API_KEY` não está neste ambiente: o ensaio com modelo real fica para o Hub. Falhas já existentes na main (não desta mudança): ociosidade do PC com `sempreLigado`, ordem pollinations/cloudflare, agrupamento da lista e `run_command` fora do kit de vídeo.
+
 ## 2026-11-04 — Receber bot por link
 
 - `POST /api/bots/importar-link` com `modo: preview` (só lê) e `modo: confirmar` (cria o managed bot do usuário logado). Só aceita `https://x.ai/bot/<id>`, busca com timeout de 8s e teto de 1 MB, e não segue redirect para outro domínio.

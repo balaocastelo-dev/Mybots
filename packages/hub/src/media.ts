@@ -13,6 +13,7 @@ import {
 import type { Db } from "./db.js";
 import { redigir } from "./redacao.js";
 import { transcribe, voiceSettings } from "./voice.js";
+import { extratorFfmpeg, pipelineDeVideo } from "./videoPipeline.js";
 
 const env = (k: string, d = "") => process.env[k] ?? d;
 
@@ -136,33 +137,36 @@ export class MediaService {
 
   // ---------- vídeos que chegam: quadros + transcrição ----------
 
-  /** Para cada vídeo/áudio anexado, acrescenta quadros (jpeg) e transcrição. Nunca falha: sem ffmpeg, devolve só os originais. */
-  async enrich(botId: string, attachments: Attachment[]): Promise<Attachment[]> {
+  /**
+   * Vídeo que o modelo não aceita vira quadros (ffmpeg) + transcrição.
+   * `aceitaVideo` manda o arquivo inteiro (Gemini). Sem ffmpeg, devolve o original.
+   */
+  async enrich(botId: string, attachments: Attachment[], opts: { aceitaVideo?: boolean } = {}): Promise<Attachment[]> {
     const out: Attachment[] = [];
     for (const a of attachments) {
       const f = this.fileById(a.id);
       if (!f || !fs.existsSync(f.path) || (!isVideoMime(a.mime) && !isAudioMime(a.mime))) { out.push(a); continue; }
+      if (isVideoMime(a.mime) && opts.aceitaVideo) { out.push(a); continue; }
       let transcript: string | undefined;
       const frames: Attachment[] = [];
       if (isVideoMime(a.mime) && (await hasFfmpeg())) {
         try {
-          const dur = await probeDuration(f.path);
-          const n = clamp(Math.round(dur / 2) || 1, 2, mediaSettings.maxFrames);
-          for (let i = 0; i < n; i++) {
-            const t = dur > 0 ? Math.max(0, Math.min(dur - 0.05, (dur * (i + 0.5)) / n)) : i;
-            const jpg = await frameAt(f.path, t);
-            if (!jpg) continue;
-            const saved = this.saveFile(botId, `${path.parse(a.name).name}-quadro-${i + 1}.jpg`, "image/jpeg", jpg);
-            frames.push({ id: saved.id, name: saved.name, mime: saved.mime, url: saved.url, size: saved.size, derivedFrom: a.id, atSecond: Math.round(t * 10) / 10 });
-          }
+          const pipe = await pipelineDeVideo(f.path, {
+            ...extratorFfmpeg(mediaSettings.ffmpeg, mediaSettings.ffprobe),
+            transcrever: voiceSettings.sttUrl
+              ? async (audio) => transcribe(audio, "audio/mpeg", "audio.mp3")
+              : undefined,
+          }, { maxQuadros: mediaSettings.maxFrames });
+          pipe.quadros.forEach((q, i) => {
+            const saved = this.saveFile(botId, `${path.parse(a.name).name}-quadro-${i + 1}.jpg`, "image/jpeg", q.jpeg);
+            frames.push({ id: saved.id, name: saved.name, mime: saved.mime, url: saved.url, size: saved.size, derivedFrom: a.id, atSecond: q.segundo });
+          });
+          transcript = pipe.transcricao || (pipe.audioExtraido && !voiceSettings.sttUrl ? "(áudio extraído; transcrição indisponível neste Hub)" : undefined);
         } catch (e) { console.error(`[media] quadros de ${a.name}: ${(e as Error).message}`); }
-      }
-      if (voiceSettings.sttUrl) {
+      } else if (isAudioMime(a.mime) && voiceSettings.sttUrl) {
         try {
-          let audio: Buffer | null = null, mime = a.mime;
-          if (isVideoMime(a.mime) && (await hasFfmpeg())) { audio = await extractAudio(f.path); mime = "audio/mpeg"; }
-          else if (isAudioMime(a.mime)) audio = fs.readFileSync(f.path);
-          if (audio?.length) transcript = (await transcribe(audio, mime, mime.includes("mpeg") ? "audio.mp3" : "audio.webm")).trim() || undefined;
+          const audio = fs.readFileSync(f.path);
+          if (audio.length) transcript = (await transcribe(audio, a.mime, a.mime.includes("mpeg") ? "audio.mp3" : "audio.webm")).trim() || undefined;
         } catch (e) { console.error(`[media] transcrição de ${a.name}: ${(e as Error).message}`); }
       }
       out.push({ ...a, ...(transcript ? { transcript } : {}) }, ...frames);
@@ -426,28 +430,3 @@ export async function hasFfmpeg(): Promise<boolean> {
   return ffmpegOk;
 }
 
-function run(bin: string, args: string[], timeout = 120_000): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    execFile(bin, args, { windowsHide: true, timeout, maxBuffer: 64 * 1024 * 1024, encoding: "buffer" }, (e, stdout, stderr) => {
-      if (e) return reject(new Error(`${path.basename(bin)}: ${String(stderr ?? "").slice(-300) || e.message}`));
-      resolve(stdout as unknown as Buffer);
-    });
-  });
-}
-
-async function probeDuration(file: string): Promise<number> {
-  try {
-    const out = await run(mediaSettings.ffprobe, ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", file], 20_000);
-    return Number(out.toString().trim()) || 0;
-  } catch { return 0; }
-}
-
-async function frameAt(file: string, second: number): Promise<Buffer | null> {
-  try { return await run(mediaSettings.ffmpeg, ["-v", "error", "-ss", second.toFixed(2), "-i", file, "-frames:v", "1", "-vf", "scale=768:-2", "-q:v", "4", "-f", "image2", "-vcodec", "mjpeg", "pipe:1"], 30_000); }
-  catch { return null; }
-}
-
-async function extractAudio(file: string): Promise<Buffer | null> {
-  try { return await run(mediaSettings.ffmpeg, ["-v", "error", "-i", file, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "48k", "-f", "mp3", "pipe:1"], 120_000); }
-  catch { return null; }
-}

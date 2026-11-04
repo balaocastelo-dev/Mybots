@@ -3,7 +3,7 @@ import type { BotSummary, ControlState, Group, PendingApproval, PendingQuestion,
 import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, effectiveControl, faseDoStatus } from "@mybots/shared";
 import { useHub, type ToolInfo } from "./hub";
 import { registrarParada, stopEverything } from "./stop";
-import { criarFala, escolherMicrofone, escutaContinua, isSpeaking, listenOnce, microfoneEscolhido, microfones, onSpeaking, speak, speechSupported, stopSpeaking, type EscutaViva, type FalaViva, type VoiceCaps } from "./voice";
+import { criarFala, definirIdiomaStt, escolherMicrofone, escutaContinua, isSpeaking, listenOnce, microfoneEscolhido, microfones, onSpeaking, speak, speechSupported, stopSpeaking, type EscutaViva, type FalaViva, type VoiceCaps } from "./voice";
 import { ContextMenu, type ItemMenu } from "./ContextMenu";
 import { ChipTrocas, FolhaAbrirTroca, type Troca } from "./painel";
 import { PainelDoPc } from "./painelPc";
@@ -13,9 +13,11 @@ import { ApprovalCard, Bolha, Message, QuestionCard, Visualizador, type ArquivoD
 import { DesktopAoVivo } from "./desktop";
 import { BotSettingsPanel, RoutinesPanel } from "./dialogos";
 import { acharLinkBotX } from "./linkBot";
+import { PerfilDoBot } from "./perfilBot";
 import { QuadroKanban } from "./colab/kanban";
 import { tarefasDoBot } from "./colab/normalizar";
 import type { PacoteColab, Tarefa } from "./colab/tipos";
+import { ModalConectores } from "./conectores";
 
 export type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
 
@@ -33,6 +35,8 @@ export type ConvProps = {
   empresaNome?: string;
   abaInicial?: "tarefas" | null;
   tarefaInicial?: string | null;
+  abrirConectores?: boolean;
+  onModelosDeBots?: () => void;
   colab?: {
     tarefas: Tarefa[];
     fonte?: PacoteColab["fonte"];
@@ -44,8 +48,9 @@ export type ConvProps = {
   };
 };
 
-export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, onLinkDeBot, onAbrirEquipe, onAbrirBot, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, colab }: ConvProps) {
+export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, onLinkDeBot, onAbrirEquipe, onAbrirBot, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, abrirConectores = false, onModelosDeBots, colab }: ConvProps) {
   const [text, setText] = useState("");
+  const [conectoresAberto, setConectoresAberto] = useState(abrirConectores);
   const [vozAberta, setVozAberta] = useState(true);
   const [listening, setListening] = useState(false);
   const [level, setLevel] = useState(0);
@@ -53,6 +58,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const [falandoMsgId, setFalandoMsgId] = useState<string | null>(null);
   const falandoMsgRef = useRef<string | null>(null);
   const [showRoutines, setShowRoutines] = useState(false);
+  const [perfilAberto, setPerfilAberto] = useState(false);
   const [showTarefas, setShowTarefas] = useState(abaInicial === "tarefas");
   const convVista = useRef(conversationId);
   useEffect(() => {
@@ -140,6 +146,8 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
   const busyRef = useRef(false);
 
   const bot = target.kind === "bot" ? target.bot : null;
+  useEffect(() => { setPerfilAberto(false); }, [conversationId]);
+  useEffect(() => { definirIdiomaStt(bot?.voiceLang ?? ""); }, [bot?.id, bot?.voiceLang]);
   const busy = target.kind === "bot" ? target.bot.busy : target.group.members.some((m) => bots.find((b) => b.id === m)?.busy);
   const statusText = target.kind === "bot" ? target.bot.status : bots.filter((b) => target.group.members.includes(b.id) && b.busy).map((b) => `${b.name.split(" ")[0]}: ${b.status}`).join(" · ");
 
@@ -412,7 +420,9 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
         </button>
         {bot ? <Avatar bot={bot} size={40} /> : <div className="avatar group-avatar" style={{ width: 40, height: 40 }}>👥</div>}
         <div className="chat-title">
-          <b className="chat-titulo-nome">{title}</b>
+          {bot
+            ? <button type="button" className="chat-titulo-nome chat-titulo-bot" title="Perfil do bot" aria-haspopup="dialog" onClick={() => setPerfilAberto(true)}>{title}</button>
+            : <b className="chat-titulo-nome">{title}</b>}
           <small><span className="sub-texto">{subtitle}</span>{bot?.model && <span className="chip">{bot.engine} · {bot.provider}/{bot.model}</span>}{bot?.online && <span className={"chip mode-" + effectiveControl(control.global, bot.controlMode)} title={CONTROL_DESCRIPTIONS[effectiveControl(control.global, bot.controlMode)]}>{CONTROL_LABELS[effectiveControl(control.global, bot.controlMode)]}{control.global ? " (global)" : ""}</span>}</small>
           {bot && (bot.gerente || bot.manages?.length) && onAbrirEquipe && (
             <button type="button" className="chip-trocas chip-equipe" onClick={onAbrirEquipe}>Trocas da equipe</button>
@@ -589,6 +599,9 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       <footer className="composer">
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => { void onFiles(e.target.files); e.target.value = ""; }} />
         <button className="icon-btn mais" type="button" title="Anexar arquivo" aria-label="Anexar" onClick={() => fileRef.current?.click()}>+</button>
+        <button className="icon-btn clipe" type="button" title="Conectar aplicativos" aria-label="Conectar aplicativos" onClick={() => setConectoresAberto(true)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M21.4 11.6l-8.5 8.5a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" /></svg>
+        </button>
         <textarea
           ref={textRef}
           value={text}
@@ -631,9 +644,11 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           </button>
         )}
       </footer>
+      {conectoresAberto && <ModalConectores onFechar={() => setConectoresAberto(false)} onModelos={() => onModelosDeBots?.()} />}
       {folha && <FolhaAbrirTroca trocas={folha} bots={bots} Avatar={Avatar} onEscolher={(t) => onAbrirTroca(t.conversationId)} onFechar={() => setFolha(null)} />}
       {arquivoAberto && <Visualizador files={arquivoAberto.files} index={arquivoAberto.index} onFechar={() => setArquivoAberto(null)} />}
       {desktopAberto && bot && <DesktopAoVivo bot={bot} empresaId={bot.empresaId ?? null} nome={empresaNome} onFechar={() => setDesktopAberto(false)} />}
+      {perfilAberto && bot && <PerfilDoBot bot={bot} routines={routines} tarefas={tarefasDeste} onFechar={() => setPerfilAberto(false)} />}
       </>
       )}
       </div>

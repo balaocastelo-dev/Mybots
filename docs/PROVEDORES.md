@@ -1,3 +1,20 @@
+# Padrão da casa (04/11/2026)
+
+Todo bot novo, em qualquer conta, nasce no **8Token**:
+
+| | |
+|---|---|
+| provedor | `8token` |
+| base | `https://8token.tech/v1` (compatível com a API da OpenAI, `/chat/completions`) |
+| modelo | `claude-fable-5.1` |
+| chave | `EIGHTTOKEN_API_KEY` no `.env` do Hub. Opcional: `EIGHTTOKEN_BASE_URL`, `EIGHTTOKEN_MODEL` |
+
+A chave não entra no `mybots-node.json`, no chat nem no log. O nó lê o ambiente do Hub.
+
+O Claude desse catálogo aceita texto e imagem, não vídeo. Imagem anexada vai multimodal. Vídeo vira quadros (ffmpeg) e transcrição do áudio. Visão e navegação (`buscar_web` + `navegador` no PC do próprio bot) nascem ligadas.
+
+Se o 8Token falhar (rede, 429, 5xx), o Vigia troca de provedor. A ordem padrão continua `zai,groq,ollama` (`MYBOTS_FALLBACK_ORDEM`). Quem já escolheu outro motor à mão não é reescrito. A equipe inicial que ainda estava no padrão automático (Z.ai / o que o gerente ganhava sozinho) migra uma vez; rodar de novo não mexe.
+
 # A roleta de cotas grátis (30/10/2026)
 
 O cliente liga as chaves dele no primeiro dia e o MyBots gira entre os provedores até

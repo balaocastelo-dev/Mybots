@@ -10,6 +10,7 @@ import type { NodeConfig } from "./config.js";
 import type { HubClient } from "./hubClient.js";
 import type { ToolDef } from "./providers/types.js";
 import { captureScreen, mimeOf } from "./screenshot.js";
+import { linksDaBusca, textoDaBusca } from "./buscaWeb.js";
 import { descrever, visionPlan } from "./vision.js";
 
 export type ToolContext = {
@@ -128,7 +129,8 @@ export const TOOL_DEFS: ToolDef[] = [
   { name: "write_file", description: "Cria ou sobrescreve um arquivo de texto dentro do workspace.", parameters: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] } },
   { name: "list_dir", description: "Lista arquivos e pastas de um diretório.", parameters: { type: "object", properties: { path: { type: "string", description: "padrão: workspace" } } } },
   { name: "read_attachment", description: "Le o conteudo de um anexo do chat pelo id (PDF, DOCX, txt, md, csv). O Hub extrai o texto com auth — nao use fetch_url em /api/files. Para PDF grande, use parte=1,2,3...", parameters: { type: "object", properties: { id: { type: "string", description: "id do anexo (vem em [anexo: ... id=...])" }, parte: { type: "number", description: "pedaco do texto (1 por padrao)" } }, required: ["id"] } },
-  { name: "fetch_url", description: "Baixa o conteudo de uma URL publica (texto/HTML simplificado, ate 20 mil). NAO use para anexos do chat (/api/files/...): use read_attachment com o id do anexo.", parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
+  { name: "fetch_url", description: "Baixa o conteudo de uma URL publica (texto/HTML simplificado, ate 20 mil). NAO use para anexos do chat (/api/files/...): use read_attachment com o id do anexo. Prefira navegador no PC deste bot.", parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
+  { name: "buscar_web", description: "Busca na internet e devolve títulos e links. Depois ABRA o melhor link com a ferramenta navegador no PC DESTE bot e leia a página (acao=ler) antes de responder. Não encerre só dizendo que vai buscar.", parameters: { type: "object", properties: { consulta: { type: "string", description: "o que procurar, em poucas palavras" }, limite: { type: "number", description: "quantos links (5 por padrão, no máximo 8)" } }, required: ["consulta"] } },
   { name: "ask_user", description: "Faz uma pergunta ao chefe e espera a resposta. Passe options para ele responder clicando num botão.", parameters: { type: "object", properties: { question: { type: "string" }, options: { type: "array", items: { type: "string" } } }, required: ["question"] } },
   { name: "search_knowledge", description: "Busca na BASE DE CONHECIMENTO comum da casa, que e a mesma para todos os bots. query com palavras-chave procura por assunto; query=\"*\" devolve o indice INTEIRO da base; id (com parte=1,2,3...) le um documento inteiro em pedacos. Antes de dizer que nao sabe algo da casa, busque aqui.", parameters: { type: "object", properties: { query: { type: "string", description: "palavras-chave do que você precisa saber" }, limit: { type: "number", description: "quantos resultados (5 por padrão)" }, id: { type: "string", description: "para LER um documento inteiro: o id que veio no resultado da busca" }, parte: { type: "number", description: "com id: qual pedaço ler (1, 2, 3…)" } }, required: ["query"] } },
   { name: "learn_knowledge", description: "Guarda algo novo na base comum, para toda a equipe passar a saber. Use quando descobrir um procedimento, um jeito de fazer, dados de um fornecedor ou produto.", parameters: { type: "object", properties: { titulo: { type: "string" }, resumo: { type: "string", description: "uma linha: quando usar isto" }, conteudo: { type: "string" }, tipo: { type: "string", enum: ["skill", "conhecimento", "procedimento", "ferramenta", "contato", "produto"] }, tags: { type: "array", items: { type: "string" } } }, required: ["titulo", "conteudo"] } },
@@ -339,6 +341,7 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
       return { output: typeof r.data === "string" ? r.data : JSON.stringify(r.data), ok: r.ok };
     }
     case "fetch_url": return await fetchUrl(String(args.url ?? ""), ctx);
+      case "buscar_web": return await buscarWeb(String(args.consulta ?? args.query ?? ""), Number(args.limite) || 5, ctx);
       case "ask_user": {
         const options = Array.isArray(args.options) ? args.options.map(String) : [];
         if (ctx.mode === "deus") {
@@ -613,6 +616,23 @@ function listDir(p: string, ctx: ToolContext) {
   if (!fs.existsSync(abs)) return { output: `Pasta não existe: ${abs}`, ok: false };
   const entries = fs.readdirSync(abs, { withFileTypes: true }).slice(0, 500);
   return { output: `${abs}\n` + entries.map((e) => (e.isDirectory() ? "[dir]  " : "       ") + e.name).join("\n"), ok: true };
+}
+
+async function buscarWeb(consulta: string, limite: number, ctx: ToolContext): Promise<{ output: string; ok: boolean }> {
+  const q = consulta.trim();
+  if (!q) return { output: "Diga o que buscar.", ok: false };
+  ctx.setStatus("Buscando na web");
+  try {
+    const r = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q), {
+      signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(20_000)]),
+      headers: { "user-agent": "MyBots/0.1", accept: "text/html" },
+    });
+    const html = await r.text();
+    const links = linksDaBusca(html, Math.max(1, Math.min(8, limite || 5)));
+    return { output: textoDaBusca(q, links), ok: r.ok && links.length > 0 };
+  } catch (e) {
+    return { output: `A busca falhou (${(e as Error).message}). Abra um endereço direto com a ferramenta navegador, no PC deste bot.`, ok: false };
+  }
 }
 
 async function fetchUrl(url: string, ctx: ToolContext) {

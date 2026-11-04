@@ -346,3 +346,41 @@ export function saudacaoDeReceita(receita: Receita, botName: string): string {
   if (gs) return `Oi — sou ${botName}. ${gs}`;
   return `Oi — sou ${botName} (${receita.profile.name}). Pronto para começar.`;
 }
+
+/**
+ * Banco de capacidades BASE (receitas/_base/capacidades-base.json): skills que TODO
+ * bot novo recebe, qualquer que seja a especialidade. Gravadas na base comum com id
+ * fixo (base-<nome>), entao chamar de novo so atualiza — nao duplica. Sem segredos.
+ */
+export function aplicarCapacidadesBase(db: Db): { skills: number; erros: string[] } {
+  const erros: string[] = [];
+  let skills = 0;
+  const p = path.join(pastaReceitas(), "_base", "capacidades-base.json");
+  if (!fs.existsSync(p)) return { skills, erros };
+  let base: { skills?: Array<{ name?: string; description?: string; content?: string; origem?: string }> };
+  try {
+    base = JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch (e) {
+    return { skills, erros: [`capacidades-base: ${(e as Error).message}`] };
+  }
+  for (const sk of base.skills || []) {
+    try {
+      const name = String(sk.name || "").trim();
+      const content = String(sk.content || "").trim();
+      if (!name || !content) continue;
+      db.saveSaber({
+        id: `base-${name}`.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").slice(0, 80),
+        titulo: sk.description || `Skill: ${name}`,
+        resumo: `Capacidade base de todo bot (${name})${sk.origem ? ` — inspirada em ${sk.origem}` : ""}`,
+        conteudo: content,
+        tipo: "procedimento",
+        tags: ["skill", "capacidade-base", name],
+        origem: "capacidades-base",
+      } as any);
+      skills++;
+    } catch (e) {
+      erros.push(`base ${sk.name}: ${(e as Error).message}`);
+    }
+  }
+  return { skills, erros };
+}

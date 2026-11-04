@@ -1,0 +1,31 @@
+{
+  "versao": 1,
+  "id": "_base",
+  "descricao": "Banco de capacidades BASE: todo bot novo do MyBots nasce com estas skills, qualquer que seja a especialidade. Inspirado em 4 bots oficiais do Grok Bot Marketplace: dial bot (ligacoes), dr eggbot (projetar bots), Director Bot (video) e SEO & AEO Desk (pautas para busca e respostas de IA). Sem chaves: o que depende de conta/chave so funciona depois que o chefe configurar.",
+  "skills": [
+    {
+      "name": "ligacao_telefonica",
+      "origem": "dial bot (Grok Bot Team)",
+      "description": "Fazer uma ligacao telefonica com objetivo definido e relatar o resultado",
+      "content": "---\nname: ligacao_telefonica\ndescription: >\n  Use quando o chefe pedir para ligar para alguem (agendar, confirmar, perguntar preco, cobrar retorno).\n---\n\n# Ligacao telefonica (inspirado no dial bot)\n\n1. Monte o roteiro ANTES: numero, para quem, objetivo em 1 frase, o que pode e o que NAO pode dizer/prometer, informacoes que o atendente vai pedir (nome, CPF? endereco?) e o plano B (caixa postal, transferencia, horario fechado).\n2. Mostre o roteiro ao chefe e espere o SIM dele, com o numero escrito. Ligacao e acao externa: sem aprovacao explicita, nao liga.\n3. Ligue pela ferramenta de voz configurada na casa (URA/VoIP do MyBots ou provedor de chamadas). Se nao houver ferramenta de chamada funcionando (veja minhas_capacidades), diga o que falta e PARE.\n4. Na ligacao: identifique-se como assistente do chefe, seja curto, nao invente dados, nao aceite compromisso, pagamento ou contrato.\n5. Depois relate: atendeu? com quem falou, o que ficou combinado, proximos passos, duracao e a transcricao/gravacao se houver. Nunca diga que deu certo sem a evidencia.\n6. Grave o combinado com remember se outro bot precisar.\n\nRegra de teste: so ligue/mande mensagem de teste para numeros que o chefe liberou para teste.\n"
+    },
+    {
+      "name": "projetar_bot",
+      "origem": "dr eggbot (Grok Bot Team)",
+      "description": "Desenhar um bot novo enxuto: um trabalho, uma voz, anti-trabalhos e so as ferramentas necessarias",
+      "content": "---\nname: projetar_bot\ndescription: >\n  Use quando o chefe pedir um bot novo, ou quando um bot existente estiver fazendo coisa demais.\n---\n\n# Projetar um bot (inspirado no dr eggbot)\n\n1. Faca no maximo 3 perguntas de preferencia (o trabalho, para quem, com que frequencia). Se o trabalho ja estiver claro, nao pergunte: aja.\n2. Escreva a ficha em 6 linhas:\n   - UM trabalho (uma frase, verbo + resultado).\n   - UMA voz (tom e idioma).\n   - Anti-trabalhos explicitos: o que ele NAO faz.\n   - Ferramentas: so as que o trabalho usa. Nenhuma sobrando.\n   - Gatilho: sob demanda ou rotina (cron).\n   - Como prova que fez: o que ele mostra no fim (arquivo, print, link).\n3. Escolha a especialidade/receita mais proxima no catalogo do MyBots e diga o que muda.\n4. Mostre a ficha ao chefe; crie o bot pelo fluxo normal do MyBots so depois do sim.\n5. Bot de codigo: um trabalho, sem enrolacao, verificado (testa antes de dizer pronto, abre PR, nunca faz merge).\n"
+    },
+    {
+      "name": "direcao_video",
+      "origem": "Director Bot (Grok Bot Team)",
+      "description": "Transformar um briefing em video curto: planejar, gerar/gravar, montar e entregar",
+      "content": "---\nname: direcao_video\ndescription: >\n  Use quando pedirem video: anuncio, explicativo, reels, curta, clipe ou micro-novela.\n---\n\n# Direcao de video (inspirado no Director Bot)\n\n1. Briefing: objetivo, publico, plataforma (formato 9:16, 1:1 ou 16:9), duracao, tom, marca, CTA. Se faltar algo essencial, pergunte UMA vez.\n2. Plano: conceito em 1 frase + roteiro + decupagem cena a cena (tempo, imagem, fala/legenda, audio).\n3. Mostre o plano e espere o OK antes de gastar geracao.\n4. Producao: gere imagens/clipes com a ferramenta de imagem/video da casa, ou use o material do chefe. Mantenha personagem, paleta e estilo iguais entre cenas.\n5. Montagem: corte, legenda queimada, trilha/voz, vinheta final com CTA (ffmpeg se disponivel; confira com minhas_capacidades).\n6. Entrega: o arquivo final + thumbnail + legenda do post + texto alternativo. Mostre o video, nao descreva.\n7. Nunca publique sozinho: postar em rede social so com o sim do chefe.\n"
+    },
+    {
+      "name": "pauta_seo_aeo",
+      "origem": "SEO & AEO Desk (Grok Bot Team)",
+      "description": "Transformar palavras-chave ou dados do Search Console em ideias e briefings prontos para o redator, para Google e respostas de IA",
+      "content": "---\nname: pauta_seo_aeo\ndescription: >\n  Use quando pedirem pauta, ideias de conteudo, SEO, AEO/GEO ou 'aparecer no ChatGPT/Google'.\n---\n\n# Pauta SEO & AEO (inspirado no SEO & AEO Desk)\n\nEntrada: lista de palavras-chave colada OU export/conexao do Google Search Console. Sem isso, peca.\n\n1. Agrupe as palavras por intencao (informacional, comparativa, comercial, local) e por tema.\n2. Para cada grupo, verifique na web o que hoje aparece no Google e o que assistentes de IA respondem; anote quem eles citam.\n3. Priorize: impressao alta + posicao 5-20 (Search Console) ou lacuna clara frente aos concorrentes. NUNCA invente volume de busca: sem dado, escreva 'sem dado'.\n4. Briefing por pauta: palavra principal e secundarias, intencao, titulo e H1, meta description, slug, outline H2/H3, perguntas que a IA faz (bloco FAQ com resposta direta de 40-60 palavras), dados/fontes a citar, schema sugerido (FAQPage, HowTo, Product, LocalBusiness), links internos, CTA.\n5. AEO: primeira frase de cada secao responde a pergunta direto; entidades e numeros claros; fonte citavel.\n6. Entregue em tabela + 1 briefing completo por pauta prioritaria. Fontes com link.\n"
+    }
+  ]
+}

@@ -858,7 +858,7 @@ export class Hub {
       ...this.summary(b),
       empresaId: b.empresaId ?? null,
       ponte: !!b.ponte,
-      ownerUserId: (b as any).ownerUserId || repo?.ownerUserIdDoBot(b.id) || null,
+      ownerUserId: repo?.ownerUserIdDoBot(b.id) || (b as any).ownerUserId || null,
     }));
   }
 
@@ -1912,7 +1912,7 @@ export class Hub {
     // lazy require evita ciclo no load
     const repo = getUsuariosRepo();
     return all.filter((b) => {
-      const owner = (b as any).ownerUserId || repo?.ownerUserIdDoBot(b.id) || null;
+      const owner = repo?.ownerUserIdDoBot(b.id) || (b as any).ownerUserId || null;
       if (user.role === "owner") {
         if (escopo === "todos") return true;
         if (escopo === "meus") return !owner || owner === user.uid;

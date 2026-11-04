@@ -87,6 +87,9 @@ export class UsuariosRepo {
     this.db.prepare(`UPDATE managed_bots SET owner_user_id=? WHERE owner_user_id IS NULL OR owner_user_id=''`).run(u.id);
     this.db.prepare(`UPDATE groups SET owner_user_id=? WHERE owner_user_id IS NULL OR owner_user_id=''`).run(u.id);
     this.db.prepare(`UPDATE files SET owner_user_id=? WHERE owner_user_id IS NULL OR owner_user_id=''`).run(u.id);
+    // Dono real do bot gerenciado vale mais que a migracao (bot criado por cliente nao vira do dono).
+    this.db.prepare(`UPDATE bots SET owner_user_id=(SELECT m.owner_user_id FROM managed_bots m WHERE m.id=bots.id)
+      WHERE EXISTS (SELECT 1 FROM managed_bots m WHERE m.id=bots.id AND m.owner_user_id IS NOT NULL AND m.owner_user_id<>'')`).run();
     this.db.prepare(`UPDATE bots SET owner_user_id=? WHERE owner_user_id IS NULL OR owner_user_id=''`).run(u.id);
     this.db.prepare(`UPDATE routines SET owner_user_id=? WHERE owner_user_id IS NULL OR owner_user_id=''`).run(u.id);
     // Tambem no JSON def dos managed bots
@@ -137,6 +140,7 @@ export class UsuariosRepo {
 
   setOwnerUserIdManaged(botId: string, ownerUserId: string) {
     this.db.prepare(`UPDATE managed_bots SET owner_user_id=? WHERE id=?`).run(ownerUserId, botId);
+    try { this.db.prepare(`UPDATE bots SET owner_user_id=? WHERE id=?`).run(ownerUserId, botId); } catch { /* coluna via ensure */ }
     const r = this.db.prepare(`SELECT def FROM managed_bots WHERE id=?`).get(botId) as { def?: string } | undefined;
     if (!r?.def) return;
     try {

@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import { botOfConversation, isControlMode } from "@mybots/shared";
 import { config, tokenAllows, botForToken, raizDoProjeto } from "./config.js";
@@ -44,7 +45,7 @@ import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
 import { authOnlineAtivo, cookieDe, emitirTicketWs, hubTokenLoopbackOk, lerTicketWs, registrarAuthOnline, rotaPublicaOnline, sessaoDoReq, sessaoValida, SESSION_COOKIE, setUsuariosRepo, ticketWsDoReq, usuarioDoReq } from "./authOnline.js";
-import { registrarAuthGoogle } from "./authGoogle.js";
+import { registrarAuthGoogle, definirAoEntrarGoogle } from "./authGoogle.js";
 import { UsuariosRepo } from "./usuarios.js";
 import { escopoDeQuery, filtrarBotsPorUsuario, filtrarPorOwnerUserId, podeAcessarBot } from "./isolamento.js";
 import { config as hubConfig } from "./config.js";
@@ -52,6 +53,7 @@ import { config as hubConfig } from "./config.js";
 export async function startServer(hub: Hub) {
   instalarRedacao();
   const usuarios = new UsuariosRepo(hub.db.db);
+  const donosPendentes = new Map<string, string>();
   usuarios.ensure();
   const ownerEmail = (hubConfig.ownerEmail || hubConfig.usuarioOnline || "").toLowerCase();
   if (ownerEmail) usuarios.ensureOwner(ownerEmail, hubConfig.usuarioOnline || ownerEmail);
@@ -1539,6 +1541,32 @@ export async function startServer(hub: Hub) {
     hub.db.audit(null, "empresa.equipe-inicial", { empresa, out });
     return out;
   }
+  // Equipe inicial por conta Google de cliente: nasce com os bots de equipe-inicial.json, todos dele.
+  // O dono vai por nonce de uso unico (so em memoria) na chamada interna; nunca por header livre.
+  definirAoEntrarGoogle(async (user) => {
+    if (user.role === "owner") return;
+    const sufixo = user.id.replace(/^usr_/, "").slice(0, 8);
+    const jaTem = new Set(hub.db.listBots().map((b) => b.id));
+    const empresa = hub.db.listEmpresas()[0]?.id;
+    if (!empresa) return;
+    const out: Array<{ receita: string; status: string }> = [];
+    for (const rid of idsEquipeInicial()) {
+      const botId = `${rid}-${sufixo}`.slice(0, 40).replace(/-$/, "");
+      if (jaTem.has(botId)) continue;
+      const nonce = crypto.randomBytes(16).toString("hex");
+      donosPendentes.set(nonce, user.id);
+      try {
+        const res = await app.inject({
+          method: "POST", url: "/api/receitas/import",
+          headers: { "x-mybots-interno": "equipe-inicial", "x-mybots-dono-nonce": nonce, authorization: `Bearer ${config.hubToken}` },
+          payload: { receita: carregarReceita(rid), id: botId, empresa },
+        });
+        out.push({ receita: rid, status: String(res.statusCode) });
+      } catch (e) { out.push({ receita: rid, status: (e as Error).message }); }
+      finally { donosPendentes.delete(nonce); }
+    }
+    if (out.length) hub.db.audit(null, "usuario.equipe-inicial", { uid: user.id, out });
+  });
   app.get("/api/equipe-inicial", async () => ({ receitas: idsEquipeInicial() }));
   app.post("/api/equipe-inicial", async (req, reply) => {
     const empresa = String((req.body as any)?.empresa || hub.db.listEmpresas()[0]?.id || "");
@@ -1625,6 +1653,13 @@ export async function startServer(hub: Hub) {
     const r = manager.create(createBody);
     if ("error" in r) return reply.code(400).send(r);
     hub.db.setEmpresaDoBot(r.id, r.name, empresa, false);
+    {
+      const nonce = String(req.headers["x-mybots-dono-nonce"] || "");
+      const donoInterno = nonce ? donosPendentes.get(nonce) : undefined;
+      if (nonce) donosPendentes.delete(nonce);
+      const dono = donoInterno || (authOnlineAtivo() ? usuarioDoReq(req)?.id : undefined);
+      if (dono) createBody.ownerUserId = dono;
+    }
     try {
       const esp = porId(espId) || porId(idPadrao());
       for (const sk of carregarSkillsDaEspecialidade(esp)) {
@@ -1645,6 +1680,7 @@ export async function startServer(hub: Hub) {
     hub.db.audit(r.id, "receita.import", applied);
     try { hub.storeMessage(dmConversation(r.id), hub.botSender(r.id), saudacaoDeReceita(receita, r.name)); } catch {}
     hub.db.upsertBot({ id: r.id, name: r.name, role: r.role, avatar: r.avatar, color: r.color, voice: r.voice }, { engine: r.engine, provider: r.provider?.kind, model: r.provider?.model });
+    if (createBody.ownerUserId) usuarios.setOwnerUserIdManaged(r.id, createBody.ownerUserId);
     try { registrarPc({ botId: r.id, empresaId: empresa, nome: r.name }); marcarSempreLigado(r.id, true); definirAcessoPc(r.id, true); void ligarPc(r.id); } catch {}
     hub.broadcastKnowledge();
     hub.botUpdate(r.id);

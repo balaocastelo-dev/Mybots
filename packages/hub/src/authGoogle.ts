@@ -37,6 +37,11 @@ function clearTempCookieMulti(reply: FastifyReply, nome: string) {
   appendSetCookie(reply, `${nome}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
+type AoEntrarGoogle = (user: { id: string; email: string; role: string }, novo: boolean) => Promise<void> | void;
+let aoEntrar: AoEntrarGoogle | null = null;
+/** Chamado apos cada login Google (novo=true no primeiro login da conta). */
+export function definirAoEntrarGoogle(fn: AoEntrarGoogle) { aoEntrar = fn; }
+
 export function registrarAuthGoogle(app: FastifyInstance) {
   app.get("/api/auth/google", async (_req, reply) => {
     if (!googleOAuthAtivo()) {
@@ -109,12 +114,17 @@ export function registrarAuthGoogle(app: FastifyInstance) {
     if (ownerEmail && String(info.email).toLowerCase() === ownerEmail) {
       repo.ensureOwner(ownerEmail, info.name || info.email);
     }
+    const jaExistia = !!repo.getByEmail(String(info.email));
     const user = repo.upsertGoogle({
       email: String(info.email),
       name: String(info.name || info.email),
       googleSub: String(info.sub),
       ownerEmail,
     });
+    if (aoEntrar) {
+      try { await aoEntrar({ id: user.id, email: user.email, role: user.role }, !jaExistia); }
+      catch (e) { console.error("[auth.google] equipe inicial: " + (e as Error).message); }
+    }
     setSessionCookie(reply, { u: user.email, uid: user.id, role: user.role, m: "google" });
     return reply.redirect("/");
   });

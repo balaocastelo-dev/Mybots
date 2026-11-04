@@ -1,5 +1,14 @@
 # Progresso
 
+## 2026-11-01 — Casca Android (WebView) do painel público
+
+- App nativo em `android/`, pacote `info.balao.mybots`, minSdk 24. Abre `https://www.balao.info/mybots` com JavaScript, DOM storage, cookie de sessão (aceita cookie e cookie de terceiro, flush ao pausar), voltar no histórico, puxar no topo ou ícone para recarregar, tela “Sem conexão” com “Tentar novamente”, seletor de arquivo, download e link externo no navegador.
+- Não mexe no Hub, no nó, nem nas portas 8787/8791. O pareamento adb de cada bot continua em `docs/ANDROID.md`.
+- Workflow `.github/workflows/android-apk.yml` compila o APK debug e publica o artifact `MyBots-debug`.
+- Arquivos: `android/**`, `.github/workflows/android-apk.yml`, `README.md`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `./gradlew assembleDebug testDebugUnitTest` passou (3 testes). `assembleRelease` também passou, assinado com a chave de debug. A casca não entra no `npm test`.
+
 ## 2026-10-31 — Tokens e ajustes de UI (specs + análise)
 
 - Balcão/Bancada voltam a mandar na cor: acento claro `#E10600`, perigo `#d4453c` (o Parar deixa de parecer botão primário roxo). Tipografia Karla + Bricolage. Avatares 42 / 80 / 144 e balão de 24px metade para fora.

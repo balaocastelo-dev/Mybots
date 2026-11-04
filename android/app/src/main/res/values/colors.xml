@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fundo">#0B1116</color>
+    <color name="barra">#0B1116</color>
+    <color name="acento">#E10600</color>
+    <color name="texto">#F4F7FA</color>
+    <color name="texto_secundario">#B7C2CC</color>
+    <color name="branco">#FFFFFF</color>
+    <color name="icone_fundo">#0B1116</color>
+</resources>

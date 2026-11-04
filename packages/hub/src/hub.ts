@@ -6,7 +6,7 @@ import {
   type PendingApproval, type PendingQuestion, type Routine, type Sender, type StoredMessage, type UiToHub,
   type Saber,
   type SaberTipo,
-  botOfConversation, cortarFala, dmConversation, effectiveControl, faseDoStatus, groupOfConversation, isControlMode, needsHumanApproval, newId, pairConversation, PROTOCOL_VERSION, SABER_LABELS,
+  botOfConversation, cortarFala, dmConversation, effectiveControl, faseDoStatus, groupOfConversation, isControlMode, modeloAceitaVideo, needsHumanApproval, newId, pairConversation, PROTOCOL_VERSION, SABER_LABELS,
 } from "@mybots/shared";
 import { Db } from "./db.js";
 import { Cofre } from "./cofre.js";
@@ -2177,7 +2177,10 @@ export class Hub {
     // videos/audios: quadros + transcicao; documentos: texto extraido no Hub
     if (atts.some((a) => /^(video|audio)\//i.test(a.mime))) {
       const owner = botOfConversation(conversationId) ?? from.id;
-      void this.media.enrich(owner, atts)
+      const alvo = botOfConversation(conversationId);
+      const cadastro = alvo ? this.db.listBots().find((b) => b.id === alvo) : undefined;
+      const aceitaVideo = !!(cadastro && modeloAceitaVideo(cadastro.provider || "", cadastro.model || ""));
+      void this.media.enrich(owner, atts, { aceitaVideo })
         .then((m) => enriquecerAnexos(m))
         .then(deliver, (e) => { console.error(`[hub] preparo de midia: ${(e as Error).message}`); void enriquecerAnexos(atts).then(deliver); });
     } else if (atts.some((a) => ehDocumentoLivel(a.mime || "", a.name))) {

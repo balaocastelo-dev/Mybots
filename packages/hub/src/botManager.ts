@@ -4,7 +4,8 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type ControlMode, isControlMode, newId } from "@mybots/shared";
+import { type ControlMode, type EscolhaProvedor, aplicarPadrao, baseDo8token, blocoVisaoEWeb, decidirPadrao, escolhaDoInput, isControlMode, newId, PADRAO_DA_CASA } from "@mybots/shared";
+export { PADRAO_DA_CASA };
 import type { Plano } from "@mybots/soul-bank";
 import { materializar, prepararNascimento } from "./almas.js";
 import { config } from "./config.js";
@@ -41,6 +42,12 @@ export type ManagedBotDef = {
   ownerUserId?: string;
   /** alma com que nasceu, se nasceu com uma */
   alma?: string;
+  /** receita de origem (equipe inicial). A migração não trata isto como escolha manual. */
+  receitaId?: string;
+  /** padrao = nasceu no motor da casa; manual = o dono escolheu e a migração não mexe */
+  providerEscolha?: EscolhaProvedor;
+  /** visão e navegação nascem ligadas. false só se o dono desligar. */
+  capacidades?: { visao?: boolean; navegacaoWeb?: boolean };
 };
 
 export type ManagedBotStatus = ManagedBotDef & { running: boolean; pid?: number; restarts: number; lastExit?: number | null };
@@ -50,8 +57,8 @@ export const PROVIDERS = [
   { kind: "groq", label: "Groq — rapido, contexto pequeno", engines: ["direct"], needsKey: true, keyEnv: "GROQ_API_KEY", defaultModel: "qwen/qwen3.8-27b", defaultBaseURL: "https://api.groq.com/openai/v1", models: ["qwen/qwen3.8-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b"] },
   { kind: "cerebras", label: "Cerebras — muito rapido, 8K de contexto", engines: ["direct"], needsKey: true, keyEnv: "CEREBRAS_API_KEY", defaultModel: "llama-3.3-70b", defaultBaseURL: "https://api.cerebras.ai/v1", models: ["llama-3.3-70b", "qwen-3-32b"] },
   { kind: "mistral", label: "Mistral", engines: ["direct"], needsKey: true, keyEnv: "MISTRAL_API_KEY", defaultModel: "mistral-small-latest", defaultBaseURL: "https://api.mistral.ai/v1", models: ["mistral-small-latest"] },
-  { kind: "8token", label: "Claude via 8Token (pago, inteligente, mais lento)", engines: ["direct"], needsKey: true, keyEnv: "EIGHTTOKEN_API_KEY", defaultModel: "claude-sonnet-5", defaultBaseURL: "https://8token.tech", models: ["claude-sonnet-5", "claude-opus-5-5", "claude-fable-5.1"] },
-  { kind: "anthropic", label: "Claude (Anthropic) — padrao da casa", engines: ["direct", "opencode"], needsKey: true, keyEnv: "ANTHROPIC_API_KEY", defaultModel: "claude-haiku-4-5", models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"] },
+  { kind: "8token", label: "8Token — padrão da casa (OpenAI em 8token.tech/v1)", engines: ["direct"], needsKey: true, keyEnv: "EIGHTTOKEN_API_KEY", defaultModel: "claude-fable-5.1", defaultBaseURL: "https://8token.tech/v1", models: ["claude-fable-5.1", "claude-sonnet-5", "claude-opus-5-5"] },
+  { kind: "anthropic", label: "Claude (Anthropic)", engines: ["direct", "opencode"], needsKey: true, keyEnv: "ANTHROPIC_API_KEY", defaultModel: "claude-haiku-4-5", models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"] },
   { kind: "opencode", label: "OpenCode — modelos grátis", engines: ["opencode"], needsKey: false, keyEnv: "", defaultModel: "big-pickle", models: ["big-pickle", "glm-5.3-flash-free", "deepseek-v4.1-flash-free", "nemotron-3.5-lightning-free", "mimo-v2.6-flash-free", "flint-40b-free"] },
   { kind: "gemini", label: "Google Gemini", engines: ["direct", "opencode"], needsKey: true, keyEnv: "GEMINI_API_KEY", defaultModel: "gemini-3.8-flash", models: ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.0-flash"] },
   { kind: "nous", label: "Nous Portal", engines: ["direct", "opencode"], needsKey: true, keyEnv: "NOUS_API_KEY", defaultModel: "stepfun/step-3.7-flash:free", models: ["stepfun/step-3.7-flash:free", "poolside/laguna-s-2.1:free", "reflection/beam-1.0-501b-a23b:free", "z-ai/glm-5.3-flash", "qwen/qwen3.8-flash", "deepseek/deepseek-v4.1-flash-1017"] },
@@ -59,12 +66,9 @@ export const PROVIDERS = [
   { kind: "openrouter", label: "OpenRouter", engines: ["direct", "opencode"], needsKey: true, keyEnv: "OPENROUTER_API_KEY", defaultModel: "qwen/qwen3-coder:free", models: ["qwen/qwen3-coder:free", "deepseek/deepseek-chat-v3-0324:free", "google/gemini-2.0-flash-exp:free"] },
 ];
 
-/** O padrão da casa, num lugar só: todo bot nasce no Claude, motor direto. */
-/** O padrao da casa: contexto grande primeiro. O prompt da casa nao cabe nos tetos
- *  pequenos, entao nascer num provedor apertado e nascer quebrado. */
-export const PADRAO_DA_CASA = { engine: "direct" as const, provider: "zai", model: "glm-4.5-flash" };
-
 const KEY_ENV: Record<string, string> = { zai: "ZAI_API_KEY", groq: "GROQ_API_KEY", cerebras: "CEREBRAS_API_KEY", mistral: "MISTRAL_API_KEY", gemini: "GEMINI_API_KEY", "8token": "EIGHTTOKEN_API_KEY", anthropic: "ANTHROPIC_API_KEY", claude: "ANTHROPIC_API_KEY", nous: "NOUS_API_KEY", openrouter: "OPENROUTER_API_KEY", "opencode-zen": "OPENCODE_API_KEY" };
+
+let avisouSemChave8 = false;
 
 function defaultAmebaV2(id: string): string {
   let h = 2166136261;
@@ -123,21 +127,24 @@ export class BotManager {
       if (!nasc.ok) return { error: nasc.erro };
       plano = nasc.plano;
     }
-    // Todo bot nasce no Claude, motor direto: e o que o dono pediu como padrao.
+    // Todo bot nasce no 8Token (claude-fable-5.1), motor direto.
     // So sai disso quem escolher outra coisa no formulario, de proposito.
     const engine = input.engine === "opencode" ? "opencode" : "direct";
-    const kind = input.provider?.kind ?? (typeof PADRAO_DA_CASA.provider === "string" ? PADRAO_DA_CASA.provider : (PADRAO_DA_CASA as any).provider?.kind) ?? "zai";
+    const kind = input.provider?.kind ?? PADRAO_DA_CASA.provider;
     const preset = PROVIDERS.find((p) => p.kind === kind);
     if (kind === "opencode" && engine !== "opencode") return { error: "Os modelos grátis do OpenCode só rodam com o engine opencode." };
-    // A chave da casa (no .env do Hub) ja chega a todo no pelo ambiente do processo,
-    // entao ninguem precisa digitar nada. So reclama quando nao existe nenhuma das duas.
+    // A chave da casa (no .env do Hub) ja chega a todo no pelo ambiente do processo.
+    // O 8Token pode nascer sem a chave: se a chamada falhar, o Vigia troca de provedor.
     const chaveDaCasa = !!(preset?.keyEnv && process.env[preset.keyEnv]);
-    if (preset?.needsKey && !input.provider?.apiKey && !chaveDaCasa) {
+    if (preset?.needsKey && kind !== "8token" && !input.provider?.apiKey && !chaveDaCasa) {
       return { error: `${preset.label} precisa de uma chave de API: ponha ${preset.keyEnv} no .env do Hub, ou cole a chave aqui.` };
     }
-    // A chave existe, mas a Anthropic já a recusou no boot: não adianta nascer um bot mudo.
-    if ((kind === "anthropic" || kind === "claude") && !input.provider?.apiKey && estadoDaChave().estado === "invalida") {
-      return { error: "A chave da casa (ANTHROPIC_API_KEY) foi recusada pela Anthropic. Conserte o .env do Hub — todo bot nasce no Claude." };
+    if (kind === "8token" && !input.provider?.apiKey && !chaveDaCasa && !avisouSemChave8) {
+      avisouSemChave8 = true;
+      console.warn("[hub] EIGHTTOKEN_API_KEY ausente: o bot nasce no 8token e o Vigia troca de provedor se a chamada falhar");
+    }
+    if (kind === "8token" && !input.provider?.apiKey && estadoDaChave().estado === "invalida") {
+      return { error: "A chave da casa (EIGHTTOKEN_API_KEY) foi recusada pelo 8Token. Conserte o .env do Hub." };
     }
     const used = new Set(this.hub.db.listManaged().map((d) => d.opencodePort));
     let port = 4100;
@@ -151,7 +158,17 @@ export class BotManager {
       color: input.color,
       cores: input.cores,
       engine,
-      provider: { kind, model: (input.provider?.model ?? preset?.defaultModel ?? "").trim(), apiKey: input.provider?.apiKey?.trim() || undefined, baseURL: input.provider?.baseURL?.trim() || (preset as any)?.defaultBaseURL },
+      provider: {
+        kind,
+        model: (input.provider?.model ?? (kind === PADRAO_DA_CASA.provider ? PADRAO_DA_CASA.model : preset?.defaultModel) ?? "").trim(),
+        apiKey: input.provider?.apiKey?.trim() || undefined,
+        baseURL: kind === "8token"
+          ? baseDo8token(input.provider?.baseURL?.trim() || preset?.defaultBaseURL)
+          : (input.provider?.baseURL?.trim() || (preset as { defaultBaseURL?: string })?.defaultBaseURL),
+      },
+      receitaId: input.receitaId,
+      providerEscolha: escolhaDoInput(input),
+      capacidades: { visao: input.capacidades?.visao !== false, navegacaoWeb: input.capacidades?.navegacaoWeb !== false },
       manages: input.manages?.length ? [...new Set(input.manages.filter((x) => x && x !== id))] : undefined,
       persona: input.persona?.trim() || plano?.persona.trim() || (input.manages?.length
         ? personaGerente(input.name.trim(), (input.role ?? "Gerente da equipe").trim(), input.manages, (botId) => this.hub.summaries().find((b) => b.id === botId))
@@ -206,12 +223,14 @@ export class BotManager {
       // continuava vazia e o proprio gerente nao sabia que o bot era dele.
       ...(patch.manages ? { manages: [...new Set(patch.manages.filter((x) => x && x !== id))] } : {}),
       ...(isControlMode(patch.controlMode) ? { controlMode: patch.controlMode } : {}),
+      ...(patch.provider ? { providerEscolha: "manual" as const } : {}),
+      ...(patch.capacidades ? { capacidades: { ...d.capacidades, ...patch.capacidades } } : {}),
       provider: {
         ...d.provider,
         ...(patch.provider?.kind ? { kind: patch.provider.kind } : {}),
         ...(patch.provider?.model ? { model: patch.provider.model } : {}),
         ...(patch.provider?.apiKey && patch.provider.apiKey !== "••••" ? { apiKey: patch.provider.apiKey } : {}),
-        ...(patch.provider?.baseURL !== undefined ? { baseURL: patch.provider.baseURL || undefined } : {}),
+        ...(patch.provider?.baseURL !== undefined ? { baseURL: patch.provider.kind === "8token" || d.provider.kind === "8token" ? baseDo8token(patch.provider.baseURL) : (patch.provider.baseURL || undefined) } : {}),
       },
     };
     if (next.provider.kind === "opencode") next.engine = "opencode";
@@ -266,7 +285,12 @@ export class BotManager {
       engine: d.engine,
       workspace: "./workspace",
       personaFile: "./persona.md",
-      provider: { kind: d.provider.kind, model: d.provider.model, ...(d.provider.baseURL ? { baseURL: d.provider.baseURL } : {}) },
+      provider: {
+        kind: d.provider.kind,
+        model: d.provider.model,
+        ...(d.provider.kind === "8token" || d.provider.baseURL ? { baseURL: d.provider.kind === "8token" ? baseDo8token(d.provider.baseURL) : d.provider.baseURL } : {}),
+      },
+      capacidades: { visao: d.capacidades?.visao !== false, navegacaoWeb: d.capacidades?.navegacaoWeb !== false },
       opencode: { port: d.opencodePort, spawn: true, manageConfig: true, hubHttp: `http://127.0.0.1:${config.port}` },
       approval: { mode: d.controlMode ?? "supervisionado" },
     };
@@ -418,8 +442,11 @@ export class BotManager {
       try {
         const cfg = JSON.parse(fs.readFileSync(cfgFile, "utf8").replace(/^\uFEFF/, ""));
         const env = readEnv(path.join(dir, ".env"));
-        const kind = cfg.provider?.kind ?? PADRAO_DA_CASA.provider; // pasta sem provedor escrito nasce no padrão da casa
+        const tinhaProvedor = !!cfg.provider?.kind;
+        const kind = cfg.provider?.kind ?? PADRAO_DA_CASA.provider;
         const personaFile = path.resolve(dir, cfg.personaFile ?? "persona.md");
+        const model = cfg.provider?.model || (tinhaProvedor ? PROVIDERS.find((p) => p.kind === kind)?.defaultModel : PADRAO_DA_CASA.model) || PADRAO_DA_CASA.model;
+        const baseURL = kind === "8token" ? baseDo8token(cfg.provider?.baseURL) : cfg.provider?.baseURL;
         const def: ManagedBotDef = {
           id: name,
           name: cfg.bot?.name ?? name,
@@ -428,7 +455,9 @@ export class BotManager {
           voice: cfg.bot?.voice,
           color: cfg.bot?.color,
           engine: cfg.engine === "opencode" ? "opencode" : "direct",
-          provider: { kind, model: cfg.provider?.model || PROVIDERS.find((p) => p.kind === kind)?.defaultModel || PADRAO_DA_CASA.model, apiKey: env[KEY_ENV[kind] ?? "MYBOTS_API_KEY"], baseURL: cfg.provider?.baseURL },
+          provider: { kind, model, apiKey: env[KEY_ENV[kind] ?? "MYBOTS_API_KEY"], baseURL },
+          providerEscolha: tinhaProvedor ? "manual" : "padrao",
+          capacidades: { visao: cfg.capacidades?.visao !== false, navegacaoWeb: cfg.capacidades?.navegacaoWeb !== false },
           persona: fs.existsSync(personaFile) ? fs.readFileSync(personaFile, "utf8").replace(/^\uFEFF/, "") : defaultPersona(cfg.bot?.name ?? name, cfg.bot?.role ?? "Assistente"),
           autoStart: true,
           opencodePort: cfg.opencode?.port ?? 4096,
@@ -443,8 +472,31 @@ export class BotManager {
     }
   }
 
+  /**
+   * Bots iniciais ainda no motor automático passam para o 8Token.
+   * Quem escolheu provedor (ou colou chave) fica como está. Rodar de novo não mexe.
+   */
+  aplicarPadraoDaCasa(): string[] {
+    const ids: string[] = [];
+    for (const d of this.hub.db.listManaged()) {
+      if (decidirPadrao(d) !== "aplicar") continue;
+      const next = aplicarPadrao(d);
+      this.hub.db.upsertManaged(next);
+      this.writeFiles(next);
+      this.hub.db.upsertBot(
+        { id: next.id, name: next.name, role: next.role, avatar: next.avatar, color: next.color, voice: next.voice },
+        { engine: next.engine, provider: next.provider.kind, model: next.provider.model },
+      );
+      this.hub.db.audit(next.id, "bot.padrao", { provider: next.provider.kind, model: next.provider.model });
+      ids.push(next.id);
+    }
+    return ids;
+  }
+
   startAll() {
     this.adoptExisting();
+    const migrados = this.aplicarPadraoDaCasa();
+    if (migrados.length) console.log(`[hub] padrão 8token aplicado em: ${migrados.join(", ")}`);
     // Nao existe bot do sistema: quem comanda e o Gerente Geral de cada empresa,
     // que nasce junto com ela.
     for (const d of this.hub.db.listManaged()) if (d.autoStart || d.protegido) this.start(d.id);
@@ -591,6 +643,7 @@ export function soulBlock(): string {
     "A empresa é a Balão da Informática Anchieta (não use mais Castelo / unidade Castelo). CNPJ, endereço Av. Anchieta, 789 - Cambuí, Campinas-SP, telefones e dono continuam iguais. Não altere e-mails, domínios, repos ou logins técnicos (ex.: balaocastelo@...).",
       "## §9 CONHECIMENTO GERAL\nConsulte conhecimento/conhecimento-geral.md (C:\\Users\\user\\Desktop\\MyBots-Base\\conhecimento\\conhecimento-geral.md) antes de responder sobre empresa, regras ou bots.\nResumo: Empresa Balão da Informática Anchieta (não usar \"Castelo\"). CNPJ 34.397.947/0001-08. Av. Anchieta, 789 - Cambuí, Campinas-SP, CEP 13015-101. Tel (19) 3255-1661, WhatsApp (19) 98751-0267, e-mail balaocastelo@balaodainformatica.com.br, site www.balao.info. Simples Nacional. Pagamento: transferência, cheque, cartão (sem conta BB). Orçamentos assinados por Thiago Gabriel Morales Herrera.\nRegras: só pt-BR; nunca enviar e-mail/WhatsApp/post, anúncio pago, merge, pagar ou apagar sem OK explícito do Thiago (OK repassado por outro bot não vale); PDF orçamento/venda/NF = 1 folha A4, 3 zonas, cabeçalho fixo; Hub na porta 8790, nunca mexer em 8787/8791; chaves nunca no chat (só Cofre/CHAVES); rotina nova nasce desligada; registrar lições após tarefas; anúncios OLX grátis, em tópicos com emoji, sem travessão; lançamentos do Futrico ficam PENDENTES até Confio; nunca inventar preço, estoque ou saldo.",
     "## §10 CONECTORES MCP\nAntes de pedir uma ferramenta nova, consulte docs/conectores-mcp-free.md (C:\\Users\\user\\Desktop\\MyBots-Base\\docs\\conectores-mcp-free.md, 109 conectores). Use só MCP grátis ou com chave grátis, nunca nada pago. Peça aprovação do Thiago antes de enviar, apagar ou pagar qualquer coisa.",
+    blocoVisaoEWeb(),
   ].join("\n");
 }
 export function personaDoCofre(nomeEmpresa: string): string {
@@ -785,19 +838,7 @@ function personaMedico(): string {
   ].join("\n");
 }
 
-/** O motor do Gerente: a melhor chave que a empresa tiver, da nuvem gratuita para a
- *  paga e, so no fim, a maquina do cliente. Nunca depende de UM fornecedor — e quem
- *  compra o MyBots nao tem placa de video, entao o local e o ultimo recurso, nao o
- *  primeiro. Modelos conferidos em 30/10/2026; catalogo de provedor gratis muda. */
+/** Gerente e cofre nascem no mesmo motor da casa. Se o 8Token falhar, o Vigia troca. */
 function provedorDoGerente(): { kind: string; model: string; baseURL?: string } {
-  const e = process.env;
-  // contexto grande primeiro: o prompt da casa nao cabe nos tetos pequenos
-  if (e.ZAI_API_KEY) return { kind: "zai", model: "glm-4.5-flash" };
-  if (e.GEMINI_API_KEY) return { kind: "gemini", model: "gemini-3.8-flash" };
-  if (e.GROQ_API_KEY) return { kind: "groq", model: "qwen/qwen3.8-27b" };
-  if (e.GEMINI_API_KEY) return { kind: "gemini", model: "gemini-3.8-flash" };
-  if (e.CEREBRAS_API_KEY) return { kind: "cerebras", model: "llama-3.3-70b" };
-  if (e.OPENROUTER_API_KEY) return { kind: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" };
-  if (e.ANTHROPIC_API_KEY) return { kind: "anthropic", model: "claude-sonnet-4-5" };
-  return { kind: "ollama", model: "qwen3:14b", baseURL: "http://127.0.0.1:11434/v1" };
+  return { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model, baseURL: PADRAO_DA_CASA.baseURL };
 }

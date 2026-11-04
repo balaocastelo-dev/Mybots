@@ -39,7 +39,7 @@ const PADROES: Array<{ re: RegExp; classe: Queda["classe"]; resumo: string; cons
   { re: /401|403|invalid[_ ]api[_ ]key|authentication_error|x-api-key/i,
     classe: "chave-recusada",
     resumo: "o provedor recusou a chave",
-    conserto: "Confira ANTHROPIC_API_KEY no .env da raiz. Não imprima o valor: só diga se está presente ou vazia." },
+    conserto: "Confira a chave do provedor deste bot no .env do Hub. O padrão da casa é EIGHTTOKEN_API_KEY (8Token, https://8token.tech/v1). Não imprima o valor: só diga se está presente ou vazia." },
   { re: /EADDRINUSE|address already in use/i,
     classe: "porta-ocupada",
     resumo: "a porta que o nó queria já está ocupada",

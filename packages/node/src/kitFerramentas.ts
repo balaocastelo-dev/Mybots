@@ -14,6 +14,10 @@ const NUCLEO = [
   "read_file", "list_dir", "send_file", "minhas_capacidades",
 ];
 
+/** Visão e navegação nascem ligadas: entram mesmo quando o teto da especialidade é curto. */
+const VISÃO = ["read_attachment"];
+const WEB = ["buscar_web", "navegador", "fetch_url"];
+
 /** Kits por palavra-chave no role/id/persona. */
 const KITS: Array<{ match: RegExp; tools: string[]; teto: number }> = [
   { match: /gerente|diretor|coordenad|chefe de equipe/i, tools: ["criar_bot", "gerenciar_bot", "list_bots", "ask_bot", "send_to_bot", "anotar_empresa", "delegate_task", "check_task", "planejar", "atualizar_passo", "aguardar_decisao", "email", "whatsapp"], teto: 14 },
@@ -40,10 +44,14 @@ export type KitInfo = { defs: ToolDef[]; incluidas: string[]; cortadas: string[]
  */
 export function selecionarKitFerramentas(
   todas: ToolDef[],
-  opts: { role?: string; botId?: string; persona?: string } = {},
+  opts: { role?: string; botId?: string; persona?: string; visao?: boolean; navegacaoWeb?: boolean } = {},
 ): KitInfo {
   const texto = [opts.role, opts.botId, opts.persona].filter(Boolean).join("\n");
   const adminLivre = process.env.MYBOTS_KIT_ADMIN === "1";
+  const ligadas = [
+    ...(opts.visao === false ? [] : VISÃO),
+    ...(opts.navegacaoWeb === false ? [] : WEB),
+  ];
   let especialidade = "geral";
   let extras = PADRAO_EXTRA;
   let teto = TETO_PADRAO;
@@ -58,7 +66,7 @@ export function selecionarKitFerramentas(
   const envTeto = Number(process.env.MYBOTS_KIT_MAX);
   if (Number.isFinite(envTeto) && envTeto >= 5) teto = envTeto;
 
-  const quer = new Set<string>([...NUCLEO, ...extras]);
+  const quer = new Set<string>([...NUCLEO, ...ligadas, ...extras]);
   if (adminLivre) for (const a of ADMIN_TOOLS) quer.add(a);
 
   const incluidas: string[] = [];
@@ -71,9 +79,10 @@ export function selecionarKitFerramentas(
     incluidas.push(d.name);
     defs.push(d);
   }
-  // Garante núcleo mesmo se teto apertado
+  // Núcleo, visão e navegação entram mesmo se o teto da especialidade já encheu.
+  const sempre = new Set([...NUCLEO, ...ligadas]);
   for (const d of todas) {
-    if (NUCLEO.includes(d.name) && !incluidas.includes(d.name)) {
+    if (sempre.has(d.name) && !incluidas.includes(d.name)) {
       incluidas.push(d.name);
       defs.push(d);
     }

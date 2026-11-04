@@ -1,5 +1,15 @@
 # Progresso
 
+## 2026-11-04 — 8Token, visão e navegação no nascimento
+
+- Todo bot novo (qualquer conta, inclusive gerente, cofre, receita e link) nasce no 8Token: base `https://8token.tech/v1` (OpenAI), modelo `claude-fable-5.1`. A chave é `EIGHTTOKEN_API_KEY` no `.env` do Hub.
+- Migração idempotente da equipe inicial ainda no motor automático. Escolha manual ou chave colada no bot não é reescrita.
+- Se o 8Token falhar, o Vigia segue para Z.ai, Groq ou Ollama (`exceto` o que acabou de falhar).
+- Visão ligada: imagem multimodal; vídeo sem suporte vira quadros ffmpeg + transcrição. Navegação ligada: `buscar_web` e `navegador` no PC do próprio bot, com instruções no prompt base.
+- Arquivos: `packages/shared/src/padrao.ts`, `packages/hub/src/botManager.ts`, `videoPipeline.ts`, `media.ts`, `chaves.ts`, `packages/node/src/vision.ts`, `buscaWeb.ts`, `kitFerramentas.ts`, `continuarTarefa.ts`, `packages/ui/src/dialogos.tsx`, `.env.example`, `docs/PROVEDORES.md`, `tests/padrao8token.test.ts`.
+- `docs/HANDOFF.md` não está neste repositório.
+- `node --import tsx --test tests/padrao8token.test.ts`: 9 testes ok (padrão, migração, Vigia, visão, pipeline falso e ffmpeg, kit, busca, mock multimodal). O e2e de adoção também passou no 8Token. `EIGHTTOKEN_API_KEY` não está neste ambiente: o ensaio com modelo real fica para o Hub. Falhas já existentes na main (não desta mudança): ociosidade do PC com `sempreLigado`, ordem pollinations/cloudflare, agrupamento da lista e `run_command` fora do kit de vídeo.
+
 ## 2026-11-04 — Receber bot por link
 
 - `POST /api/bots/importar-link` com `modo: preview` (só lê) e `modo: confirmar` (cria o managed bot do usuário logado). Só aceita `https://x.ai/bot/<id>`, busca com timeout de 8s e teto de 1 MB, e não segue redirect para outro domínio.

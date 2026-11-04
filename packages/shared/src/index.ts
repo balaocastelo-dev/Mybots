@@ -353,3 +353,4 @@ export const IDIOMAS: Array<{ id: Idioma; nome: string }> = [
 export type Empresa = { id: string; nome: string; regras: string; cor?: string; idioma: Idioma; criadaEm: number; bots: number };
 export * from "./cotas.js";
 export * from "./colab.ts";
+export * from "./padrao.ts";

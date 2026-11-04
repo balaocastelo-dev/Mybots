@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { type Attachment, type CartaoDeAcao, type ControlMode, type HubToNode, type Risk, controlPromptLine, effectiveControl, newId, resourcePromptLine } from "@mybots/shared";
+import { type Attachment, type CartaoDeAcao, type ControlMode, type HubToNode, type Risk, blocoVisaoEWeb, controlPromptLine, effectiveControl, MARCA_VISAO_WEB, modeloAceitaVideo, newId, resourcePromptLine } from "@mybots/shared";
 import { textoDaAlma } from "../almaPrompt.js";
 import { type NodeConfig, readPersona } from "../config.js";
 import type { HubClient } from "../hubClient.js";
@@ -202,16 +202,18 @@ export class DirectEngine implements Engine {
       return (fromFile.trim() || montarPromptChamada(this.cfg.bot.name, this.cfg.bot.role || "")) + "\n";
     }
     const persona = readPersona(this.cfg);
+    const olhos = persona.includes(MARCA_VISAO_WEB) ? "" : blocoVisaoEWeb();
     // No Ollama o Gerente não carrega o manual inteiro: o prefill fica caro
     // e a janela (num_ctx) acompanha este texto, não 32 mil tokens vazios.
     if ((this.provider.kind === "ollama" || this.provider.kind === "lmstudio") && ehGerenteBot(this.cfg.bot)) {
-      return promptGerenteNoOllama({
+      const curto = promptGerenteNoOllama({
         persona,
         nome: this.cfg.bot.name,
         id: this.cfg.bot.id,
         chefe: process.env.MYBOTS_USER_NAME ?? "o chefe",
         workspace: this.cfg.workspace,
       });
+      return olhos ? curto + "\n\n" + olhos : curto;
     }
     // Bot de idiomas precisa falar a língua que ensina. Contradizer a regra de
     // "tudo em português" confunde modelos pequenos, então a regra simplesmente
@@ -220,6 +222,7 @@ export class DirectEngine implements Engine {
     const blocoAlma = textoDaAlma(this.cfg.workspace);
     return [
       persona.trim(),
+      ...(olhos ? ["", olhos] : []),
       "",
       "## Contexto do MyBots",
       `- Você é o Bot "${this.cfg.bot.name}" (id ${this.cfg.bot.id}) da equipe MyBots. Seu chefe é ${process.env.MYBOTS_USER_NAME ?? "o chefe"}.`,
@@ -333,7 +336,9 @@ export class DirectEngine implements Engine {
     }
     const hubHttp = (this.cfg.opencode?.hubHttp ?? this.cfg.hub.replace(/^ws/, "http")).replace(/\/$/, "");
     this.hub.status("Olhando as imagens", true);
-    const partes = await baixarImagens(atts, hubHttp, this.cfg.token);
+    const partes = await baixarImagens(atts, hubHttp, this.cfg.token, 8, {
+      videos: plano.modo === "nativo" && modeloAceitaVideo(this.cfg.provider.kind, this.cfg.provider.model),
+    });
     if (!partes.length) return { texto: textoBase, media: [] };
     if (plano.modo === "nativo") return { texto: textoBase, media: partes.map(({ mime, dataBase64, name }) => ({ mime, dataBase64, name })) };
     const descricao = await descrever(partes, plano, t.text, signal);
@@ -398,6 +403,8 @@ export class DirectEngine implements Engine {
         role: this.cfg.bot.role,
         botId: this.cfg.bot.id,
         persona: readPersona(this.cfg),
+        visao: this.cfg.capacidades?.visao !== false,
+        navegacaoWeb: this.cfg.capacidades?.navegacaoWeb !== false,
       });
       const corte = ferramentasQueCabem(kit.defs, Math.max(700, teto - gastoFixo - 400));
       if (corte.cortadas.length && !avisados.has(this.provider.kind)) {
@@ -489,7 +496,7 @@ export class DirectEngine implements Engine {
             emendaProv = this.provider;
             emendaKind = this.provider.kind;
           } catch (primario) {
-            const fb = isErroRetriavelProvedor(primario) ? provedorFallback() : null;
+            const fb = isErroRetriavelProvedor(primario) ? provedorFallback(process.env, { exceto: this.provider.kind }) : null;
             if (!fb || ac.signal.aborted || saiuTexto) throw primario;
             this.hub.event(conversationId, {
               kind: "text.note",

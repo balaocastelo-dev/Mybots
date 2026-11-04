@@ -8,6 +8,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { baseDo8token, PADRAO_DA_CASA } from "@mybots/shared";
 
 export const MAX_AUTO_CONTINUES = 6;
 export const MAX_PROVIDER_RETRIES = 3;
@@ -207,15 +208,30 @@ export function montarContextoRetomada(tarefa: TarefaEmAndamento): string {
 }
 
 
-/** Provedor de reserva a partir do ambiente (Z.ai / Groq / Ollama local). */
+/**
+ * Troca do Vigia: se o provedor da vez (inclusive o 8Token) falhar, o próximo
+ * da ordem assume. `exceto` é quem acabou de falhar — não tenta o mesmo de novo.
+ * A ordem padrão continua zai, groq, ollama, então o 8Token cair não fica em loop.
+ */
 export function provedorFallback(
   env: NodeJS.ProcessEnv = process.env,
+  opts: { exceto?: string } = {},
 ): { kind: string; model: string; baseURL: string; apiKey?: string } | null {
+  const exceto = String(opts.exceto || "").toLowerCase();
   const ordem = String(env.MYBOTS_FALLBACK_ORDEM || "zai,groq,ollama")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   for (const k of ordem) {
+    if (k === exceto) continue;
+    if (k === "8token" && env.EIGHTTOKEN_API_KEY) {
+      return {
+        kind: "8token",
+        model: env.EIGHTTOKEN_MODEL || PADRAO_DA_CASA.model,
+        baseURL: baseDo8token(env.EIGHTTOKEN_BASE_URL),
+        apiKey: env.EIGHTTOKEN_API_KEY,
+      };
+    }
     if (k === "zai" && env.ZAI_API_KEY) {
       return {
         kind: "zai",

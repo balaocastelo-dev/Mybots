@@ -14,7 +14,7 @@
 const TETO: Record<string, number> = {
   groq: 6200, cerebras: 6200, cloudflare: 6200,
   nous: 12000, opencode: 24000, openrouter: 24000, mistral: 24000,
-  gemini: 120000, anthropic: 120000, claude: 120000, zai: 120000,
+  gemini: 120000, anthropic: 120000, claude: 120000, "8token": 120000, zai: 120000,
   ollama: 16000, lmstudio: 16000,
 };
 const PADRAO = 16000;
@@ -33,13 +33,14 @@ export const emTokens = (s: string) => Math.ceil((s ?? "").length / 4);
 const NIVEL: Record<string, number> = {
   ask_user: 1, set_status: 1, notify_user: 1, search_knowledge: 1, recall: 1, remember: 1,
   read_file: 2, list_dir: 2, write_file: 2, send_file: 2, fetch_url: 2, run_command: 2,
+  buscar_web: 2, navegador: 2, read_attachment: 2,
   request_approval: 2, minhas_capacidades: 2,
   // criar_bot e o trabalho principal do Gerente Geral: bot que falta e trabalho que
   // nao sai. anotar_empresa alimenta a base da empresa, que todos leem depois.
   criar_bot: 2, anotar_empresa: 3,
   whatsapp: 3, whatsapp_proprio: 3, pedir_conexao: 3, email: 3, gerar_pdf: 3, schedule: 3, ask_bot: 3, send_to_bot: 3, list_bots: 3,
   delegate_task: 3, check_task: 3, cancel_task: 3,
-  navegador: 4, gravar_tela: 4, celular: 4, generate_image: 4, generate_video: 4, audio: 4, screenshot: 4,
+  gravar_tela: 4, celular: 4, generate_image: 4, generate_video: 4, audio: 4, screenshot: 4,
   fill_credential: 3,
   learn_knowledge: 4, list_routines: 4, cancel_routine: 4, gerenciar_bot: 4,
   system_resources: 5, pedir_na_tela: 5,

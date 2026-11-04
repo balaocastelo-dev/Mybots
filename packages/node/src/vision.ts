@@ -4,7 +4,7 @@
 //  - Modelo só de texto (qwen3, gpt-oss, llama…): um modelo de visão descreve a imagem
 //    e a descrição entra como texto. Assim o bot "vê" sem trocar o cérebro dele.
 import type { Attachment } from "@mybots/shared";
-import { isImageMime } from "@mybots/shared";
+import { isImageMime, isVideoMime } from "@mybots/shared";
 import type { NodeConfig } from "./config.js";
 import type { MediaPart } from "./providers/types.js";
 
@@ -17,8 +17,9 @@ export type VisionPlan =
   | { modo: "sem-visao" };
 
 export function visionPlan(cfg: NodeConfig): VisionPlan {
+  if (cfg.capacidades?.visao === false) return { modo: "sem-visao" };
   const forcado = (process.env.MYBOTS_VISION_MODEL ?? cfg.provider.visionModel ?? "").trim();
-  const nativo = MODELO_ENXERGA.test(cfg.provider.model) || ["gemini", "anthropic"].includes(cfg.provider.kind);
+  const nativo = MODELO_ENXERGA.test(cfg.provider.model) || ["gemini", "anthropic", "claude", "8token"].includes(cfg.provider.kind);
   if (nativo && !forcado) return { modo: "nativo" };
   const base = (cfg.provider.visionBaseURL ?? (cfg.provider.kind === "ollama" ? cfg.provider.baseURL : undefined) ?? "http://127.0.0.1:11434/v1").replace(/\/$/, "");
   const model = forcado || (cfg.provider.kind === "ollama" ? "qwen2.5vl:7b" : "");
@@ -26,9 +27,15 @@ export function visionPlan(cfg: NodeConfig): VisionPlan {
   return { modo: "descrever", model, baseURL: base };
 }
 
-/** Baixa os anexos de imagem do Hub. Vídeo já chega como quadros (derivedFrom). */
-export async function baixarImagens(atts: Attachment[], hubHttp: string, token: string, max = 8): Promise<Array<MediaPart & { origem?: string; segundo?: number }>> {
-  const imagens = atts.filter((a) => isImageMime(a.mime)).slice(0, max);
+/** Baixa imagens (e o vídeo inteiro, se o modelo aceita). Quadros de vídeo já são jpeg. */
+export async function baixarImagens(
+  atts: Attachment[],
+  hubHttp: string,
+  token: string,
+  max = 8,
+  opts: { videos?: boolean } = {},
+): Promise<Array<MediaPart & { origem?: string; segundo?: number }>> {
+  const imagens = atts.filter((a) => isImageMime(a.mime) || (opts.videos && isVideoMime(a.mime) && !a.derivedFrom)).slice(0, max);
   const out: Array<MediaPart & { origem?: string; segundo?: number }> = [];
   for (const a of imagens) {
     try {
@@ -36,7 +43,7 @@ export async function baixarImagens(atts: Attachment[], hubHttp: string, token: 
       const r = await fetch(url, { headers: token ? { authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(30_000) });
       if (!r.ok) continue;
       const buf = Buffer.from(await r.arrayBuffer());
-      if (buf.length > 12 * 1024 * 1024) continue; // imagem absurda: pula
+      if (buf.length > (isVideoMime(a.mime) ? 20 : 12) * 1024 * 1024) continue;
       out.push({ mime: a.mime, dataBase64: buf.toString("base64"), name: a.name, origem: a.derivedFrom, segundo: a.atSecond });
     } catch { /* anexo que não baixou não derruba o turno */ }
   }

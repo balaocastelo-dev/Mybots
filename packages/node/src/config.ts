@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { type BotInfo, type ControlMode, isControlMode } from "@mybots/shared";
+import { type BotInfo, type ControlMode, baseDo8token, isControlMode, PADRAO_DA_CASA } from "@mybots/shared";
 
 export type ProviderKind = "gemini" | "anthropic" | "openai";
 
@@ -17,6 +17,7 @@ export const OPENAI_COMPAT_PRESETS: Record<string, { baseURL: string; keyEnv: st
   zai: { baseURL: "https://api.z.ai/api/paas/v4", keyEnv: "ZAI_API_KEY", label: "Z.ai (GLM Flash)" },
   cerebras: { baseURL: "https://api.cerebras.ai/v1", keyEnv: "CEREBRAS_API_KEY", label: "Cerebras" },
   mistral: { baseURL: "https://api.mistral.ai/v1", keyEnv: "MISTRAL_API_KEY", label: "Mistral" },
+  "8token": { baseURL: PADRAO_DA_CASA.baseURL, keyEnv: PADRAO_DA_CASA.keyEnv, label: "8Token" },
 };
 
 export type NodeConfig = {
@@ -38,6 +39,8 @@ export type NodeConfig = {
     visionModel?: string;
     visionBaseURL?: string;
   };
+  /** Visão e navegação nascem ligadas. false só se o dono desligar no mybots-node.json. */
+  capacidades: { visao: boolean; navegacaoWeb: boolean };
   opencode: {
     bin: string;               // "opencode"
     port: number;
@@ -72,6 +75,7 @@ const DEFAULTS: NodeConfig = {
   workspace: "./workspace",
   personaFile: "./persona.md",
   provider: { kind: "ollama", model: "qwen3:14b", temperature: 0.1, visionModel: "qwen2.5vl:7b" },
+  capacidades: { visao: true, navegacaoWeb: true },
   opencode: { bin: "opencode", port: 4096, spawn: true, manageConfig: true },
   approval: {
     autoAllow: ["^(dir|ls|git status|git log|git diff|type|cat|echo|whoami|hostname|ipconfig|ifconfig|pwd|cd)\\b"],
@@ -109,6 +113,7 @@ export function loadConfig(argPath?: string): NodeConfig & { configDir: string }
     ...raw,
     bot: { ...DEFAULTS.bot, ...(raw.bot ?? {}) },
     provider: { ...DEFAULTS.provider, ...(raw.provider ?? {}) },
+    capacidades: { ...DEFAULTS.capacidades, ...(raw.capacidades ?? {}) },
     opencode: { ...DEFAULTS.opencode, ...(raw.opencode ?? {}) },
     approval: { ...DEFAULTS.approval, ...(raw.approval ?? {}) },
   };
@@ -120,7 +125,8 @@ export function loadConfig(argPath?: string): NodeConfig & { configDir: string }
   cfg.provider.model = process.env.MYBOTS_MODEL ?? cfg.provider.model;
   cfg.provider.apiKey = process.env.MYBOTS_API_KEY ?? cfg.provider.apiKey ?? keyFromEnv(cfg.provider.kind);
   cfg.provider.baseURL = process.env.MYBOTS_BASE_URL ?? cfg.provider.baseURL ?? OPENAI_COMPAT_PRESETS[cfg.provider.kind]?.baseURL
-    ?? (cfg.provider.kind === "gemini" ? "https://generativelanguage.googleapis.com/v1beta" : cfg.provider.kind === "8token" ? (process.env.EIGHTTOKEN_BASE_URL ?? "https://8token.tech") : cfg.provider.kind === "anthropic" || cfg.provider.kind === "claude" ? "https://api.anthropic.com" : undefined);
+    ?? (cfg.provider.kind === "gemini" ? "https://generativelanguage.googleapis.com/v1beta" : cfg.provider.kind === "anthropic" || cfg.provider.kind === "claude" ? "https://api.anthropic.com" : undefined);
+  if (cfg.provider.kind === "8token") cfg.provider.baseURL = baseDo8token(cfg.provider.baseURL || process.env.EIGHTTOKEN_BASE_URL);
   cfg.opencode.password = process.env.OPENCODE_SERVER_PASSWORD ?? cfg.opencode.password;
   const envMode = process.env.MYBOTS_CONTROL_MODE;
   if (isControlMode(envMode)) cfg.approval.mode = envMode;

@@ -690,7 +690,7 @@ export async function startServer(hub: Hub) {
       empresa: empresaId ?? undefined,
       autoStart: true,
       engine: PADRAO_DA_CASA.engine,
-      provider: { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model },
+      provider: { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model, baseURL: PADRAO_DA_CASA.baseURL },
     } as any);
     if ("error" in r) return { ok: false, msg: r.error };
     if (empresaId) hub.db.setEmpresaDoBot(r.id, r.name, empresaId, false);
@@ -1389,7 +1389,7 @@ export async function startServer(hub: Hub) {
         ownerUserId: plano.ownerUserId,
         controlMode: "supervisionado",
         engine: PADRAO_DA_CASA.engine,
-        provider: { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model },
+        provider: { kind: PADRAO_DA_CASA.provider, model: PADRAO_DA_CASA.model, baseURL: PADRAO_DA_CASA.baseURL },
         autoStart: true,
       });
       if ("error" in r) return r;
@@ -1759,8 +1759,8 @@ export async function startServer(hub: Hub) {
     if (!empresa) return reply.code(400).send({ error: "Crie a primeira empresa antes." });
     const espId = receita.especialidadeId || receita.id || idPadrao();
     const basePadrao = PADRAO_DA_CASA as { engine?: string; provider?: string | { kind: string; model?: string }; model?: string };
-    const padraoKind = typeof basePadrao.provider === "string" ? basePadrao.provider : basePadrao.provider?.kind || "zai";
-    const padraoModel = (typeof basePadrao.provider === "object" && basePadrao.provider?.model) || basePadrao.model || "glm-4.5-flash";
+    const padraoKind = typeof basePadrao.provider === "string" ? basePadrao.provider : basePadrao.provider?.kind || PADRAO_DA_CASA.provider;
+    const padraoModel = (typeof basePadrao.provider === "object" && basePadrao.provider?.model) || basePadrao.model || PADRAO_DA_CASA.model;
     const reqProvider = body.provider;
     const pKind = (typeof reqProvider === "string" ? reqProvider : reqProvider?.kind) || padraoKind;
     const pModel = (typeof reqProvider === "object" && reqProvider?.model) || body.model || padraoModel;

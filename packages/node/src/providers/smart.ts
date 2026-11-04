@@ -1,9 +1,9 @@
-// Camada esperta: o bot continua no provedor dele (rapido/gratis) e so chama o
-// Claude da 8Token nos turnos dificeis -- orquestrar ferramentas ou pedido longo.
-// Se a 8Token falhar (rede, 401, IP nao autorizado, 429...), cai de volta no
-// provedor do bot sem o usuario perceber. Liga com MYBOTS_SMART_TIER=8token e
-// EIGHTTOKEN_API_KEY no .env do Hub. Desligado por padrao: a 8Token e mais lenta.
-import { AnthropicProvider } from "./anthropic.js";
+// Camada esperta: o bot continua no provedor dele e so chama o Claude da 8Token
+// (API OpenAI em https://8token.tech/v1) nos turnos dificeis. Se a 8Token falhar,
+// cai de volta no provedor do bot. Liga com MYBOTS_SMART_TIER=8token e
+// EIGHTTOKEN_API_KEY no .env do Hub. Desligado por padrao.
+import { baseDo8token, PADRAO_DA_CASA } from "@mybots/shared";
+import { OpenAICompatProvider } from "./openaiCompat.js";
 import type { ChatRequest, ChatResponse, Provider } from "./types.js";
 
 const LIMITE_TEXTO = 600;
@@ -42,7 +42,7 @@ export function comCamadaEsperta(base: Provider, env: NodeJS.ProcessEnv = proces
   const chave = env.EIGHTTOKEN_API_KEY;
   if (String(env.MYBOTS_SMART_TIER ?? "").toLowerCase() !== "8token" || !chave) return base;
   if (base.kind === "8token" || /^claude-/.test(base.model)) return base;
-  const modelo = env.EIGHTTOKEN_MODEL || "claude-sonnet-5";
-  const url = env.EIGHTTOKEN_BASE_URL || "https://8token.tech";
-  return new SmartTierProvider(base, new AnthropicProvider(modelo, chave, url));
+  const modelo = env.EIGHTTOKEN_MODEL || PADRAO_DA_CASA.model;
+  const url = baseDo8token(env.EIGHTTOKEN_BASE_URL);
+  return new SmartTierProvider(base, new OpenAICompatProvider("8token", modelo, url, chave));
 }

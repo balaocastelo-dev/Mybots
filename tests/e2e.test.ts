@@ -897,7 +897,8 @@ async function main() {
     const adotado = lista.find((b: any) => b.id === "adotado-teste");
     assert(adotado, "pasta solta não foi adotada");
     assert(adotado.engine === "direct", `adotado deveria nascer no motor direto, veio ${adotado.engine}`);
-    assert(adotado.provider.kind === "zai" && adotado.provider.model === "glm-4.5-flash", `adotado fora do padrão da casa: ${JSON.stringify(adotado.provider)}`);
+    assert(adotado.provider.kind === "8token" && adotado.provider.model === "claude-fable-5.1", `adotado fora do padrão da casa: ${JSON.stringify(adotado.provider)}`);
+    assert(String(adotado.provider.baseURL || "").replace(/\/$/, "") === "https://8token.tech/v1", `base do 8token: ${adotado.provider.baseURL}`);
   });
 
   await test("bot offline: mensagem fica salva e usuário é avisado", async () => {

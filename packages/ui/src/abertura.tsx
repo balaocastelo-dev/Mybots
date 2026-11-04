@@ -24,12 +24,19 @@ const api = (path: string, init?: RequestInit) =>
 const FUNDO = "#F4F4F1"; // claro, como a referencia: letra grafite sobre parede clara
 // grafite na maioria, com faiscas vermelhas: a letra le como quase preta de longe
 const CORES = ["#4A4A52", "#5C5C66", "#3A3A42", "#6E6E78", "#55555E", "#45454D", "#63636D", "#4F4F58", "#4A5A6E", "#4A6B5E"];
-const QUANTAS = 150000; // o triplo: enche a letra em vez de pontilhar o contorno
+/** Quantas particulas o aparelho aguenta a 60 quadros: depende dos nucleos e da
+ *  area da tela. 150 mil travava ate maquina boa; o teto aqui fica entre 12 e 40 mil. */
+function quantasPorAparelho(w: number, h: number, dpr: number): number {
+  const nucleos = navigator.hardwareConcurrency || 4;
+  let base = nucleos >= 12 ? 40000 : nucleos >= 8 ? 32000 : nucleos >= 6 ? 24000 : 16000;
+  if (dpr > 1.5) base *= 0.75; // tela retina: cada grao custa mais pixels
+  if (w * h < 900 * 700) base *= 0.6; // celular / janela pequena
+  return Math.max(12000, Math.min(40000, Math.round(base)));
+}
 /** quanto cada palavra espera a anterior, no compasso da voz */
 const PASSO_A = 430, PASSO_B = 520;
 const T_TROCA = 2600, T_EXPLODE = 6600, T_FIM = 7450;
 
-type Par = { x: number; y: number; ax: number; ay: number; vx: number; vy: number; t: number; g: number; cor: string; lados: number; ang: number; giro: number; palavra: number };
 type Linha = { tipo: "hero" | "nota" | "regra"; texto?: string };
 
 /** Desenha as linhas num canvas invisível e devolve os pixels com tinta. */
@@ -177,12 +184,24 @@ export function Abertura({ onFim }: { onFim: () => void }) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     let w = Math.floor(window.innerWidth), h = Math.floor(window.innerHeight);
     let umA: ReturnType<typeof alvos> = [], umB: ReturnType<typeof alvos> = [];
-    let bolas: Par[] = [];
     let trocou = false;
+    // O compasso da voz conta a partir da montagem, mesmo com a preparacao adiada.
+    const tMontagem = performance.now();
 
-    // Mudar o tamanho da janela TEM de recentrar: o canvas e os alvos sao medidos pela
-    // janela. Sem isto, a abertura montada numa janela menor continuava desenhada no
-    // tamanho antigo e ficava encostada no canto, ocupando meia tela.
+    // Particulas em vetores tipados, ordenadas por cor: o desenho troca de tinta 10
+    // vezes por quadro, nao uma vez por particula. Nada e alocado dentro do laco.
+    const N = quantasPorAparelho(w, h, dpr);
+    const X = new Float32Array(N), Y = new Float32Array(N), AX = new Float32Array(N), AY = new Float32Array(N);
+    const VX = new Float32Array(N), VY = new Float32Array(N), T = new Float32Array(N), G = new Float32Array(N);
+    const PAL = new Uint8Array(N);
+    const inicioCor = new Int32Array(CORES.length + 1);
+    for (let c = 0; c <= CORES.length; c++) inicioCor[c] = Math.floor((c * N) / CORES.length);
+    let n = 0; // quantas estao ativas (o corte adaptativo so diminui este numero)
+
+    const prender = (lista: ReturnType<typeof alvos>) => {
+      if (!lista.length) return;
+      for (let k = 0; k < N; k++) { const p = lista[(k * 7919) % lista.length]; AX[k] = p.x; AY[k] = p.y; PAL[k] = p.palavra; }
+    };
     const medirTela = () => {
       w = Math.floor(window.innerWidth); h = Math.floor(window.innerHeight);
       cv.width = Math.floor(w * dpr); cv.height = Math.floor(h * dpr);
@@ -190,67 +209,35 @@ export function Abertura({ onFim }: { onFim: () => void }) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       umA = alvos(w, h, BLOCO_1);
       umB = alvos(w, h, BLOCO_2);
-      const atual = trocou ? umB : umA;
-      if (atual.length) {
-        for (let k = 0; k < bolas.length; k++) {
-          const n = atual[k % atual.length];
-          bolas[k].ax = n.x; bolas[k].ay = n.y; bolas[k].palavra = n.palavra;
-        }
-      }
+      prender(trocou ? umB : umA);
       ctx.fillStyle = FUNDO; ctx.fillRect(0, 0, w, h);
     };
-    medirTela();
-    for (let i = 0; i < (umA.length ? QUANTAS : 0); i++) {
-      const a = umA[i % umA.length];
-      const ang = Math.random() * Math.PI * 2, raio = Math.max(w, h) * (0.7 + Math.random() * 0.8);
-      bolas.push({
-        x: w / 2 + Math.cos(ang) * raio, y: h / 2 + Math.sin(ang) * raio,
-        ax: a.x, ay: a.y, vx: 0, vy: 0,
-        t: 0.055 + Math.random() * 0.05, g: 0.6 + Math.random() * 1.1,
-        cor: CORES[(Math.random() * CORES.length) | 0],
-        lados: Math.random() < 0.03 ? 3 : 0,
-        ang: Math.random() * 6.28, giro: (Math.random() - 0.5) * 0.14,
-        palavra: a.palavra,
-      });
-    }
 
-    medirTela(); // agora que as bolas existem, prende-as aos alvos recem-medidos
-    let relogioMedir: number | null = null;
-    const aoRedimensionar = () => {
-      if (relogioMedir) clearTimeout(relogioMedir);
-      relogioMedir = window.setTimeout(medirTela, 140);
-    };
-    window.addEventListener("resize", aoRedimensionar);
-
-    let vivo = true, t0 = performance.now(), tFase = t0, estourou = false;
+    let vivo = true, rodando = false, raf = 0, t0 = 0, tFase = tMontagem, estourou = false;
     let lentos = 0, cortes = 0;
-    ctx.fillStyle = FUNDO; ctx.fillRect(0, 0, w, h);
 
     const quadro = (agora: number) => {
-      if (!vivo) return;
+      if (!vivo || !rodando) return;
       const ms = agora - t0; t0 = agora;
       const dt = Math.min(2.5, ms / 16.7);
       if (!estourou && cortes < 2) {
         lentos = ms > 24 ? lentos + 1 : 0;
-        if (lentos > 30) { bolas = bolas.filter((_, k) => k % 2 === 0); cortes++; lentos = 0; }
+        if (lentos > 20) { n = n >> 1; cortes++; lentos = 0; }
       }
 
       if (fase.current === 1 && !trocou && umB.length) {
         trocou = true; tFase = agora;
-        for (let k = 0; k < bolas.length; k++) {
-          const b = bolas[k], n = umB[k % umB.length];
-          b.ax = n.x; b.ay = n.y; b.palavra = n.palavra;
-          b.vx += (Math.random() - 0.5) * 5; b.vy += (Math.random() - 0.5) * 5;
-        }
+        prender(umB);
+        for (let k = 0; k < N; k++) { VX[k] += (Math.random() - 0.5) * 5; VY[k] += (Math.random() - 0.5) * 5; }
       }
       if (fase.current === 2 && !estourou) {
         estourou = true;
-        for (const b of bolas) {
-          const dx = b.x - w / 2, dy = b.y - h / 2, d = Math.hypot(dx, dy) || 1;
+        const cx = w / 2, cy = h / 2;
+        for (let k = 0; k < N; k++) {
+          const dx = X[k] - cx, dy = Y[k] - cy, d = Math.sqrt(dx * dx + dy * dy) || 1;
           const forca = 14 + Math.random() * 38;
-          b.vx = (dx / d) * forca + (Math.random() - 0.5) * 12;
-          b.vy = (dy / d) * forca + (Math.random() - 0.5) * 12 - 6;
-          b.giro *= 5;
+          VX[k] = (dx / d) * forca + (Math.random() - 0.5) * 12;
+          VY[k] = (dy / d) * forca + (Math.random() - 0.5) * 12 - 6;
         }
       }
 
@@ -258,30 +245,80 @@ export function Abertura({ onFim }: { onFim: () => void }) {
       ctx.fillRect(0, 0, w, h);
 
       const compasso = trocou ? tempoB.current : tempoA.current;
-      for (let i = 0; i < bolas.length; i++) {
-        const b = bolas[i];
-        const esp = compasso[b.palavra] ?? b.palavra * 430;
-        if (estourou) { b.vx *= 0.988; b.vy = b.vy * 0.988 + 0.34 * dt; b.g *= 0.995; }
-        else if (agora - tFase < esp) { b.vx *= 0.94; b.vy *= 0.94; }
-        else { b.vx += (b.ax - b.x) * b.t * dt; b.vy += (b.ay - b.y) * b.t * dt; b.vx *= 0.8; b.vy *= 0.8; }
-        b.x += b.vx * dt; b.y += b.vy * dt;
-        if (b.x < -60 || b.x > w + 60 || b.y > h + 60) continue;
-        ctx.fillStyle = b.cor;
-        if (b.lados === 0) ctx.fillRect(b.x, b.y, b.g, b.g);
-        else {
-          b.ang += b.giro * dt;
-          ctx.beginPath();
-          for (let k = 0; k < 3; k++) {
-            const a2 = b.ang + (k * 6.2832) / 3, r = b.g * 2;
-            k ? ctx.lineTo(b.x + Math.cos(a2) * r, b.y + Math.sin(a2) * r) : ctx.moveTo(b.x + Math.cos(a2) * r, b.y + Math.sin(a2) * r);
-          }
-          ctx.closePath(); ctx.fill();
+      const desde = agora - tFase;
+      const amort = Math.pow(0.94, dt), amortE = Math.pow(0.988, dt), enc = Math.pow(0.995, dt), mola = Math.pow(0.8, dt);
+      const grav = 0.34 * dt, xMax = w + 60, yMax = h + 60;
+      // n ativas espalhadas pelas cores: pega o mesmo trecho inicial de cada faixa de cor
+      const fracao = n / N;
+      for (let c = 0; c < CORES.length; c++) {
+        ctx.fillStyle = CORES[c];
+        const ini = inicioCor[c], fimC = ini + Math.floor((inicioCor[c + 1] - ini) * fracao);
+        for (let k = ini; k < fimC; k++) {
+          let vx = VX[k], vy = VY[k];
+          if (estourou) { vx *= amortE; vy = vy * amortE + grav; G[k] *= enc; }
+          else if (desde < (compasso[PAL[k]] ?? PAL[k] * 430)) { vx *= amort; vy *= amort; }
+          else { const tt = T[k] * dt; vx = (vx + (AX[k] - X[k]) * tt) * mola; vy = (vy + (AY[k] - Y[k]) * tt) * mola; }
+          const x = X[k] + vx * dt, y = Y[k] + vy * dt;
+          VX[k] = vx; VY[k] = vy; X[k] = x; Y[k] = y;
+          if (x < -60 || x > xMax || y > yMax) continue;
+          const g = G[k];
+          ctx.fillRect(x, y, g, g);
         }
       }
-      requestAnimationFrame(quadro);
+      raf = requestAnimationFrame(quadro);
     };
-    requestAnimationFrame(quadro);
-    return () => { vivo = false; if (relogioMedir) clearTimeout(relogioMedir); window.removeEventListener("resize", aoRedimensionar); };
+    const comecar = () => {
+      if (!vivo || rodando || document.hidden || n === 0) return;
+      rodando = true; t0 = performance.now(); lentos = 0;
+      raf = requestAnimationFrame(quadro);
+    };
+    const parar = () => { rodando = false; cancelAnimationFrame(raf); };
+    // Aba escondida: para o laco. Ao voltar, zera o relogio para nao dar um salto.
+    const aoVisibilidade = () => { if (document.hidden) parar(); else comecar(); };
+    document.addEventListener("visibilitychange", aoVisibilidade);
+
+    // Primeiro pinta o fundo; a parte pesada (ler os pixels das letras e criar as
+    // particulas) fica para depois do primeiro quadro, quando o navegador estiver livre.
+    cv.width = Math.floor(w * dpr); cv.height = Math.floor(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = FUNDO; ctx.fillRect(0, 0, w, h);
+    const preparar = () => {
+      if (!vivo) return;
+      medirTela();
+      if (!umA.length) return;
+      const raioBase = Math.max(w, h);
+      for (let k = 0; k < N; k++) {
+        const ang = Math.random() * Math.PI * 2, raio = raioBase * (0.7 + Math.random() * 0.8);
+        X[k] = w / 2 + Math.cos(ang) * raio; Y[k] = h / 2 + Math.sin(ang) * raio;
+        T[k] = 0.055 + Math.random() * 0.05;
+        // menos particulas pedem graos um pouco maiores para a letra continuar cheia
+        G[k] = (0.6 + Math.random() * 1.1) * Math.min(1.8, Math.sqrt(150000 / N) * 0.62);
+      }
+      n = N;
+      comecar();
+    };
+    type Ocioso = (cb: () => void, o?: { timeout: number }) => number;
+    const ocioso = (window as unknown as { requestIdleCallback?: Ocioso }).requestIdleCallback;
+    let idIdle = 0;
+    const rafIni = requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (ocioso) idIdle = ocioso(preparar, { timeout: 120 }); else idIdle = window.setTimeout(preparar, 0);
+    }));
+
+    let relogioMedir: number | null = null;
+    const aoRedimensionar = () => {
+      if (relogioMedir) clearTimeout(relogioMedir);
+      relogioMedir = window.setTimeout(medirTela, 140);
+    };
+    window.addEventListener("resize", aoRedimensionar);
+
+    return () => {
+      vivo = false; parar(); cancelAnimationFrame(rafIni);
+      const cancelar = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+      if (ocioso && cancelar) cancelar(idIdle); else clearTimeout(idIdle);
+      if (relogioMedir) clearTimeout(relogioMedir);
+      window.removeEventListener("resize", aoRedimensionar);
+      document.removeEventListener("visibilitychange", aoVisibilidade);
+    };
   }, []);
 
   useEffect(() => {

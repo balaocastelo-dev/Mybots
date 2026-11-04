@@ -22,6 +22,22 @@ import { limitsFromEnv } from "../resources.js";
 import { baixarImagens, descrever, visionPlan } from "../vision.js";
 import { confirmacaoCurta } from "../confirma.js";
 import { textoComRecadosDeBots } from "../recados.js";
+import {
+  MAX_AUTO_CONTINUES,
+  MAX_PROVIDER_RETRIES,
+  pareceTarefaIncompleta,
+  montarAvisoContinuar,
+  montarAvisoLimiteRodadas,
+  comRetryProvedor,
+  carregarTarefa,
+  persistirTarefa,
+  limparTarefa,
+  textoProgresso,
+  textoConclusao,
+  montarContextoRetomada,
+  isErroRetriavelProvedor,
+  provedorFallback,
+} from "../continuarTarefa.js";
 import type { Engine } from "./types.js";
 
 type Turn = { conversationId: string; messageId: string; fromName: string; fromId: string; fromKind: string; text: string; attachments?: Attachment[] };
@@ -237,7 +253,7 @@ export class DirectEngine implements Engine {
       "- ADIANTE o passo obvio. Se o pedido tem uma continuacao evidente, faca na mesma volta em vez de esperar o chefe pedir de novo: perguntou o preco, traga tambem o estoque e o link; mandou olhar a loja, diga tambem se tem algo fora do lugar; achou um erro, ja traga a causa provavel. O limite e a regra de sempre: adiantar NUNCA significa publicar, enviar, pagar, apagar ou instalar sem o OK dele.",
       "- FECHE SEMPRE ADIANTANDO. A ultima linha da sua resposta nunca e um ponto final seco. Ela e uma de duas coisas: (a) uma pergunta curta, quando a decisao e do chefe e voce precisa dela para seguir; ou (b) uma oferta concreta do que VOCE ja pode fazer em seguida, especifica o bastante para ele so dizer 'pode'. Exemplos de (b): 'Se quiser, ja monto a lista dos 10 mais vendidos do mes em planilha.' / 'Posso deixar uma rotina conferindo isso todo dia as 8h.' / 'Se mandar o nome do cliente, ja deixo o orcamento pronto.' O que NAO vale como fechamento: 'posso ajudar em mais alguma coisa?', 'qualquer coisa estou a disposicao', repetir o que voce acabou de fazer, ou terminar sem nada. Uma frase so, sem enfeite.",
       "- CRIE ROTINA quando o trabalho continua. Se algo precisa ser olhado de novo mais tarde — esperar uma resposta, conferir um preco, acompanhar um pedido, repetir um relatorio — use schedule em vez de pedir para o chefe lembrar. O cron tem 5 campos e aceita minutos: '*/10 * * * *' a cada 10 min, '0 * * * *' de hora em hora, '0 8 * * *' todo dia as 8h. Avise em uma linha que criou a rotina e como desliga-la. Rotina de minutos e para acompanhar algo que esta acontecendo AGORA; para o resto use hora ou dia, senao voce vira barulho. Se voce prometeu um prazo ('volto em 1 hora'), e o prazo passar sem resposta, DIGA isso quando voltar ao assunto: 'ja passou do nosso prazo de 60 minutos'. Prazo que ninguem cobra nao e prazo.",
-      "- DIGA O PLANO ANTES E AVISE ENQUANTO TRABALHA. Ao receber um pedido que leva mais que alguns segundos, responda PRIMEIRO com UMA frase curta, no presente, antes de qualquer ferramenta: 'Vou montar o resumo em PDF agora.' Sem essa frase o chefe fica olhando para o vazio. Enquanto trabalha, use set_status com frases curtas e de verdade ('Montando o PDF', 'Procurando o preco'). A entrega (arquivo, tela, resumo) vem em seguida, e o resumo pode continuar depois do arquivo. Sumir e voltar pronto deixa quem pediu no escuro.",
+      "- DIGA O PLANO ANTES E AVISE ENQUANTO TRABALHA. Ao receber um pedido que leva mais que alguns segundos, responda PRIMEIRO com UMA frase curta, no presente, NA MESMA RODADA em que voce JA chama a ferramenta: 'Vou montar o resumo em PDF agora.' + write_file/run_command/etc. Sem a frase o chefe fica no vazio; sem a ferramenta a frase e so promessa vazia e o motor te forca a continuar. Enquanto trabalha, use set_status / planejar / atualizar_passo. Nunca encerre o turno so com 'vou fazer' / 'estou processando'. Se precisar de aprovacao (enviar, pagar, apagar, publicar), peca e PARE — nao invente que fez.",
       "- ENTREGUE MOSTRANDO O QUE MUDOU E A CONTA. Nao diga so 'pronto'. Diga o que ficou diferente, concretamente: 'Agora o logo fica a direita, os dois produtos lado a lado e o total em destaque.' E quando houver numero por tras, mostre a conta em vez de so o resultado: 'Na internet esse computador sai por R$ 6.380; na proposta coloquei R$ 12.990 — mais que o dobro.' Quem le precisa poder conferir voce sem refazer o trabalho.",
       "- CONFIRME O QUE SAIU, COM HORA E ONDE PROCURAR. Depois de mandar e-mail, WhatsApp ou publicar, confirme em uma linha: para quem foi, a que horas, com o que anexado, e onde olhar se nao aparecer ('se nao estiver na caixa de entrada, veja o spam ou a aba Promocoes'). 'Enviado' sozinho nao ajuda ninguem a conferir.",
       "- NAO TRAVE POR FALTA DE DETALHE. Se falta um dado e existe um padrao sensato, adote esse padrao, DIGA qual adotou e siga: 'Como voce nao disse o cliente, pus em nome do o chefe; e so avisar se for outro.' Pergunte apenas quando errar custa caro — dinheiro, mensagem para cliente, algo que nao da para desfazer. Uma pergunta por vez, nunca uma lista de perguntas.",
@@ -333,6 +349,16 @@ export class DirectEngine implements Engine {
     const base = textoComRecadosDeBots(t, recados);
     const { texto, media } = await this.olhar(t, base, ac.signal);
     history.push(media.length ? { role: "user", content: texto, media } : { role: "user", content: texto });
+    // Retoma tarefa que parou no meio (promessa sem ferramenta / provedor caiu).
+    const tarefaPrevia = carregarTarefa(this.cfg.workspace, conversationId);
+    if (tarefaPrevia && (tarefaPrevia.status === "em_andamento" || tarefaPrevia.status === "erro")) {
+      history.push({ role: "user", content: montarContextoRetomada(tarefaPrevia) });
+      this.hub.event(conversationId, {
+        kind: "text.note",
+        messageId: newId("b"),
+        text: "Retomando a tarefa que tinha parado: " + tarefaPrevia.objetivo.slice(0, 120),
+      });
+    }
     this.hub.status("Pensando", true);
 
     const self = this;
@@ -348,6 +374,9 @@ export class DirectEngine implements Engine {
       ask: (question, options, cartao) => this.waitQuestion(conversationId, question, options, cartao),
     };
 
+    let autoContinues = 0;
+    let toolsOkNestaTarefa = 0;
+    const objetivoTurno = String(t.text || "").replace(/\s+/g, " ").trim().slice(0, 240);
     for (let round = 0; round < this.cfg.maxToolRounds; round++) {
       if (ac.signal.aborted) break;
       // o id da mensagem nasce antes da chamada: o texto vai saindo em fluxo com esse id,
@@ -434,11 +463,43 @@ export class DirectEngine implements Engine {
         }
         if (!res) {
           saiuTexto = false;
-          res = await pedir(this.provider, this.provider.kind, janela, corte.defs, fixo);
+          try {
+            res = await comRetryProvedor(
+              () => pedir(this.provider, this.provider.kind, janela, corte.defs, fixo),
+              {
+                signal: ac.signal,
+                max: MAX_PROVIDER_RETRIES,
+                onRetry: (n, err) => {
+                  const motivo = String((err as Error)?.message ?? err).slice(0, 120);
+                  this.hub.status("Tentando de novo (" + n + "/" + MAX_PROVIDER_RETRIES + ")", true);
+                  this.hub.event(conversationId, {
+                    kind: "text.note",
+                    messageId: newId("b"),
+                    text: "Provedor falhou (" + motivo + "). Tentando de novo " + n + "/" + MAX_PROVIDER_RETRIES + "...",
+                  });
+                },
+              },
+            );
+            modeloDaVez = this.provider.model;
+            emendaProv = this.provider;
+            emendaKind = this.provider.kind;
+          } catch (primario) {
+            const fb = isErroRetriavelProvedor(primario) ? provedorFallback() : null;
+            if (!fb || ac.signal.aborted || saiuTexto) throw primario;
+            this.hub.event(conversationId, {
+              kind: "text.note",
+              messageId: newId("b"),
+              text: "Provedor principal falhou; tentando reserva " + fb.kind + "/" + fb.model + "...",
+            });
+            this.hub.status("Provedor reserva", true);
+            const reserva = new OpenAICompatProvider(fb.kind, fb.model, fb.baseURL, fb.apiKey);
+            saiuTexto = false;
+            res = await pedir(reserva, fb.kind, janela, corte.defs, fixo);
+            emendaProv = reserva;
+            emendaKind = fb.kind;
+            modeloDaVez = fb.model;
+          }
           inteiro = res.text;
-          modeloDaVez = this.provider.model;
-          emendaProv = this.provider;
-          emendaKind = this.provider.kind;
           emendaTools = corte.defs;
           emendaFixo = fixo;
         }
@@ -460,11 +521,27 @@ export class DirectEngine implements Engine {
           inteiro += "\n\n[a resposta ficou longa demais para o modelo fechar sozinho; peca a continuacao e eu sigo daqui]";
         }
       } catch (e) {
-        // Parar não é erro: quando o chefe aperta ⏹, o provedor devolve "aborted" e isso
+        // Parar nao e erro: quando o chefe aperta stop, o provedor devolve "aborted" e isso
         // virava "Falha no modelo" vermelha no chat, como se algo tivesse quebrado.
         if (ac.signal.aborted) { this.saveHistory(conversationId, history); return; }
         const msg = `Falha no modelo (${this.provider.kind}/${this.provider.model}): ${(e as Error).message}`;
         this.hub.event(conversationId, { kind: "error", message: msg });
+        persistirTarefa(this.cfg.workspace, {
+          conversationId,
+          botId: this.cfg.bot.id,
+          objetivo: objetivoTurno || "(tarefa)",
+          status: "erro",
+          continues: autoContinues,
+          ultimoTexto: msg,
+          atualizadoEm: Date.now(),
+          erro: msg,
+        });
+        this.hub.status("Erro — tarefa pausada", false);
+        this.hub.event(conversationId, {
+          kind: "text.note",
+          messageId: newId("b"),
+          text: textoConclusao(false, msg + (isErroRetriavelProvedor(e) ? " (vou retomar sozinho na proxima mensagem)." : "")),
+        });
         history.pop();
         this.saveHistory(conversationId, history);
         return;
@@ -474,9 +551,55 @@ export class DirectEngine implements Engine {
       if (res.usage) this.hub.send({ type: "uso", modelo: modeloDaVez, entrada: res.usage.input, saida: res.usage.output, cacheLido: res.usage.cacheLido, cacheGravado: res.usage.cacheGravado });
       if (res.toolCalls.length === 0) {
         const text = inteiro || "(sem resposta)";
+        const incompleta = pareceTarefaIncompleta(text, t.text, 0);
+        if (incompleta && autoContinues < MAX_AUTO_CONTINUES && !ac.signal.aborted) {
+          autoContinues += 1;
+          history.push({ role: "assistant", content: text });
+          this.hub.event(conversationId, { kind: "text.done", messageId, text });
+          const prog = textoProgresso(autoContinues, MAX_AUTO_CONTINUES, text);
+          this.hub.event(conversationId, { kind: "text.note", messageId: newId("b"), text: prog });
+          this.hub.status("Continuando (" + autoContinues + "/" + MAX_AUTO_CONTINUES + ")", true);
+          persistirTarefa(this.cfg.workspace, {
+            conversationId,
+            botId: this.cfg.bot.id,
+            objetivo: objetivoTurno || text.slice(0, 240),
+            status: "em_andamento",
+            continues: autoContinues,
+            ultimoTexto: text,
+            atualizadoEm: Date.now(),
+          });
+          history.push({
+            role: "user",
+            content: montarAvisoContinuar(text, autoContinues, MAX_AUTO_CONTINUES),
+          });
+          continue;
+        }
+        if (incompleta) {
+          const falha = textoConclusao(
+            false,
+            "parei depois de " + autoContinues + " continuacoes automaticas sem chamar ferramenta. Manda 'continua' que eu retomo.",
+          );
+          history.push({ role: "assistant", content: text });
+          this.hub.event(conversationId, { kind: "text.done", messageId, text });
+          this.hub.event(conversationId, { kind: "text.note", messageId: newId("b"), text: falha });
+          persistirTarefa(this.cfg.workspace, {
+            conversationId,
+            botId: this.cfg.bot.id,
+            objetivo: objetivoTurno || text.slice(0, 240),
+            status: "erro",
+            continues: autoContinues,
+            ultimoTexto: text,
+            atualizadoEm: Date.now(),
+            erro: falha,
+          });
+          this.hub.status("Travou — precisa de voce", false);
+          break;
+        }
         if (atalho) this.cache.guardar(this.cfg.bot.id, t.text, text, false);
         history.push({ role: "assistant", content: text });
         this.hub.event(conversationId, { kind: "text.done", messageId, text });
+        limparTarefa(this.cfg.workspace, conversationId);
+        this.hub.status("Pronto", false);
         break;
       }
       // texto intermediário + chamadas de ferramenta
@@ -517,10 +640,20 @@ export class DirectEngine implements Engine {
         if (falhou) loopState.failCount.set(call.name, falhas + 1);
         else loopState.failCount.set(call.name, 0);
         history.push({ role: "tool", toolCallId: call.id, name: call.name, content: result });
+        if (!falhou) toolsOkNestaTarefa += 1;
       }
       this.hub.status("Pensando", true);
       if (round === this.cfg.maxToolRounds - 1) {
-        history.push({ role: "user", content: "[sistema] Limite de rodadas de ferramentas atingido. Resuma o que fez e o que falta." });
+        history.push({ role: "user", content: montarAvisoLimiteRodadas(toolsOkNestaTarefa > 0) });
+      }
+    }
+    // Se saiu do loop ainda com tarefa aberta e sem abort, marca estado para retomar.
+    if (!ac.signal.aborted) {
+      const aberta = carregarTarefa(this.cfg.workspace, conversationId);
+      if (aberta && aberta.status === "em_andamento" && autoContinues >= MAX_AUTO_CONTINUES) {
+        this.hub.status("Travou — precisa de voce", false);
+      } else if (!aberta && toolsOkNestaTarefa > 0) {
+        this.hub.status("Pronto", false);
       }
     }
     this.saveHistory(conversationId, history);

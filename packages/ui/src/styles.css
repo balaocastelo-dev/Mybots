@@ -2786,7 +2786,7 @@ main.chat > .colab-quadro,
   display: block;
   flex: 0 0 auto;
   width: clamp(52px, 11vw, 92px);
-  margin: 0 -10px;
+  margin: 0 calc((var(--s, 1) - 1) * 42px - 14px); /* juntas 04/11: compensa a escala, arco mantido */
   transform: translateY(var(--y, 0)) scale(var(--s, 1));
   transform-origin: 50% 100%;
   filter: drop-shadow(0 6px 10px rgba(20, 10, 30, 0.18));
@@ -2841,12 +2841,12 @@ main.chat > .colab-quadro,
 @media (max-width: 520px) {
   .time-amebas { width: min(96vw, 360px); }
   .time-amebas-fila { min-height: 112px; }
-  .time-ameba { width: clamp(40px, 12.5vw, 64px); margin: 0 -7px; }
+  .time-ameba { width: clamp(40px, 12.5vw, 64px); margin: 0 calc((var(--s, 1) - 1) * 28px - 10px); }
 }
 @media (max-width: 360px) {
   .time-ameba:nth-child(1),
   .time-ameba:nth-child(9) { display: none; } /* 7 no celular bem estreito */
-  .time-ameba { margin: 0 -6px; }
+  .time-ameba { margin: 0 calc((var(--s, 1) - 1) * 26px - 9px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .time-ameba, .time-ameba img { animation: none !important; }

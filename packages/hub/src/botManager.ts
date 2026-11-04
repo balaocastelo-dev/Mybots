@@ -214,6 +214,7 @@ export class BotManager {
     if (next.provider.kind === "opencode") next.engine = "opencode";
     this.hub.db.upsertManaged(next);
     this.writeFiles(next);
+    if (patch.voice !== undefined) this.hub.db.definirVozDoPerfil(id, next.name, next.voice ?? "");
     this.hub.db.upsertBot(
       { id: next.id, name: next.name, role: next.role, avatar: next.avatar, color: next.color, voice: next.voice },
       { engine: next.engine, provider: next.provider?.kind, model: next.provider?.model },
@@ -250,6 +251,26 @@ export class BotManager {
     else if (fs.existsSync(pasta)) fs.writeFileSync(path.join(pasta, ".removido"), new Date().toISOString() + "\n");
     if (!r.morreu) console.error(`[hub] o processo do bot ${id} não morreu; ele está excluído e será recusado se tentar conectar`);
     return undefined;
+  }
+
+  /**
+   * Grava a voz escolhida no perfil sem reiniciar o processo e sem reescrever o .env.
+   * O TTS lê o banco na hora. O arquivo só alinha o próximo sobe-o-nó.
+   */
+  definirVoz(id: string, voice: string) {
+    const d = this.hub.db.getManaged(id);
+    if (d && d.voice !== (voice || undefined)) {
+      d.voice = voice || undefined;
+      this.hub.db.upsertManaged(d);
+    }
+    const cfgFile = path.join(this.botsDir, id, "mybots-node.json");
+    if (!fs.existsSync(cfgFile)) return;
+    try {
+      const cfg = JSON.parse(fs.readFileSync(cfgFile, "utf8").replace(/^\uFEFF/, ""));
+      if (!cfg || typeof cfg !== "object") return;
+      cfg.bot = { ...(cfg.bot ?? {}), voice: voice || undefined };
+      fs.writeFileSync(cfgFile, JSON.stringify(cfg, null, 2));
+    } catch { /* a voz no banco já vale para a fala */ }
   }
 
   private writeFiles(d: ManagedBotDef) {

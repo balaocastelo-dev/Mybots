@@ -2,14 +2,23 @@ import { OPENAI_COMPAT_PRESETS, type NodeConfig } from "../config.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { GeminiProvider } from "./gemini.js";
 import { OpenAICompatProvider } from "./openaiCompat.js";
+import { comCamadaEsperta } from "./smart.js";
 import type { Provider } from "./types.js";
 
 export function createProvider(cfg: NodeConfig): Provider {
+  return comCamadaEsperta(criarBase(cfg));
+}
+
+function criarBase(cfg: NodeConfig): Provider {
   const p = cfg.provider;
   switch (p.kind) {
     case "gemini":
       if (!p.apiKey) throw new Error("Gemini precisa de GEMINI_API_KEY (ou provider.apiKey)");
       return new GeminiProvider(p.model, p.apiKey, p.baseURL || undefined);
+    case "8token":
+      // Revenda 8Token: API no formato da Anthropic (/v1/messages), outra URL e outra chave.
+      if (!p.apiKey) throw new Error("8Token precisa de EIGHTTOKEN_API_KEY no .env do Hub");
+      return new AnthropicProvider(p.model, p.apiKey, p.baseURL || process.env.EIGHTTOKEN_BASE_URL || "https://8token.tech");
     case "anthropic":
     case "claude":
       if (!p.apiKey) throw new Error("Claude precisa de ANTHROPIC_API_KEY (ou provider.apiKey)");

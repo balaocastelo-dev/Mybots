@@ -24,12 +24,19 @@ const api = (path: string, init?: RequestInit) =>
 const FUNDO = "#F4F4F1"; // claro, como a referencia: letra grafite sobre parede clara
 // grafite na maioria, com faiscas vermelhas: a letra le como quase preta de longe
 const CORES = ["#4A4A52", "#5C5C66", "#3A3A42", "#6E6E78", "#55555E", "#45454D", "#63636D", "#4F4F58", "#4A5A6E", "#4A6B5E"];
-const QUANTAS = 150000; // o triplo: enche a letra em vez de pontilhar o contorno
+/** Quantas particulas o aparelho aguenta a 60 quadros: depende dos nucleos e da
+ *  area da tela. 150 mil travava ate maquina boa; o teto aqui fica entre 12 e 40 mil. */
+function quantasPorAparelho(w: number, h: number, dpr: number): number {
+  const nucleos = navigator.hardwareConcurrency || 4;
+  let base = nucleos >= 12 ? 40000 : nucleos >= 8 ? 32000 : nucleos >= 6 ? 24000 : 16000;
+  if (dpr > 1.5) base *= 0.75; // tela retina: cada grao custa mais pixels
+  if (w * h < 900 * 700) base *= 0.6; // celular / janela pequena
+  return Math.max(12000, Math.min(40000, Math.round(base)));
+}
 /** quanto cada palavra espera a anterior, no compasso da voz */
 const PASSO_A = 430, PASSO_B = 520;
 const T_TROCA = 2600, T_EXPLODE = 6600, T_FIM = 7450;
 
-type Par = { x: number; y: number; ax: number; ay: number; vx: number; vy: number; t: number; g: number; cor: string; lados: number; ang: number; giro: number; palavra: number };
 type Linha = { tipo: "hero" | "nota" | "regra"; texto?: string };
 
 /** Desenha as linhas num canvas invisível e devolve os pixels com tinta. */
@@ -158,6 +165,80 @@ function alvos(w: number, h: number, linhas: Linha[]): { x: number; y: number; p
   }
   return pts;
 }
+/** WebGL aguenta o triplo: 36 a 120 mil, pelo mesmo criterio de nucleos e tela. */
+function quantasWebGL(w: number, h: number, dpr: number): number {
+  const nucleos = navigator.hardwareConcurrency || 4;
+  let base = nucleos >= 12 ? 120000 : nucleos >= 8 ? 96000 : nucleos >= 6 ? 72000 : 48000;
+  if (dpr > 1.5) base *= 0.75;
+  if (w * h < 900 * 700) base *= 0.6;
+  return Math.max(36000, Math.min(120000, Math.round(base)));
+}
+
+const hexRGB = (hx: string) => [1, 3, 5].map((i) => parseInt(hx.slice(i, i + 2), 16) / 255);
+
+function criarGL(cv: HTMLCanvasElement): WebGLRenderingContext | null {
+  try {
+    // preserveDrawingBuffer: depois da explosao o quadro nao e apagado, recebe o veu
+    // translucido que deixa rastro — igual ao 2D.
+    const o = { alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: true, powerPreference: "high-performance" as const };
+    return (cv.getContext("webgl", o) as WebGLRenderingContext | null) ?? null;
+  } catch { return null; }
+}
+
+/** Monta os dois programas: os pontos (um gl.POINTS so) e o veu de tela cheia. */
+function montarPintor(gl: WebGLRenderingContext, N: number, NC: number) {
+  const sh = (tipo: number, src: string) => { const s = gl.createShader(tipo)!; gl.shaderSource(s, src); gl.compileShader(s); return s; };
+  const prog = (vs: string, fs: string) => { const p = gl.createProgram()!; gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p); return p; };
+  const pts = prog(`
+    attribute vec3 a_p; attribute float a_c;
+    uniform vec2 u_res; uniform float u_dpr; uniform vec3 u_cor[${NC}];
+    varying vec4 v_cor;
+    void main() {
+      float s = a_p.z * u_dpr;
+      if (a_p.x < -60.0 || a_p.x > u_res.x + 60.0 || a_p.y > u_res.y + 60.0 || s <= 0.0) { gl_Position = vec4(2.0, 2.0, 0.0, 1.0); gl_PointSize = 0.0; return; }
+      vec2 c = (a_p.xy + a_p.z * 0.5) / u_res;
+      gl_Position = vec4(c.x * 2.0 - 1.0, 1.0 - c.y * 2.0, 0.0, 1.0);
+      gl_PointSize = max(s, 1.0);
+      vec3 cor = u_cor[0];
+      for (int i = 0; i < ${NC}; i++) { if (float(i) == a_c) cor = u_cor[i]; }
+      v_cor = vec4(cor, min(1.0, s)); // grao menor que 1 px fica mais claro, como o fillRect
+    }`, `precision mediump float; varying vec4 v_cor; void main() { gl_FragColor = v_cor; }`);
+  const veu = prog(`attribute vec2 a_q; void main() { gl_Position = vec4(a_q, 0.0, 1.0); }`,
+    `precision mediump float; void main() { gl_FragColor = vec4(244.0/255.0, 244.0/255.0, 241.0/255.0, 0.26); }`);
+
+  const bufP = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufP); gl.bufferData(gl.ARRAY_BUFFER, N * 12, gl.DYNAMIC_DRAW);
+  const cores = new Float32Array(N); for (let k = 0; k < N; k++) cores[k] = k % NC;
+  const bufC = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufC); gl.bufferData(gl.ARRAY_BUFFER, cores, gl.STATIC_DRAW);
+  const bufQ = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufQ); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const aP = gl.getAttribLocation(pts, "a_p"), aC = gl.getAttribLocation(pts, "a_c"), aQ = gl.getAttribLocation(veu, "a_q");
+  const uRes = gl.getUniformLocation(pts, "u_res"), uDpr = gl.getUniformLocation(pts, "u_dpr");
+  gl.useProgram(pts);
+  gl.uniform3fv(gl.getUniformLocation(pts, "u_cor[0]"), new Float32Array(CORES.flatMap(hexRGB)));
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  const [fr, fg, fb] = hexRGB(FUNDO);
+
+  return {
+    tamanho(pw: number, ph: number, w: number, h: number, dpr: number) {
+      gl.viewport(0, 0, pw, ph); gl.useProgram(pts); gl.uniform2f(uRes, w, h); gl.uniform1f(uDpr, dpr);
+    },
+    limpar(veuTranslucido: boolean) {
+      if (!veuTranslucido) { gl.clearColor(fr, fg, fb, 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
+      gl.useProgram(veu);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufQ); gl.enableVertexAttribArray(aQ); gl.vertexAttribPointer(aQ, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.disableVertexAttribArray(aQ);
+    },
+    desenhar(P: Float32Array, n: number) {
+      gl.useProgram(pts);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufP); gl.bufferSubData(gl.ARRAY_BUFFER, 0, n === P.length / 3 ? P : P.subarray(0, n * 3));
+      gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufC); gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 1, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.POINTS, 0, n);
+    },
+    liberar() { gl.deleteBuffer(bufP); gl.deleteBuffer(bufC); gl.deleteBuffer(bufQ); gl.deleteProgram(pts); gl.deleteProgram(veu); },
+  };
+}
+
 export function Abertura({ onFim }: { onFim: () => void }) {
   const [saindo, setSaindo] = useState(false);
   const [pronto, setPronto] = useState(false);
@@ -173,48 +254,160 @@ export function Abertura({ onFim }: { onFim: () => void }) {
 
   useEffect(() => {
     const cv = tela.current; if (!cv) return;
-    const ctx = cv.getContext("2d", { alpha: false }); if (!ctx) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     let w = Math.floor(window.innerWidth), h = Math.floor(window.innerHeight);
+    // WebGL primeiro (um unico desenho gl.POINTS por quadro); se o navegador nao
+    // tiver, cai no caminho 2D de antes. Um canvas so aceita um tipo de contexto,
+    // por isso a escolha acontece antes de tudo.
+    const gl = criarGL(cv);
+    const ctx = gl ? null : cv.getContext("2d", { alpha: false });
+    if (!gl && !ctx) return;
     let umA: ReturnType<typeof alvos> = [], umB: ReturnType<typeof alvos> = [];
-    let bolas: Par[] = [];
     let trocou = false;
+    // O compasso da voz conta a partir da montagem, mesmo com a preparacao adiada.
+    const tMontagem = performance.now();
 
-    // Mudar o tamanho da janela TEM de recentrar: o canvas e os alvos sao medidos pela
-    // janela. Sem isto, a abertura montada numa janela menor continuava desenhada no
-    // tamanho antigo e ficava encostada no canto, ocupando meia tela.
-    const medirTela = () => {
+    // Particulas em vetores tipados. A cor e k % 10: no 2D isso permite pintar cor
+    // por cor com passo 10 (10 trocas de tinta por quadro); no WebGL a cor e atributo
+    // fixo. P guarda x, y, tamanho intercalados: e o proprio buffer enviado a GPU.
+    const N = gl ? quantasWebGL(w, h, dpr) : quantasPorAparelho(w, h, dpr);
+    const P = new Float32Array(N * 3);
+    const AX = new Float32Array(N), AY = new Float32Array(N);
+    const VX = new Float32Array(N), VY = new Float32Array(N), T = new Float32Array(N);
+    const PAL = new Uint8Array(N);
+    // No WebGL o ponto cai no centro do pixel (sem a suavizacao do fillRect) e as
+    // letras sao amostradas numa grade de 2 px: sem um desvio fixo por particula a
+    // letra viraria uma grade visivel. Meio-pixel aleatorio devolve o aspecto de areia.
+    const JIT = new Float32Array(N * 2);
+    if (gl) for (let k = 0; k < N * 2; k++) JIT[k] = (Math.random() - 0.5) * 2.2;
+    const NC = CORES.length;
+    let n = 0; // quantas estao ativas (o corte adaptativo so diminui este numero)
+    const pintor = gl ? montarPintor(gl, N, NC) : null;
+    if (gl) (window as unknown as { __abertura?: string }).__abertura = "webgl:" + N;
+    else (window as unknown as { __abertura?: string }).__abertura = "2d:" + N;
+
+    const prender = (lista: ReturnType<typeof alvos>) => {
+      if (!lista.length) return;
+      for (let k = 0; k < N; k++) { const p = lista[(k * 7919) % lista.length]; AX[k] = p.x + JIT[k * 2]; AY[k] = p.y + JIT[k * 2 + 1]; PAL[k] = p.palavra; }
+    };
+    const limpar = (veu: boolean) => {
+      if (pintor) pintor.limpar(veu);
+      else if (ctx) { ctx.fillStyle = veu ? "rgba(244,244,241,0.26)" : FUNDO; ctx.fillRect(0, 0, w, h); }
+    };
+    const dimensionar = () => {
       w = Math.floor(window.innerWidth); h = Math.floor(window.innerHeight);
       cv.width = Math.floor(w * dpr); cv.height = Math.floor(h * dpr);
       cv.style.width = w + "px"; cv.style.height = h + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (pintor) pintor.tamanho(cv.width, cv.height, w, h, dpr);
+      else if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      limpar(false);
+    };
+    const medirTela = () => {
+      dimensionar();
       umA = alvos(w, h, BLOCO_1);
       umB = alvos(w, h, BLOCO_2);
-      const atual = trocou ? umB : umA;
-      if (atual.length) {
-        for (let k = 0; k < bolas.length; k++) {
-          const n = atual[k % atual.length];
-          bolas[k].ax = n.x; bolas[k].ay = n.y; bolas[k].palavra = n.palavra;
+      prender(trocou ? umB : umA);
+    };
+
+    let vivo = true, rodando = false, raf = 0, t0 = 0, tFase = tMontagem, estourou = false;
+    // Queda de qualidade adaptativa: o orcamento e o periodo real da tela (60, 120,
+    // 144 Hz...), medido nos primeiros quadros. Estourou seguido, corta pela metade.
+    let lentos = 0, cortes = 0, amostras = 0, somaMs = 0, orcamento = 0;
+
+    const quadro = (agora: number) => {
+      if (!vivo || !rodando) return;
+      const ms = agora - t0; t0 = agora;
+      // fisica em tempo real (dt = 1 a 60 Hz, 0,42 a 144 Hz); sem passo fixo nem teto
+      // de 60 quadros. O limite de 2,5 so evita salto depois de um engasgo grande.
+      const dt = Math.min(2.5, ms / 16.7);
+      if (amostras < 30) { if (ms > 0 && ms < 40) { somaMs += ms; amostras++; } if (amostras === 30) orcamento = somaMs / 30; }
+      else if (!estourou && cortes < 2) {
+        lentos = ms > orcamento * 1.6 ? lentos + 1 : 0;
+        if (lentos > 20) { n = n >> 1; cortes++; lentos = 0; }
+      }
+
+      if (fase.current === 1 && !trocou && umB.length) {
+        trocou = true; tFase = agora;
+        prender(umB);
+        for (let k = 0; k < N; k++) { VX[k] += (Math.random() - 0.5) * 5; VY[k] += (Math.random() - 0.5) * 5; }
+      }
+      if (fase.current === 2 && !estourou) {
+        estourou = true;
+        const cx = w / 2, cy = h / 2;
+        for (let k = 0; k < N; k++) {
+          const dx = P[k * 3] - cx, dy = P[k * 3 + 1] - cy, d = Math.sqrt(dx * dx + dy * dy) || 1;
+          const forca = 14 + Math.random() * 38;
+          VX[k] = (dx / d) * forca + (Math.random() - 0.5) * 12;
+          VY[k] = (dy / d) * forca + (Math.random() - 0.5) * 12 - 6;
         }
       }
-      ctx.fillStyle = FUNDO; ctx.fillRect(0, 0, w, h);
-    };
-    medirTela();
-    for (let i = 0; i < (umA.length ? QUANTAS : 0); i++) {
-      const a = umA[i % umA.length];
-      const ang = Math.random() * Math.PI * 2, raio = Math.max(w, h) * (0.7 + Math.random() * 0.8);
-      bolas.push({
-        x: w / 2 + Math.cos(ang) * raio, y: h / 2 + Math.sin(ang) * raio,
-        ax: a.x, ay: a.y, vx: 0, vy: 0,
-        t: 0.055 + Math.random() * 0.05, g: 0.6 + Math.random() * 1.1,
-        cor: CORES[(Math.random() * CORES.length) | 0],
-        lados: Math.random() < 0.03 ? 3 : 0,
-        ang: Math.random() * 6.28, giro: (Math.random() - 0.5) * 0.14,
-        palavra: a.palavra,
-      });
-    }
 
-    medirTela(); // agora que as bolas existem, prende-as aos alvos recem-medidos
+      limpar(estourou);
+
+      const compasso = trocou ? tempoB.current : tempoA.current;
+      const desde = agora - tFase;
+      const amort = Math.pow(0.94, dt), amortE = Math.pow(0.988, dt), enc = Math.pow(0.995, dt), mola = Math.pow(0.8, dt);
+      const grav = 0.34 * dt;
+      for (let k = 0, j = 0; k < n; k++, j += 3) {
+        let vx = VX[k], vy = VY[k];
+        const x0 = P[j], y0 = P[j + 1];
+        if (estourou) { vx *= amortE; vy = vy * amortE + grav; P[j + 2] *= enc; }
+        else if (desde < (compasso[PAL[k]] ?? PAL[k] * 430)) { vx *= amort; vy *= amort; }
+        else { const tt = T[k] * dt; vx = (vx + (AX[k] - x0) * tt) * mola; vy = (vy + (AY[k] - y0) * tt) * mola; }
+        VX[k] = vx; VY[k] = vy; P[j] = x0 + vx * dt; P[j + 1] = y0 + vy * dt;
+      }
+
+      if (pintor) pintor.desenhar(P, n);
+      else if (ctx) {
+        const xMax = w + 60, yMax = h + 60;
+        for (let c = 0; c < NC; c++) {
+          ctx.fillStyle = CORES[c];
+          for (let k = c, j = c * 3; k < n; k += NC, j += NC * 3) {
+            const x = P[j], y = P[j + 1];
+            if (x < -60 || x > xMax || y > yMax) continue;
+            ctx.fillRect(x, y, P[j + 2], P[j + 2]);
+          }
+        }
+      }
+      raf = requestAnimationFrame(quadro);
+    };
+    const comecar = () => {
+      if (!vivo || rodando || document.hidden || n === 0) return;
+      rodando = true; t0 = performance.now(); lentos = 0;
+      raf = requestAnimationFrame(quadro);
+    };
+    const parar = () => { rodando = false; cancelAnimationFrame(raf); };
+    // Aba escondida: para o laco. Ao voltar, zera o relogio para nao dar um salto.
+    const aoVisibilidade = () => { if (document.hidden) parar(); else comecar(); };
+    document.addEventListener("visibilitychange", aoVisibilidade);
+
+    // Primeiro pinta o fundo; a parte pesada (ler os pixels das letras e criar as
+    // particulas) fica para depois do primeiro quadro, quando o navegador estiver livre.
+    dimensionar();
+    const preparar = () => {
+      if (!vivo) return;
+      medirTela();
+      if (!umA.length) return;
+      const raioBase = Math.max(w, h);
+      // mais particulas pedem graos menores; o fator segue a densidade para a letra
+      // ter o mesmo peso visual com 40 ou com 120 mil
+      const escala = Math.min(1.8, Math.sqrt(150000 / N) * 0.62);
+      for (let k = 0, j = 0; k < N; k++, j += 3) {
+        const ang = Math.random() * Math.PI * 2, raio = raioBase * (0.7 + Math.random() * 0.8);
+        P[j] = w / 2 + Math.cos(ang) * raio; P[j + 1] = h / 2 + Math.sin(ang) * raio;
+        P[j + 2] = (0.6 + Math.random() * 1.1) * escala;
+        T[k] = 0.055 + Math.random() * 0.05;
+      }
+      n = N;
+      comecar();
+    };
+    type Ocioso = (cb: () => void, o?: { timeout: number }) => number;
+    const ocioso = (window as unknown as { requestIdleCallback?: Ocioso }).requestIdleCallback;
+    let idIdle = 0;
+    const rafIni = requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (ocioso) idIdle = ocioso(preparar, { timeout: 120 }); else idIdle = window.setTimeout(preparar, 0);
+    }));
+
     let relogioMedir: number | null = null;
     const aoRedimensionar = () => {
       if (relogioMedir) clearTimeout(relogioMedir);
@@ -222,66 +415,15 @@ export function Abertura({ onFim }: { onFim: () => void }) {
     };
     window.addEventListener("resize", aoRedimensionar);
 
-    let vivo = true, t0 = performance.now(), tFase = t0, estourou = false;
-    let lentos = 0, cortes = 0;
-    ctx.fillStyle = FUNDO; ctx.fillRect(0, 0, w, h);
-
-    const quadro = (agora: number) => {
-      if (!vivo) return;
-      const ms = agora - t0; t0 = agora;
-      const dt = Math.min(2.5, ms / 16.7);
-      if (!estourou && cortes < 2) {
-        lentos = ms > 24 ? lentos + 1 : 0;
-        if (lentos > 30) { bolas = bolas.filter((_, k) => k % 2 === 0); cortes++; lentos = 0; }
-      }
-
-      if (fase.current === 1 && !trocou && umB.length) {
-        trocou = true; tFase = agora;
-        for (let k = 0; k < bolas.length; k++) {
-          const b = bolas[k], n = umB[k % umB.length];
-          b.ax = n.x; b.ay = n.y; b.palavra = n.palavra;
-          b.vx += (Math.random() - 0.5) * 5; b.vy += (Math.random() - 0.5) * 5;
-        }
-      }
-      if (fase.current === 2 && !estourou) {
-        estourou = true;
-        for (const b of bolas) {
-          const dx = b.x - w / 2, dy = b.y - h / 2, d = Math.hypot(dx, dy) || 1;
-          const forca = 14 + Math.random() * 38;
-          b.vx = (dx / d) * forca + (Math.random() - 0.5) * 12;
-          b.vy = (dy / d) * forca + (Math.random() - 0.5) * 12 - 6;
-          b.giro *= 5;
-        }
-      }
-
-      ctx.fillStyle = estourou ? "rgba(244,244,241,0.26)" : FUNDO;
-      ctx.fillRect(0, 0, w, h);
-
-      const compasso = trocou ? tempoB.current : tempoA.current;
-      for (let i = 0; i < bolas.length; i++) {
-        const b = bolas[i];
-        const esp = compasso[b.palavra] ?? b.palavra * 430;
-        if (estourou) { b.vx *= 0.988; b.vy = b.vy * 0.988 + 0.34 * dt; b.g *= 0.995; }
-        else if (agora - tFase < esp) { b.vx *= 0.94; b.vy *= 0.94; }
-        else { b.vx += (b.ax - b.x) * b.t * dt; b.vy += (b.ay - b.y) * b.t * dt; b.vx *= 0.8; b.vy *= 0.8; }
-        b.x += b.vx * dt; b.y += b.vy * dt;
-        if (b.x < -60 || b.x > w + 60 || b.y > h + 60) continue;
-        ctx.fillStyle = b.cor;
-        if (b.lados === 0) ctx.fillRect(b.x, b.y, b.g, b.g);
-        else {
-          b.ang += b.giro * dt;
-          ctx.beginPath();
-          for (let k = 0; k < 3; k++) {
-            const a2 = b.ang + (k * 6.2832) / 3, r = b.g * 2;
-            k ? ctx.lineTo(b.x + Math.cos(a2) * r, b.y + Math.sin(a2) * r) : ctx.moveTo(b.x + Math.cos(a2) * r, b.y + Math.sin(a2) * r);
-          }
-          ctx.closePath(); ctx.fill();
-        }
-      }
-      requestAnimationFrame(quadro);
+    return () => {
+      vivo = false; parar(); cancelAnimationFrame(rafIni);
+      const cancelar = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+      if (ocioso && cancelar) cancelar(idIdle); else clearTimeout(idIdle);
+      if (relogioMedir) clearTimeout(relogioMedir);
+      window.removeEventListener("resize", aoRedimensionar);
+      document.removeEventListener("visibilitychange", aoVisibilidade);
+      pintor?.liberar();
     };
-    requestAnimationFrame(quadro);
-    return () => { vivo = false; if (relogioMedir) clearTimeout(relogioMedir); window.removeEventListener("resize", aoRedimensionar); };
   }, []);
 
   useEffect(() => {

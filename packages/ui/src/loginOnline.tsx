@@ -1,37 +1,14 @@
-import { FormEvent, useState } from "react";
-import { api, UI_BASE } from "./api";
+import { UI_BASE } from "./api";
 import { TimeAmebas, TituloMyBots } from "./timeAmebas";
 
-type Props = { onOk: (usuario: string) => void };
+type Props = { onOk: (usuario: string, info?: { role?: string; uid?: string }) => void };
+
+// Online o login e somente com Google.
+const google = true;
+
 
 export function LoginOnline({ onOk }: Props) {
-  const [usuario, setUsuario] = useState("");
-  const [senha, setSenha] = useState("");
-  const [erro, setErro] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function enviar(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErro("");
-    try {
-      const r = await api("/login", {
-        method: "POST",
-        body: JSON.stringify({ usuario: usuario.trim(), senha }),
-      });
-      const j = await r.json().catch(() => ({} as any));
-      if (!r.ok) {
-        setErro(String(j?.error || "nao foi possivel entrar"));
-        setBusy(false);
-        return;
-      }
-      onOk(String(j.usuario || usuario), { role: j.role, uid: j.uid });
-    } catch {
-      setErro("falha de rede; tente de novo");
-      setBusy(false);
-    }
-  }
-
+  void onOk;
   return (
     <div className="login-online">
       <style>{`
@@ -53,7 +30,7 @@ export function LoginOnline({ onOk }: Props) {
       <div className="login-online-card">
         <TimeAmebas />
         <TituloMyBots />
-        <p className="login-online-sub">Acesso restrito — entre com seu e-mail e senha.</p>
+        <p className="login-online-sub">Acesso restrito — entre com sua conta Google.</p>
         
       {google && (
         <a className="login-google" href={`${UI_BASE}/api/auth/google`} style={{
@@ -66,36 +43,7 @@ export function LoginOnline({ onOk }: Props) {
           Entrar com Google
         </a>
       )}
-      {google && senhaOk && <div style={{ textAlign: "center", opacity: .6, margin: "0 0 12px", fontSize: 13 }}>ou com e-mail e senha</div>}
-      {senhaOk && (
-<form onSubmit={enviar} className="login-online-form">
-          <label>
-            E-mail
-            <input
-              type="email"
-              autoComplete="username"
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
-              required
-              disabled={busy}
-            />
-          </label>
-          <label>
-            Senha
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              required
-              disabled={busy}
-            />
-          </label>
-          {erro ? <p className="login-online-erro" role="alert">{erro}</p> : null}
-          <button type="submit" disabled={busy}>{busy ? "Entrando…" : "Entrar"}</button>
-        </form>
-      )}
-        <p className="login-online-base muted">{UI_BASE || "/"}</p>
+              <p className="login-online-base muted">{UI_BASE || "/"}</p>
       </div>
     </div>
   );

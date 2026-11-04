@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import { botOfConversation, isControlMode } from "@mybots/shared";
 import { config, tokenAllows, botForToken, raizDoProjeto } from "./config.js";
@@ -26,6 +27,7 @@ const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900
 import { PROVEDORES } from "@mybots/shared";
 import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
+import { registrarAlmas } from "./almas.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA, soulBlock } from "./botManager.js";
 import { listarEspecialidades, detectarEspecialidade, porId, montarPersonaComEspecialidade, idPadrao, categoriasDoCatalogo, resumoParaUi, carregarSkillsDaEspecialidade, recarregarEspecialidades } from "./especialidades.js";
 import { carregarReceita, idsEquipeInicial, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, reaplicarReceitaEmBot, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
@@ -45,7 +47,7 @@ import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
 import { authOnlineAtivo, cookieDe, emitirTicketWs, hubTokenLoopbackOk, lerTicketWs, registrarAuthOnline, rotaPublicaOnline, sessaoDoReq, sessaoValida, SESSION_COOKIE, setUsuariosRepo, ticketWsDoReq, usuarioDoReq } from "./authOnline.js";
-import { registrarAuthGoogle } from "./authGoogle.js";
+import { registrarAuthGoogle, definirAoEntrarGoogle } from "./authGoogle.js";
 import { UsuariosRepo } from "./usuarios.js";
 import { escopoDeQuery, filtrarBotsPorUsuario, filtrarPorOwnerUserId, podeAcessarBot } from "./isolamento.js";
 import { config as hubConfig } from "./config.js";
@@ -54,6 +56,7 @@ export async function startServer(hub: Hub) {
   instalarRedacao();
   hub.db.ensureManagedTable();
   const usuarios = new UsuariosRepo(hub.db.db);
+  const donosPendentes = new Map<string, string>();
   usuarios.ensure();
   const ownerEmail = (hubConfig.ownerEmail || hubConfig.usuarioOnline || "").toLowerCase();
   if (ownerEmail) usuarios.ensureOwner(ownerEmail, hubConfig.usuarioOnline || ownerEmail);
@@ -617,6 +620,7 @@ export async function startServer(hub: Hub) {
 
   // --- bots criados pela interface (hospedados neste PC) ---
   const manager = new BotManager(hub);
+  registrarAlmas(app);
   hub.managedIds = () => new Set(manager.list().map((b) => b.id));
   hub.protegidosIds = () => new Set(manager.list().filter((b) => b.protegido).map((b) => b.id));
   // mesma regra que o nó usa no prompt: a persona diz se o bot fala outro idioma
@@ -630,6 +634,7 @@ export async function startServer(hub: Hub) {
     botExiste: botConhecido,
   });
   android.registrar();
+  hub.androidDoBot = (id) => android.cadastro(id);
   atenderAndroidHttp = (req, reply) => android.http(req, reply);
   atenderAndroidWs = (socket, req) => android.ws(socket, req);
   app.post("/api/bots/:id/android/pair", async (req, reply) => {
@@ -644,6 +649,18 @@ export async function startServer(hub: Hub) {
     if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
     const serial = String(((req.body ?? {}) as any).serial ?? "");
     return android.usar(id, serial);
+  });
+  app.get("/api/bots/:id/android/aparelhos", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    return { aparelhos: await android.aparelhosConectados() };
+  });
+  app.post("/api/bots/:id/android/adotar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    return android.adotar(id, String((req.body as { serial?: unknown } | null)?.serial ?? ""));
   });
   app.get("/api/bots/:id/android/status", async (req, reply) => {
     const id = String((req.params as any).id ?? "");
@@ -1089,7 +1106,7 @@ export async function startServer(hub: Hub) {
     const passo = String(b.passo ?? "");
     if (!passo) return reply.code(400).send({ error: "diga o passo: imagem, pdf, video ou link" });
     const salvar = (nome: string, mime: string, data: Buffer) => {
-      const f = hub.saveFile("user", nome, mime, data);
+      const f = hub.saveFile("user", nome, mime, data, authOnlineAtivo() ? usuarioDoReq(req)?.id ?? null : null);
       return { url: f.url, name: f.name };
     };
     try {
@@ -1187,6 +1204,49 @@ export async function startServer(hub: Hub) {
     hub.broadcastKnowledge();
     hub.botUpdate(id);
     return { ok: true };
+  });
+
+  // --- WhatsApp da conta (QR no Celular; todo bot da mesma conta usa; dono conferido) ---
+  app.get("/api/bots/:id/whatsapp", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    return hub.whatsBot.estado(hub.contaDoBot(id));
+  });
+  app.post("/api/bots/:id/whatsapp/conectar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const b = (req.body ?? {}) as { forcar?: boolean };
+    hub.db.audit(id, "whatsapp.bot.conectar", { forcar: !!b.forcar });
+    return hub.whatsBot.conectar(hub.contaDoBot(id), !!b.forcar);
+  });
+  app.post("/api/bots/:id/whatsapp/desligar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const b = (req.body ?? {}) as { esquecer?: boolean };
+    await hub.whatsBot.desligar(hub.contaDoBot(id), !!b.esquecer);
+    hub.db.audit(id, "whatsapp.bot.desligar", { esquecer: !!b.esquecer });
+    return { ok: true };
+  });
+  app.get("/api/bots/:id/nascimento", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    return hub.nascimentoDe(id) ?? { botId: id, passo: null, gmail: "pendente", whatsapp: "pendente", pedidos: [] };
+  });
+  app.post("/api/bots/:id/nascimento/gmail", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const e = await hub.nascimento.tentarGmail(id, true);
+    return e ?? { botId: id };
   });
 
   // --- WhatsApp de cada empresa (conta propria, QR propria) ---
@@ -1377,7 +1437,7 @@ export async function startServer(hub: Hub) {
       const esp = porId(espId) || porId(idPadrao());
       b.especialidadeId = esp?.id ?? idPadrao();
       if (!b.role?.trim()) b.role = esp?.nome || "Assistente geral";
-      if (!b.personaTouched || !String(b.persona || "").trim()) {
+      if (!b.alma && (!b.personaTouched || !String(b.persona || "").trim())) {
         b.persona = montarPersonaComEspecialidade(String(b.name).trim(), String(b.role || esp?.nome || "").trim(), esp, soulBlock());
       }
       if (!isControlMode(b.controlMode) || b.controlMode === "total" || b.controlMode === "deus") {
@@ -1609,6 +1669,32 @@ export async function startServer(hub: Hub) {
     hub.db.audit(null, "empresa.equipe-inicial", { empresa, out });
     return out;
   }
+  // Equipe inicial por conta Google de cliente: nasce com os bots de equipe-inicial.json, todos dele.
+  // O dono vai por nonce de uso unico (so em memoria) na chamada interna; nunca por header livre.
+  definirAoEntrarGoogle(async (user) => {
+    if (user.role === "owner") return;
+    const sufixo = user.id.replace(/^usr_/, "").slice(0, 8);
+    const jaTem = new Set(hub.db.listBots().map((b) => b.id));
+    const empresa = hub.db.listEmpresas()[0]?.id;
+    if (!empresa) return;
+    const out: Array<{ receita: string; status: string }> = [];
+    for (const rid of idsEquipeInicial()) {
+      const botId = `${rid}-${sufixo}`.slice(0, 40).replace(/-$/, "");
+      if (jaTem.has(botId)) continue;
+      const nonce = crypto.randomBytes(16).toString("hex");
+      donosPendentes.set(nonce, user.id);
+      try {
+        const res = await app.inject({
+          method: "POST", url: "/api/receitas/import",
+          headers: { "x-mybots-interno": "equipe-inicial", "x-mybots-dono-nonce": nonce, authorization: `Bearer ${config.hubToken}` },
+          payload: { receita: carregarReceita(rid), id: botId, empresa },
+        });
+        out.push({ receita: rid, status: String(res.statusCode) });
+      } catch (e) { out.push({ receita: rid, status: (e as Error).message }); }
+      finally { donosPendentes.delete(nonce); }
+    }
+    if (out.length) hub.db.audit(null, "usuario.equipe-inicial", { uid: user.id, out });
+  });
   app.get("/api/equipe-inicial", async () => ({ receitas: idsEquipeInicial() }));
   app.post("/api/equipe-inicial", async (req, reply) => {
     const empresa = String((req.body as any)?.empresa || hub.db.listEmpresas()[0]?.id || "");
@@ -1695,6 +1781,13 @@ export async function startServer(hub: Hub) {
     const r = manager.create(createBody);
     if ("error" in r) return reply.code(400).send(r);
     hub.db.setEmpresaDoBot(r.id, r.name, empresa, false);
+    {
+      const nonce = String(req.headers["x-mybots-dono-nonce"] || "");
+      const donoInterno = nonce ? donosPendentes.get(nonce) : undefined;
+      if (nonce) donosPendentes.delete(nonce);
+      const dono = donoInterno || (authOnlineAtivo() ? usuarioDoReq(req)?.id : undefined);
+      if (dono) createBody.ownerUserId = dono;
+    }
     try {
       const esp = porId(espId) || porId(idPadrao());
       for (const sk of carregarSkillsDaEspecialidade(esp)) {
@@ -1715,6 +1808,7 @@ export async function startServer(hub: Hub) {
     hub.db.audit(r.id, "receita.import", applied);
     try { hub.storeMessage(dmConversation(r.id), hub.botSender(r.id), saudacaoDeReceita(receita, r.name)); } catch {}
     hub.db.upsertBot({ id: r.id, name: r.name, role: r.role, avatar: r.avatar, color: r.color, voice: r.voice }, { engine: r.engine, provider: r.provider?.kind, model: r.provider?.model });
+    if (createBody.ownerUserId) usuarios.setOwnerUserIdManaged(r.id, createBody.ownerUserId);
     try { registrarPc({ botId: r.id, empresaId: empresa, nome: r.name }); marcarSempreLigado(r.id, true); definirAcessoPc(r.id, true); void ligarPc(r.id); } catch {}
     hub.broadcastKnowledge();
     hub.botUpdate(r.id);
@@ -1793,21 +1887,30 @@ export async function startServer(hub: Hub) {
   app.delete("/api/routines/:id", async (req) => { hub.deleteRoutine((req.params as any).id); return { ok: true }; });
 
   // --- arquivos ---
-  app.get("/api/files/:id/:name?", async (req, reply) => {
-    if (authOnlineAtivo()) {
-      const user = usuarioDoReq(req);
-      const f0 = hub.db.getFile((req.params as any).id) as any;
-      if (f0) {
-        const ou = f0.owner_user_id || null;
-        const botOwner = f0.bot_id ? usuarios.ownerUserIdDoBot(f0.bot_id) : null;
-        const dono = ou || botOwner;
-        if (user?.role === "cliente" && dono && dono !== user.id) {
-          return reply.code(404).send({ error: "arquivo nao encontrado" });
-        }
-      }
+  // Regra: ninguem ve arquivo de outro usuario. Dono = owner_user_id do arquivo, senao o dono do bot.
+  // Owner ve tudo. Online sem sessao nao ve nada. Token de bot ve so arquivos do mesmo dono do bot.
+  // Bearer MYBOTS_HUB_TOKEN so vale em loopback (processos locais).
+  const donoDoArquivo = (f: { owner_user_id?: string | null; bot_id?: string | null }): string | null =>
+    (f.owner_user_id ? String(f.owner_user_id) : null) || (f.bot_id ? usuarios.ownerUserIdDoBot(f.bot_id) : null);
+  const podeVerDono = (req: any, dono: string | null): boolean => {
+    if (!authOnlineAtivo()) return true;
+    if (hubTokenLoopbackOk(req)) return true;
+    const user = sessaoValida(req) ? usuarioDoReq(req) : null;
+    if (user) return user.role === "owner" || (!!dono && dono === user.id);
+    const bot = nodeAuthorized(req);
+    if (bot) {
+      const donoBot = usuarios.ownerUserIdDoBot(bot);
+      if (!donoBot) return false;
+      if (donoBot === dono) return true;
+      return usuarios.getById(donoBot)?.role === "owner";
     }
+    return false;
+  };
+  app.get("/api/files/:id/:name?", async (req, reply) => {
     const f = hub.db.getFile((req.params as any).id);
-    if (!f || !fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo não encontrado" });
+    // 404 igual para "nao existe" e "nao e seu": nada de adivinhar id.
+    if (!f || !podeVerDono(req, donoDoArquivo(f))) return reply.code(404).send({ error: "arquivo nao encontrado" });
+    if (!fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo não encontrado" });
     // Foto e PDF seguem abertos (o chat já embute). Vídeo pede a senha da interface.
     if (videoExigeSenha(f.mime) && config.uiPassword && !uiAuthorized(req) && !nodeAuthorized(req)) {
       return reply.code(401).send({ error: "senha da interface inválida" });
@@ -1838,7 +1941,8 @@ export async function startServer(hub: Hub) {
     const conversationId = String(req.headers["x-conversation"] ?? "");
     const caption = req.headers["x-caption"] ? decodeURIComponent(String(req.headers["x-caption"])) : undefined;
     const data = Buffer.isBuffer(req.body) ? req.body : typeof req.body === "string" ? Buffer.from(req.body, "utf8") : Buffer.from(JSON.stringify(req.body ?? ""));
-    const f = hub.saveFile(botId, name, mime, data);
+    const quem = botId === "user" && authOnlineAtivo() ? usuarioDoReq(req)?.id ?? null : null;
+    const f = hub.saveFile(botId, name, mime, data, quem);
     if (conversationId && botId !== "user") hub.storeMessage(conversationId, hub.botSender(botId), caption ?? `Enviou ${f.name}`, { files: [{ id: f.id, name: f.name, url: f.url, mime: f.mime }] });
     return { ...f, publicUrl: `${config.publicUrl}${f.url}` };
   });
@@ -1934,11 +2038,11 @@ export async function startServer(hub: Hub) {
     const q = String((req.query as any).q ?? "").trim().toLowerCase();
     const tipo = String((req.query as any).tipo ?? "").trim();
     const bot = String((req.query as any).bot ?? "").trim();
-    const doBanco = hub.db.listFiles(5000).filter((f) => fs.existsSync(f.path)).map((f) => ({
+    const doBanco = hub.db.listFiles(5000).filter((f) => podeVerDono(req, donoDoArquivo(f)) && fs.existsSync(f.path)).map((f) => ({
       id: f.id, nome: f.name, mime: f.mime, tamanho: f.size, botId: f.bot_id, quando: f.created_at,
       tipo: tipoDoArquivo(f.name, f.mime), url: `/api/files/${f.id}/${encodeURIComponent(f.name)}`, origem: "chat", caminho: f.name,
     }));
-    const todos = [...doBanco, ...listarWorkspaces()].sort((a, b) => b.quando - a.quando);
+    const todos = [...doBanco, ...listarWorkspaces().filter((w) => podeVerDono(req, usuarios.ownerUserIdDoBot(w.botId)))].sort((a, b) => b.quando - a.quando);
     const contagem: Record<string, number> = {};
     for (const f of todos) contagem[f.tipo] = (contagem[f.tipo] ?? 0) + 1;
     const botIds = [...new Set(todos.map((f) => f.botId))].sort();
@@ -1948,7 +2052,7 @@ export async function startServer(hub: Hub) {
   app.get("/api/arquivos/ws/:bot/*", async (req, reply) => {
     const botId = String((req.params as any).bot ?? "");
     const rel = String((req.params as any)["*"] ?? "");
-    const real = caminhoDoWorkspace(botId, rel);
+    const real = podeVerDono(req, usuarios.ownerUserIdDoBot(botId)) ? caminhoDoWorkspace(botId, rel) : null;
     if (!real) return reply.code(404).send({ error: "arquivo nao encontrado" });
     const ext = (real.split(".").pop() ?? "").toLowerCase();
     const mime = mimeDaExt[ext] ?? "application/octet-stream";
@@ -1969,6 +2073,7 @@ export async function startServer(hub: Hub) {
     const limite = Math.min(Number((req.query as any).limite ?? 400) || 400, 2000);
     const contagem: Record<string, number> = {};
     const itens = hub.db.listFiles(limite)
+      .filter((f) => podeVerDono(req, donoDoArquivo(f)))
       .map((f) => ({
         id: f.id, nome: f.name, mime: f.mime, tamanho: f.size, botId: f.bot_id,
         quando: f.created_at, tipo: tipoDoArquivo(f.name, f.mime),
@@ -1999,6 +2104,7 @@ export async function startServer(hub: Hub) {
     };
     let copiados = 0, pulados = 0;
     for (const f of hub.db.listFiles(2000)) {
+      if (!podeVerDono(req, donoDoArquivo(f))) continue; // so copia arquivos do proprio usuario (owner ve tudo)
       const tipo = tipoDoArquivo(f.name, f.mime);
       if (corpo.tipo && tipo !== corpo.tipo) continue;
       if (corpo.ids?.length && !corpo.ids.includes(f.id)) continue;

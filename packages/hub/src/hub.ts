@@ -14,6 +14,9 @@ import { alvoDoNavegador } from "./cofreCdp.js";
 import { ehDocumentoLivel, ehImagem, extrairTextoDoArquivo } from "./extrairAnexo.js";
 import { redigir, semSegredo, textoSeguro } from "./redacao.js";
 import { WhatsAppDasEmpresas } from "./whatsapp.js";
+import { WhatsAppDosBots } from "./whatsappBot.js";
+import { Nascimento, type EstadoNascimento } from "./nascimento.js";
+import { abrirLoginNoNavegador, urlsDaPorta } from "./gmailTela.js";
 import { PrimeirosPassos } from "./primeirospassos.js";
 import { logoNaPasta } from "./folha.js";
 import { OBRIGATORIOS, VERSAO_LEGAL } from "./legal.js";
@@ -37,6 +40,7 @@ import {
   TravaDosCelulares, acaoSensivel, enderecoParaReconectar, lerMdns, lerPareamento, pacoteValido, resumoDoCelular,
   type VinculoCelular,
 } from "./celularEmpresa.js";
+import { escolherAlvoDoCelular } from "./celularDoBot.js";
 import { argumentosScrcpy } from "./scrcpy.js";
 import { spawn } from "node:child_process";
 import { ehHumano, FilaDeTarefas } from "./colab/fila.js";
@@ -82,6 +86,8 @@ export class Hub {
   managesOf: (botId: string) => string[] | undefined = () => undefined;
   /** é o Gerente Geral da empresa? (preenchido pelo server com o BotManager) */
   ehGerente: (botId: string) => boolean = () => false;
+  /** Cadastro Android deste bot (ServicoAndroid.cadastro). O server liga isto. */
+  androidDoBot: (botId: string) => { serial: string } | null = () => null;
   /** reinicia um bot hospedado aqui (preenchido pelo server); false = não é gerenciado por este PC */
   restartBot: (botId: string) => boolean = () => false;
   /** cuidar da equipe (ligar, parar, reiniciar, excluir). Ligado ao BotManager pelo server. */
@@ -228,6 +234,13 @@ export class Hub {
   /** O WhatsApp de cada empresa: conta propria, QR propria. */
   readonly whats: WhatsAppDasEmpresas;
 
+  /** O WhatsApp deste bot: QR no Celular, sessão em bots/<id>/whatsapp/. */
+  readonly whatsBot: WhatsAppDosBots;
+
+  /** Saudação e as duas ligações do nascimento. */
+  readonly nascimento: Nascimento;
+  private relogioNascimento: NodeJS.Timeout | null = null;
+
   /** O roteiro dos primeiros passos de uma empresa nova. */
   readonly passos: PrimeirosPassos;
 
@@ -240,6 +253,37 @@ export class Hub {
     this.whats = new WhatsAppDasEmpresas(path.dirname(dbFile), (estado) => this.broadcastUi({ type: "whatsapp", estado }));
     // Sessao ja escaneada volta sozinha quando o Hub sobe: ninguem escaneia duas vezes.
     setTimeout(() => { for (const id of this.whats.salvas()) void this.whats.conectar(id).catch(() => {}); }, 1500);
+    // WhatsApp e nascimento são da CONTA (dono), não do bot: todo bot da mesma conta usa,
+    // bot de outra conta nunca vê. A sessão fica fora do repo, junto do banco.
+    this.whatsBot = new WhatsAppDosBots(path.join(path.dirname(dbFile), "contas"), (estado) => {
+      // Sem broadcast: o QR é da conta e a UI busca pela rota com dono conferido.
+      const e = this.nascimentos()[estado.botId];
+      if (e) this.nascimento?.aoWhats({ ...estado, botId: e.botId });
+    });
+    this.nascimento = new Nascimento({
+      falar: (botId, texto) => this.storeMessage(dmConversation(botId), this.botSender(botId), texto),
+      ler: (botId) => this.nascimentoDaConta(botId),
+      gravar: (e) => {
+        const todos = this.nascimentos();
+        const chave = Object.keys(todos).find((k) => todos[k]?.botId === e.botId) ?? this.contaDoBot(e.botId);
+        todos[chave] = e;
+        this.db.setSetting("nascimentos", todos);
+      },
+      listar: () => Object.values(this.nascimentos()),
+      abrirGmail: (botId) => this.abrirGmailDoBot(botId),
+      urls: (botId) => this.urlsDoBot(botId),
+      conectarWhats: async (botId) => { await this.whatsBot.conectar(this.contaDoBot(botId)); },
+      whatsConectado: (botId) => this.whatsBot.estado(this.contaDoBot(botId)).estado === "conectado",
+      numeroWhats: (botId) => this.whatsBot.estado(this.contaDoBot(botId)).numero,
+      agora: () => Date.now(),
+    });
+    this.relogioNascimento = setInterval(() => { void this.nascimento.tick(); }, 8_000);
+    if (typeof this.relogioNascimento.unref === "function") this.relogioNascimento.unref();
+    // Sessão de bot já escaneada volta sozinha. Nascimento incompleto reabre o passo.
+    setTimeout(() => {
+      void this.nascimento.retomar();
+      for (const id of this.whatsBot.salvas()) void this.whatsBot.conectar(id).catch(() => {});
+    }, 1600);
     // O roteiro dos primeiros passos fala PELO Gerente. A interface e minuscula de
     // proposito: ele nao enxerga o Hub inteiro, so o que precisa para falar, perguntar,
     // guardar arquivo e ler a empresa.
@@ -858,7 +902,7 @@ export class Hub {
       ...this.summary(b),
       empresaId: b.empresaId ?? null,
       ponte: !!b.ponte,
-      ownerUserId: (b as any).ownerUserId || repo?.ownerUserIdDoBot(b.id) || null,
+      ownerUserId: repo?.ownerUserIdDoBot(b.id) || (b as any).ownerUserId || null,
     }));
   }
 
@@ -1155,6 +1199,81 @@ export class Hub {
     };
   }
 
+  private nascimentos(): Record<string, EstadoNascimento> {
+    return this.db.getSetting<Record<string, EstadoNascimento>>("nascimentos") ?? {};
+  }
+
+  /** A conta dona do bot. Sem login online (modo local) todos ficam na conta "local". */
+  contaDoBot(botId: string): string {
+    const dono = this.db.getManaged(botId)?.ownerUserId;
+    return "conta-" + String(dono || "local").replace(/[^a-z0-9_-]/gi, "_").slice(0, 50);
+  }
+
+  /** O nascimento da conta deste bot (um só por conta). */
+  private nascimentoDaConta(botId: string): EstadoNascimento | undefined {
+    const todos = this.nascimentos();
+    return todos[this.contaDoBot(botId)] ?? Object.values(todos).find((e) => e?.botId === botId);
+  }
+
+  /**
+   * Chamado quando um bot é criado. O pedido de Gmail e WhatsApp sai UMA vez por conta:
+   * a equipe inicial (3 bots) e os bots seguintes da mesma conta não repetem.
+   */
+  botNasceu(b: { id: string; nome: string; funcao?: string }) {
+    if (this.nascimentos()[this.contaDoBot(b.id)]) return;
+    void this.nascimento.nascer(b).catch((e) => console.error(`[nascimento] ${b.id}: ${textoSeguro(e)}`));
+  }
+
+  nascimentoDe(botId: string): EstadoNascimento | null {
+    return this.nascimentoDaConta(botId) ?? null;
+  }
+
+  private async abrirGmailDoBot(botId: string): Promise<{ ok: boolean; motivo: string }> {
+    const alvo = await alvoDoNavegador(botId, this.empresaDe(botId).id);
+    if ("erro" in alvo) return { ok: false, motivo: "A tela do PC ainda não está no ar." };
+    return abrirLoginNoNavegador(alvo.porta);
+  }
+
+  private async urlsDoBot(botId: string): Promise<string[]> {
+    const alvo = await alvoDoNavegador(botId, this.empresaDe(botId).id);
+    if ("erro" in alvo) return [];
+    return urlsDaPorta(alvo.porta);
+  }
+
+  private async atenderWhatsDoBot(botId: string, msg: Extract<NodeToHub, { type: "whatsapp_bot" }>): Promise<{ ok: boolean; texto: string }> {
+    const acao = msg.acao;
+    const conta = this.contaDoBot(botId);
+    if (acao === "estado") {
+      const e = this.whatsBot.estado(conta);
+      if (e.estado === "conectado") return { ok: true, texto: `WhatsApp deste bot conectado${e.numero ? ` no número ${e.numero}` : ""}.` };
+      if (e.estado === "qr") return { ok: false, texto: "O QR deste bot está no painel Celular, esperando o chefe escanear." };
+      if (e.estado === "conectando") return { ok: false, texto: "O WhatsApp deste bot está conectando." };
+      return { ok: false, texto: "O WhatsApp deste bot está desligado. O QR fica no painel Celular." };
+    }
+    if (acao === "ler") {
+      const e = this.whatsBot.estado(conta);
+      if (e.estado !== "conectado") {
+        await this.nascimento.pedir(botId, "whatsapp", "ler as mensagens deste aparelho");
+        return { ok: false, texto: "O WhatsApp deste bot não está conectado. O QR fica no painel Celular." };
+      }
+      const lista = this.whatsBot.ler(conta, msg.limite ?? 15);
+      if (!lista.length) return { ok: true, texto: "Nenhuma mensagem recente neste WhatsApp." };
+      const linhas = lista.map((m) => {
+        const hora = new Date(m.em || Date.now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        const quem = m.deMim ? "você" : (m.de || "contato");
+        return `[${hora}] ${quem}: ${m.texto}`;
+      });
+      return { ok: true, texto: linhas.join("\n") };
+    }
+    const gate = this.liberarAcaoSensivel(botId, "whatsapp_proprio", { acao: "enviar", texto: msg.texto, para: msg.para }, "enviar");
+    if (!gate.ok) return { ok: false, texto: gate.texto };
+    const r = await this.whatsBot.enviar(conta, String(msg.para ?? ""), String(msg.texto ?? ""));
+    if (!r.ok && /não está conectado/.test(r.detalhe)) {
+      await this.nascimento.pedir(botId, "whatsapp", "enviar uma mensagem por este aparelho");
+    }
+    return { ok: r.ok, texto: r.detalhe };
+  }
+
   private chaveCelular(empresaId: string) { return `celular:${empresaId}`; }
 
   vinculoDoCelular(empresaId: string): VinculoCelular | null {
@@ -1271,9 +1390,13 @@ export class Hub {
 
   private async atenderCelular(botId: string, msg: Extract<NodeToHub, { type: "celular" }>): Promise<{ ok: boolean; texto: string }> {
     const emp = this.empresaDe(botId).id;
-    if (!emp) return { ok: false, texto: "Você não está numa empresa, então não tem celular." };
-    const v = this.vinculoDoCelular(emp);
-    if (!v) return { ok: false, texto: "O celular desta empresa ainda não foi vinculado. O chefe liga em Empresas → Celular da empresa." };
+    const alvo = escolherAlvoDoCelular({
+      botId,
+      cadastro: this.androidDoBot(botId),
+      empresaId: emp,
+      vinculo: emp ? this.vinculoDoCelular(emp) : null,
+    });
+    if (!alvo) return { ok: false, texto: "Este bot ainda não tem celular. Na aba Celular do painel, vincule o aparelho que o adb já mostra como device, ou pareie com o código de 6 dígitos." };
     const acao = String(msg.acao || "estado");
     if (acaoSensivel(acao, msg.texto, msg.pacote)) {
       if (!msg.aprovado) return { ok: false, texto: "Essa ação no celular (pagamento, apagar ou enviar) precisa do OK do chefe. Peça com request_approval e tente de novo." };
@@ -1281,33 +1404,34 @@ export class Hub {
       if (!gate.ok) return { ok: false, texto: gate.texto };
     }
     if (acao !== "estado" && acao !== "print" && acao !== "arvore") {
-      const trava = this.travaCelular.pegar(emp, botId, this.botSender(botId).name, false);
+      const trava = this.travaCelular.pegar(alvo.trava, botId, this.botSender(botId).name, false);
       if (!trava.ok) return { ok: false, texto: `${trava.nome} está no celular agora. Espere um instante e tente de novo.` };
     }
     if (acao === "estado") {
       const lista = await celular.listar();
-      const on = lista.some((a) => a.serial === v.serial && a.estado === "device");
-      const t = this.travaCelular.ver(emp);
-      return { ok: true, texto: `${v.modelo} (${v.serial}) ${on ? "online" : "offline"}${t ? `. Quem está nele: ${t.nome}` : ""}` };
+      const on = lista.some((a) => a.serial === alvo.serial && a.estado === "device");
+      const t = this.travaCelular.ver(alvo.trava);
+      const deQuem = alvo.origem === "bot" ? "deste bot" : "da empresa";
+      return { ok: true, texto: `${alvo.modelo} (${alvo.serial}, ${deQuem}) ${on ? "online" : "offline"}${t ? `. Quem está nele: ${t.nome}` : ""}` };
     }
     if (acao === "print") {
-      const png = await celular.tela(v.serial);
+      const png = await celular.tela(alvo.serial);
       if (!png) return { ok: false, texto: "não consegui fotografar a tela do celular" };
-      const f = this.saveFile(botId, `celular-${emp}.png`, "image/png", png);
+      const f = this.saveFile(botId, `celular-${emp || botId}.png`, "image/png", png);
       if (msg.conversationId) this.storeMessage(msg.conversationId, this.botSender(botId), "Tela do celular", { files: [{ id: f.id, name: f.name, url: f.url, mime: f.mime }] });
       return { ok: true, texto: "Mandei a foto da tela no chat." };
     }
     if (acao === "arvore") {
-      const x = await celular.arvore(v.serial);
+      const x = await celular.arvore(alvo.serial);
       return x ? { ok: true, texto: x.slice(0, 8000) } : { ok: false, texto: "não consegui ler a árvore da tela" };
     }
-    if (acao === "tocar") return { ok: await celular.tocar(v.serial, Number(msg.x), Number(msg.y)), texto: "toquei" };
-    if (acao === "deslizar") return { ok: await celular.deslizar(v.serial, Number(msg.x), Number(msg.y), Number(msg.x2), Number(msg.y2)), texto: "deslizei" };
-    if (acao === "digitar") return { ok: await celular.digitar(v.serial, String(msg.texto ?? "")), texto: "digitei" };
-    if (acao === "tecla") return { ok: await celular.tecla(v.serial, String(msg.tecla ?? "")), texto: "tecla enviada" };
+    if (acao === "tocar") return { ok: await celular.tocar(alvo.serial, Number(msg.x), Number(msg.y)), texto: "toquei" };
+    if (acao === "deslizar") return { ok: await celular.deslizar(alvo.serial, Number(msg.x), Number(msg.y), Number(msg.x2), Number(msg.y2)), texto: "deslizei" };
+    if (acao === "digitar") return { ok: await celular.digitar(alvo.serial, String(msg.texto ?? "")), texto: "digitei" };
+    if (acao === "tecla") return { ok: await celular.tecla(alvo.serial, String(msg.tecla ?? "")), texto: "tecla enviada" };
     if (acao === "abrir") {
       if (!pacoteValido(String(msg.pacote ?? ""))) return { ok: false, texto: "pacote inválido" };
-      return { ok: await celular.abrirApp(v.serial, String(msg.pacote)), texto: `pedi para abrir ${msg.pacote}` };
+      return { ok: await celular.abrirApp(alvo.serial, String(msg.pacote)), texto: `pedi para abrir ${msg.pacote}` };
     }
     return { ok: false, texto: "acao deve ser estado, print, arvore, tocar, deslizar, digitar, tecla ou abrir" };
   }
@@ -1630,6 +1754,18 @@ export class Hub {
           .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
         return;
       }
+      case "whatsapp_bot": {
+        void this.atenderWhatsDoBot(botId, msg)
+          .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
+        return;
+      }
+      case "pedir_conexao": {
+        void this.nascimento.pedir(botId, msg.ferramenta, msg.motivo)
+          .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.texto }))
+          .catch((e) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: textoSeguro(e) }));
+        return;
+      }
       case "whatsapp_send": {
         // Cada empresa fala pela sua conta. Bot do sistema nao tem conta propria.
         const emp = this.empresaDe(botId).id;
@@ -1912,7 +2048,7 @@ export class Hub {
     // lazy require evita ciclo no load
     const repo = getUsuariosRepo();
     return all.filter((b) => {
-      const owner = (b as any).ownerUserId || repo?.ownerUserIdDoBot(b.id) || null;
+      const owner = repo?.ownerUserIdDoBot(b.id) || (b as any).ownerUserId || null;
       if (user.role === "owner") {
         if (escopo === "todos") return true;
         if (escopo === "meus") return !owner || owner === user.uid;
@@ -1964,7 +2100,8 @@ export class Hub {
   sendUserMessage(conversationId: string, text: string, attachments?: Array<{ name: string; mime: string; dataBase64: string }>, from: Sender = USER): StoredMessage {
     const files: Array<{ id: string; name: string; url: string; mime: string; size: number }> = [];
     for (const a of attachments ?? []) {
-      const f = this.saveFile(from.id, a.name, a.mime, Buffer.from(a.dataBase64, "base64"));
+      const donoConv = this.botsDaConversa(conversationId).map((id) => getUsuariosRepo()?.ownerUserIdDoBot(id)).find(Boolean) || null;
+      const f = this.saveFile(from.id, a.name, a.mime, Buffer.from(a.dataBase64, "base64"), donoConv);
       files.push({ id: f.id, name: f.name, url: f.url, mime: f.mime, size: f.size });
     }
     // Chefe falando na sala tem precedencia: a roda para e a palavra volta pra ele.
@@ -2069,14 +2206,16 @@ export class Hub {
   }
 
   /** Grava um arquivo em data/files e registra no banco. */
-  saveFile(botId: string, name: string, mime: string, data: Buffer): { id: string; name: string; mime: string; size: number; url: string; path: string } {
+  saveFile(botId: string, name: string, mime: string, data: Buffer, ownerUserId?: string | null): { id: string; name: string; mime: string; size: number; url: string; path: string } {
     const id = newId("f");
     const safe = name.replace(/[^\w.\-\u00C0-\u024F ]+/g, "_").slice(0, 120) || "arquivo";
     const dir = path.join(path.dirname(config.dbFile), "files");
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `${id}-${safe}`);
     fs.writeFileSync(file, data);
-    this.db.insertFile({ id, name: safe, mime, size: data.length, botId, path: file, createdAt: Date.now() });
+    // Todo arquivo nasce com dono: quem pediu, ou o dono do bot que gerou.
+    const dono = ownerUserId || getUsuariosRepo()?.ownerUserIdDoBot(botId) || null;
+    this.db.insertFile({ id, name: safe, mime, size: data.length, botId, path: file, createdAt: Date.now(), ownerUserId: dono });
     return { id, name: safe, mime, size: data.length, url: `/api/files/${id}/${encodeURIComponent(safe)}`, path: file };
   }
 

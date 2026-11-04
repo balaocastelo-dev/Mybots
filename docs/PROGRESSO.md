@@ -8,7 +8,29 @@
 - Arquivos: `packages/hub/src/importarLink.ts`, `server.ts`, `botManager.ts`, `packages/ui/src/dialogos.tsx`, `App.tsx`, `conversa.tsx`, `avatar.tsx`, `linkBot.ts`, `styles.css`, `tests/importarLink.test.ts`.
 - `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
 - A coluna `owner_user_id` passa a ser criada depois da tabela `managed_bots`, senão um banco novo quebrava a lista (`no such column`).
-- Teste: `node --import tsx --test tests/importarLink.test.ts` passou (parser, domínio, redirect, tenant). Exemplo real `https://x.ai/bot/jSCXcQoyWa04Fgh3uTK-X` lê Director, laranja `#FF9800` e a receita `director`. O e2e de criar bot pela interface passou. `tests/pcs.test.ts` segue falhando neste ambiente (bot `sempreLigado` não entra na varredura de ociosidade) e o e2e tem falhas de ferramenta (`run_command` / `ask_bot` / `schedule` desconhecidas) com o Docker desligado.
+- Teste: `node --import tsx --test tests/importarLink.test.ts` passou (parser, domínio, redirect, tenant). Exemplo real `https://x.ai/bot/jSCXcQoyWa04Fgh3uTK-X` lê Director, laranja `#FF9800` e a receita `director`.
+## 2026-11-01 — Casca Android (WebView) do painel público
+
+- App nativo em `android/`, pacote `info.balao.mybots`, minSdk 24. Abre `https://www.balao.info/mybots` com JavaScript, DOM storage, cookie de sessão (aceita cookie e cookie de terceiro, flush ao pausar), voltar no histórico, puxar no topo ou ícone para recarregar, tela “Sem conexão” com “Tentar novamente”, seletor de arquivo, download e link externo no navegador.
+- Não mexe no Hub, no nó, nem nas portas 8787/8791. O pareamento adb de cada bot continua em `docs/ANDROID.md`.
+- Workflow `.github/workflows/android-apk.yml` compila o APK debug e publica o artifact `MyBots-debug`.
+- Arquivos: `android/**`, `.github/workflows/android-apk.yml`, `README.md`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `./gradlew assembleDebug testDebugUnitTest` passou (3 testes). `assembleRelease` também passou, assinado com a chave de debug. A casca não entra no `npm test`.
+## 2026-11-01 — Celular do bot pelo cadastro Android
+
+- Na main as empresas continuam (tabelas, painel, vínculo `celular:<empresaId>`). A ferramenta `celular` agora resolve o serial por `ServicoAndroid.cadastro(botId)` e só usa o vínculo da empresa se o bot não tiver o dele.
+- `POST /api/bots/<id>/android/adotar` grava um serial já em `adb devices` como `device` (ex.: `192.168.15.5:5555`) sem código. Não chama `adb pair` nem `adb connect`. O pareamento com código segue igual. Portas 8787, 8790 e 8791 são recusadas.
+- Painel: na aba Celular do bot e em Configurações → Parear, o formulário "Vincular este aparelho" fica ao lado do pareamento.
+- Arquivos: `packages/hub/src/androidBot.ts`, `androidServico.ts`, `celularDoBot.ts`, `hub.ts`, `server.ts`, `packages/ui/src/telasBot.tsx`, `configuracoes/Computadores.tsx`, `configuracoes/pareamento.ts`, `packages/node/src/tools.ts`, `engines/direct.ts`, `docs/ANDROID.md`, `tests/androidBot.test.ts`, `tests/configuracoes.test.ts`.
+- Teste: `tests/androidBot.test.ts` e `tests/configuracoes.test.ts` passaram. `npm test` para em `tests/pcs.test.ts`, que já vinha assim na main: PC novo nasce `sempreLigado` e a varredura não desliga a `bia`.
+## 2026-11-01 — Nascimento do bot e WhatsApp por QR
+
+- Cada bot nasce cumprimentando o chefe no chat e pede, nesta ordem, Gmail e WhatsApp. Gmail só fica feito quando a caixa abre na tela do PC (o dono digita a senha; ela não entra no chat nem no estado). WhatsApp só fica feito quando a sessão do QR conecta. Outra ferramenta entra com `pedir_conexao`, na hora do uso.
+- WhatsApp do bot usa Baileys com `useMultiFileAuthState` em `bots/<id>/whatsapp/`. O QR aparece no painel Celular, com reserva na tela do PC, e a ferramenta `whatsapp_proprio` envia e lê. Aparelho conectado cai se o celular principal ficar ~14 dias offline.
+- Arquivos: `packages/hub/src/nascimento.ts`, `gmailTela.ts`, `whatsappBot.ts`, `hub.ts`, `server.ts`, `botManager.ts`, `packages/node/src/tools.ts`, `packages/ui/src/whatsBot.tsx`, `telasBot.tsx`, `tests/nascimento.test.ts`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `tests/nascimento.test.ts` (6) e o e2e (46) passaram. `npm test` inteiro para nos mesmos pontos que já falham na main: PC sempre ligado vs ociosidade, ordem dos provedores de mídia e o rótulo da lista.
 
 ## 2026-10-31 — Tokens e ajustes de UI (specs + análise)
 

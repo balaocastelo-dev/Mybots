@@ -12,6 +12,7 @@ import { confirmDeus } from "./controles";
 import { RetratoPreview } from "./avatar";
 import { AMEBAS_V2_TODOS, amebaV2Path, amebaV2Num, amebaV2StoragePath, sortearAmebaV2, isAmebaV2 } from "./amebasV2";
 import { CRON_PRESETS } from "./mensagem";
+import { SeletorDeAlma, useAlmas, type AlmaUi } from "./almas";
 
 export function RoutinesPanel({ bot, routines, onClose }: { bot: BotSummary; routines: Routine[]; onClose: () => void }) {
   const [name, setName] = useState("");
@@ -355,6 +356,10 @@ export function NewGerenteDialog({ bots, onClose, onCreated }: { bots: BotSummar
 
 export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva = "todas", onCriou }: { onClose: () => void; onCreated: (id: string) => void; empresas?: Array<{ id: string; nome: string }>; empresaAtiva?: string; onCriou?: () => void }) {
   const { providers, voices } = usePresets();
+  const banco = useAlmas();
+  const [almaId, setAlmaId] = useState<string | null>(null);
+  const [opcionais, setOpcionais] = useState<string[]>([]);
+  const [confirmei, setConfirmei] = useState(false);
   const where = "hub" as const;
   /* empresa/ponte removidos da UI: o Hub escolhe a empresa padrao em silencio */
   const [etapa, setEtapa] = useState<1 | 2>(1);
@@ -391,9 +396,24 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
     return () => clearTimeout(t);
   }, [v.name, v.role, v.especialidadeDesligada]);
   const id = slug(v.name || "bot");
+  const alma = banco.almas.find((a) => a.id === almaId) ?? null;
+  const complementoPedeOk = banco.complementos.some((c) => opcionais.includes(c.id) && c.exigeConfirmacao);
+  const precisaConfirmar = !!alma?.exigeConfirmacao || complementoPedeOk;
+  const escolherAlma = (escolha: AlmaUi | null) => {
+    setAlmaId(escolha?.id ?? null);
+    setConfirmei(false);
+    if (!escolha) return;
+    setV((atual: any) => ({
+      ...atual,
+      role: atual.role?.trim() ? atual.role : escolha.funcao,
+      persona: escolha.persona,
+      personaTouched: true,
+      name: atual.name.trim() ? atual.name : escolha.nome,
+    }));
+  };
   const create = async () => {
     setBusy(true); setErr("");
-    const r = await api("/managed", { method: "POST", body: JSON.stringify({ ...v, id, avatar: isAmebaV2(v.avatar) ? amebaV2StoragePath(v.avatar) : amebaV2StoragePath(sortearAmebaV2(id, v.especialidadeId)) }) });
+    const r = await api("/managed", { method: "POST", body: JSON.stringify({ ...v, id, alma: almaId, opcionais, confirmarAlma: precisaConfirmar ? confirmei : false, avatar: isAmebaV2(v.avatar) ? amebaV2StoragePath(v.avatar) : amebaV2StoragePath(sortearAmebaV2(id, v.especialidadeId)) }) });
     setBusy(false);
     if (!r.ok) { setErr((await r.json()).error ?? "erro"); return; }
     onCriou?.();
@@ -427,6 +447,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
         {/* sempre neste PC / Hub — opcao outro PC ocultada */}
         {/* empresa e ponte: removidos — perfil unico */}
 
+        {etapa === 1 && <SeletorDeAlma almas={banco.almas} complementos={banco.complementos} erro={banco.erro} almaId={almaId} opcionais={opcionais} confirmei={confirmei} onAlma={escolherAlma} onOpcionais={(ids) => { setOpcionais(ids); setConfirmei(false); }} onConfirmar={setConfirmei} />}
         <BotForm value={v} onChange={setV} providers={providers} voices={voices} isNew etapa={etapa === 1 ? "identidade" : "modelo"} especialidades={especialidades} deteccao={deteccao} onEspecialidade={(id, desligada) => setV((prev: any) => ({ ...prev, especialidadeId: id, especialidadeDesligada: desligada }))} />
         {etapa === 2 && where === "other" && (
           <div className="hint-box">Na pasta <code>mybots</code> do outro PC, rode no PowerShell:<pre>{cmd}</pre>Depois inicie com <code>bots\{id}\start-bot.cmd</code>. O bot aparece aqui assim que conectar.</div>
@@ -437,7 +458,7 @@ export function NewBotDialog({ onClose, onCreated, empresas = [], empresaAtiva =
           {etapa === 1
             ? <button className="btn primary" type="button" disabled={!v.name.trim()} onClick={() => setEtapa(2)}>Continuar</button>
             : where === "hub"
-              ? <button className="btn primary" type="button" disabled={!v.name.trim() || busy} onClick={create}>{busy ? "Criando…" : `Criar e iniciar (${id})`}</button>
+              ? <button className="btn primary" type="button" disabled={!v.name.trim() || busy || (precisaConfirmar && !confirmei)} onClick={create}>{busy ? "Criando…" : `Criar e iniciar (${id})`}</button>
               : <button className="btn primary" type="button" onClick={() => { navigator.clipboard?.writeText(cmd); onClose(); }}>Copiar comando e fechar</button>}
         </div>
       </div>

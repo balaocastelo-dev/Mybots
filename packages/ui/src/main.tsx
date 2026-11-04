@@ -50,7 +50,7 @@ function Root() {
   if (auth.phase === "login") return <LoginOnline onOk={(usuario, meta) => setAuth({ phase: "ok", usuario, role: meta?.role, uid: meta?.uid })} />;
 
   if (gate.phase === "checking") return null;
-  if (gate.phase === "leader") return <App authRole={auth.phase === "ok" ? auth.role : undefined} authUid={auth.phase === "ok" ? auth.uid : undefined} />;
+  if (gate.phase === "leader") return <App authRole={auth.phase === "ok" ? auth.role : undefined} authUid={auth.phase === "ok" ? auth.uid : undefined} authEmail={auth.phase === "ok" ? auth.usuario : undefined} onSair={async () => { try { await api("/auth/logout", { method: "POST" }); } catch { /* segue */ } inst?.close(); setGate({ phase: "checking" }); setAuth({ phase: "login" }); }} />;
   if (gate.phase === "replaced") {
     return (
       <div className="gate">

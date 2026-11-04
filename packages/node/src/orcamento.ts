@@ -31,7 +31,7 @@ export const emTokens = (s: string) => Math.ceil((s ?? "").length / 4);
 /** Ordem de corte. Quanto MENOR o numero, mais essencial: sem as de nivel 1 o bot nao
  *  consegue nem dizer o que esta fazendo nem pedir ajuda, e ai nao e um bot. */
 const NIVEL: Record<string, number> = {
-  ask_user: 1, set_status: 1, notify_user: 1, search_knowledge: 1, recall: 1, remember: 1,
+  ask_user: 1, set_status: 1, notify_user: 1, search_knowledge: 1, buscar_capacidade: 1, recall: 1, remember: 1,
   read_file: 2, list_dir: 2, write_file: 2, send_file: 2, fetch_url: 2, run_command: 2,
   request_approval: 2, minhas_capacidades: 2,
   // criar_bot e o trabalho principal do Gerente Geral: bot que falta e trabalho que

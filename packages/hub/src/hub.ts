@@ -1,4 +1,5 @@
 import type { WebSocket } from "ws";
+import { indiceCapacidadesBase, lerCapacidadeBase } from "./receitas.js";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -679,6 +680,8 @@ export class Hub {
       resto.length ? "Para LER qualquer um por inteiro: search_knowledge com o id que esta entre colchetes (e parte=2, 3... para continuar). Para procurar por assunto: search_knowledge com palavras-chave. Para ver a BASE INTEIRA, inclusive o que nao coube na lista acima: search_knowledge com query=\"*\"." : "",
       resto.length ? "Antes de dizer que nao encontrou, que nao existe ou que nao sabe de algo da casa, voce e OBRIGADO a chamar search_knowledge com as palavras do pedido — e, se nao achar, tentar outras palavras. So depois de buscar de verdade voce pode dizer que nao achou, e ai diga quais palavras tentou." : "",
       ...partes,
+      "",
+      indiceCapacidadesBase(),
       "",
       ...memoria,
       "",
@@ -1483,6 +1486,9 @@ export class Hub {
           this.db.regenerarResumoBot(botId, this.empresaDe(botId).id ?? "");
         }
         return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: "esquecido" });
+      }
+      case "buscar_capacidade": {
+        return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: lerCapacidadeBase(msg.nome) });
       }
       case "search_knowledge": {
         const data = msg.id ? this.lerSaberTexto(botId, msg.id, msg.parte) : this.buscarSaberTexto(botId, msg.query, msg.limit);

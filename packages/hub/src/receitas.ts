@@ -348,39 +348,50 @@ export function saudacaoDeReceita(receita: Receita, botName: string): string {
 }
 
 /**
- * Banco de capacidades BASE (receitas/_base/capacidades-base.json): skills que TODO
- * bot novo recebe, qualquer que seja a especialidade. Gravadas na base comum com id
- * fixo (base-<nome>), entao chamar de novo so atualiza — nao duplica. Sem segredos.
+ * Banco de capacidades BASE (receitas/_base/capacidades-base.json), SOB DEMANDA.
+ * Nada disto e injetado inteiro no prompt nem gravado na base comum: o bot so ve um
+ * indice curto (nome + 1 linha) e le o texto completo com buscar_capacidade(nome)
+ * quando precisar usar. Assim o bot nasce leve e responde rapido. Lido do disco uma
+ * vez e cacheado pelo mtime do arquivo.
  */
-export function aplicarCapacidadesBase(db: Db): { skills: number; erros: string[] } {
-  const erros: string[] = [];
-  let skills = 0;
+type CapacidadeBase = { name: string; description: string; content: string; origem?: string };
+let cacheBase: { mtime: number; itens: CapacidadeBase[] } | null = null;
+
+export function capacidadesBase(): CapacidadeBase[] {
   const p = path.join(pastaReceitas(), "_base", "capacidades-base.json");
-  if (!fs.existsSync(p)) return { skills, erros };
-  let base: { skills?: Array<{ name?: string; description?: string; content?: string; origem?: string }> };
+  let mtime = 0;
+  try { mtime = fs.statSync(p).mtimeMs; } catch { return []; }
+  if (cacheBase && cacheBase.mtime === mtime) return cacheBase.itens;
+  let itens: CapacidadeBase[] = [];
   try {
-    base = JSON.parse(fs.readFileSync(p, "utf8"));
+    const base = JSON.parse(fs.readFileSync(p, "utf8"));
+    itens = (base.skills || [])
+      .map((s: any) => ({ name: String(s.name || "").trim(), description: String(s.description || "").trim(), content: String(s.content || "").trim(), origem: s.origem }))
+      .filter((s: CapacidadeBase) => s.name && s.content);
   } catch (e) {
-    return { skills, erros: [`capacidades-base: ${(e as Error).message}`] };
+    console.warn("[capacidades-base]", (e as Error).message);
   }
-  for (const sk of base.skills || []) {
-    try {
-      const name = String(sk.name || "").trim();
-      const content = String(sk.content || "").trim();
-      if (!name || !content) continue;
-      db.saveSaber({
-        id: `base-${name}`.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").slice(0, 80),
-        titulo: sk.description || `Skill: ${name}`,
-        resumo: `Capacidade base de todo bot (${name})${sk.origem ? ` — inspirada em ${sk.origem}` : ""}`,
-        conteudo: content,
-        tipo: "procedimento",
-        tags: ["skill", "capacidade-base", name],
-        origem: "capacidades-base",
-      } as any);
-      skills++;
-    } catch (e) {
-      erros.push(`base ${sk.name}: ${(e as Error).message}`);
-    }
-  }
-  return { skills, erros };
+  cacheBase = { mtime, itens };
+  return itens;
+}
+
+/** Indice compacto para o prompt: uma linha por capacidade, sem o conteudo. */
+export function indiceCapacidadesBase(): string {
+  const itens = capacidadesBase();
+  if (!itens.length) return "";
+  return [
+    "## Capacidades sob demanda (NAO estao carregadas)",
+    "Quando o pedido precisar de uma destas, chame buscar_capacidade com o nome ANTES de agir e siga o passo a passo que vier. Nao carregue sem precisar.",
+    ...itens.map((s) => `  - ${s.name}: ${s.description.replace(/\s+/g, " ").slice(0, 100)}`),
+  ].join("\n");
+}
+
+/** Texto completo de UMA capacidade (busca por nome exato, depois parcial). */
+export function lerCapacidadeBase(nome: string): string {
+  const itens = capacidadesBase();
+  const q = String(nome || "").trim().toLowerCase();
+  if (!q || q === "*") return itens.length ? "Capacidades disponiveis: " + itens.map((s) => s.name).join(", ") : "Nenhuma capacidade base cadastrada.";
+  const hit = itens.find((s) => s.name.toLowerCase() === q) || itens.find((s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+  if (!hit) return `Capacidade "${nome}" nao existe. Disponiveis: ${itens.map((s) => s.name).join(", ")}`;
+  return hit.content;
 }

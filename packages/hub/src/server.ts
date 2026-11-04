@@ -28,7 +28,7 @@ import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA, soulBlock } from "./botManager.js";
 import { listarEspecialidades, detectarEspecialidade, porId, montarPersonaComEspecialidade, idPadrao, categoriasDoCatalogo, resumoParaUi, carregarSkillsDaEspecialidade, recarregarEspecialidades } from "./especialidades.js";
-import { carregarReceita, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
+import { carregarReceita, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, exportarBotComoReceita, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
 import { dmConversation, newId } from "@mybots/shared";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
 import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
@@ -1318,8 +1318,6 @@ export async function startServer(hub: Hub) {
     } catch (e) {
       console.warn("[especialidades] seed falhou:", (e as Error).message);
     }
-    // Capacidades base: todo bot nasce com elas (receitas/_base/capacidades-base.json).
-    try { const base = aplicarCapacidadesBase(hub.db); hub.db.audit(r.id, "capacidades.base", base); } catch (e) { console.warn("[capacidades-base]", (e as Error).message); }
     // Receita no nascimento: memórias, skills e rotinas pausadas antes da saudação.
     {
       const receitaId = String(b.receitaId || b.especialidadeId || "").trim();
@@ -1489,7 +1487,6 @@ export async function startServer(hub: Hub) {
         });
       }
     } catch (e) { console.warn("[receita.import] seed esp", (e as Error).message); }
-    try { aplicarCapacidadesBase(hub.db); } catch (e) { console.warn("[capacidades-base]", (e as Error).message); }
     const applied = aplicarReceitaNoNascimento(hub.db, { botId: r.id, botName: r.name, empresaId: empresa, receita });
     hub.db.audit(r.id, "receita.import", applied);
     try { hub.storeMessage(dmConversation(r.id), hub.botSender(r.id), saudacaoDeReceita(receita, r.name)); } catch {}

@@ -1,7 +1,7 @@
 {
   "versao": 1,
   "id": "_base",
-  "descricao": "Banco de capacidades BASE: todo bot novo do MyBots nasce com estas skills, qualquer que seja a especialidade. Inspirado em 4 bots oficiais do Grok Bot Marketplace: dial bot (ligacoes), dr eggbot (projetar bots), Director Bot (video) e SEO & AEO Desk (pautas para busca e respostas de IA). Sem chaves: o que depende de conta/chave so funciona depois que o chefe configurar.",
+  "descricao": "Banco de capacidades BASE, carregadas SOB DEMANDA: o bot ve so o indice (nome + 1 linha) e le o texto completo com buscar_capacidade(nome) quando precisar. Nada entra inteiro no prompt. Inspirado em 4 bots oficiais do Grok Bot Marketplace: dial bot (ligacoes), dr eggbot (projetar bots), Director Bot (video) e SEO & AEO Desk (pautas para busca e respostas de IA). Sem chaves: o que depende de conta/chave so funciona depois que o chefe configurar.",
   "skills": [
     {
       "name": "ligacao_telefonica",

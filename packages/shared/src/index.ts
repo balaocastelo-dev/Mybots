@@ -63,6 +63,7 @@ export type NodeToHub =
   | { type: "aguardar_decisao"; callId: string; planoId: string; plano?: string; passoId?: string; ordem?: number; pergunta?: string; question?: string; opcoes?: string[]; options?: string[] }
   | { type: "forget"; callId: string; id?: string; key?: string }
   | { type: "recall"; callId: string; key: string }
+  | { type: "buscar_capacidade"; callId: string; nome: string }
   | { type: "search_knowledge"; callId: string; query: string; limit?: number; /** ler um verbete inteiro, em pedaços de ~4000 chars */ id?: string; parte?: number }
   | { type: "whatsapp_send"; callId: string; acao?: "estado" | "enviar" | "foto" | "documento"; para?: string; texto?: string;
       arquivo?: { base64: string; nome: string; mime: string; legenda?: string } }

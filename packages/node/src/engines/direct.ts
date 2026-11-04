@@ -10,7 +10,7 @@ import type { HubClient } from "../hubClient.js";
 import type { ChatMessage, ChatResponse, Provider, ToolCall, ToolDef } from "../providers/types.js";
 import { OpenAICompatProvider } from "../providers/openaiCompat.js";
 import { TOOL_DEFS, atualizarCatalogo, catalogoDeCapacidades, rememberApproval, runTool, validarArgsFerramenta, type ToolContext } from "../tools.js";
-import { selecionarKitFerramentas } from "../kitFerramentas.js";
+import { ADMIN_TOOLS, selecionarKitFerramentas } from "../kitFerramentas.js";
 import { tetoDoProvedor, tetoSaidaDoProvedor, emTokens, ferramentasQueCabem } from "../orcamento.js";
 import { Aquecedor, preaquecer } from "../aquecer.js";
 import { CacheResposta, emitirEmPedacos } from "../cacheResposta.js";
@@ -640,8 +640,13 @@ export class DirectEngine implements Engine {
           continue;
         }
         loopState.lastHash = hash;
-        // Valida required do schema antes de executar
-        const inval = validarArgsFerramenta(call.name, (call.args ?? {}) as Record<string, unknown>, corte.defs);
+        // O kit só limita o que o prompt anuncia. Ferramenta que existe no catálogo
+        // ainda executa (senão run_command, ask_bot e schedule somem em papéis curtos).
+        // Admin fora do kit continua recusada.
+        const argsCall = (call.args ?? {}) as Record<string, unknown>;
+        const noKit = !corte.defs.some((d) => d.name === call.name);
+        const catalogo = noKit && ADMIN_TOOLS.has(call.name) ? corte.defs : TOOL_DEFS;
+        const inval = validarArgsFerramenta(call.name, argsCall, catalogo);
         if (inval) {
           loopState.failCount.set(call.name, falhas + 1);
           history.push({ role: "tool", toolCallId: call.id, name: call.name, content: inval });

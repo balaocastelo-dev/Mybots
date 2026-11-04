@@ -32,6 +32,7 @@ import { useColab } from "./colab/estado";
 import { QuemFala } from "./colab/grafo";
 import { QuadroKanban } from "./colab/kanban";
 import { tarefasDaEmpresa, tarefasDoBot } from "./colab/normalizar";
+import { ehImportarPorLink } from "./importarLink";
 
 type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
 
@@ -63,6 +64,13 @@ export function App({ authRole, authUid, authEmail, authNome, onSair }: { authRo
   const [escopoOwner, setEscopoOwner] = useState<"todos" | "meus" | "clientes">("todos");
   const exemplo = new URLSearchParams(location.search).get("colab") === "exemplo";
   const tela = new URLSearchParams(location.search).get("tela");
+  const [rotaImportar, setRotaImportar] = useState(ehImportarPorLink);
+  useEffect(() => {
+    const ao = () => setRotaImportar(ehImportarPorLink());
+    window.addEventListener("hashchange", ao);
+    window.addEventListener("popstate", ao);
+    return () => { window.removeEventListener("hashchange", ao); window.removeEventListener("popstate", ao); };
+  }, []);
   const pcDemo = useRef(false);
   if (exemplo && !pcDemo.current) {
     pcDemo.current = true;
@@ -306,6 +314,19 @@ export function App({ authRole, authUid, authEmail, authNome, onSair }: { authRo
   const fecharColab = () => { setVerQuadro(false); setVerGrafo(false); };
   const deusActive = state.control.global === "deus" || state.bots.some((b) => b.online && effectiveControl(state.control.global, b.controlMode) === "deus");
 
+  useEffect(() => {
+    if (!rotaImportar) return;
+    setReceberLink("");
+    const caminho = location.pathname.replace(/\/+$/, "");
+    if (caminho.endsWith("/bots/importar-link")) {
+      const base = (UI_BASE || "/").replace(/\/+$/, "") || "/";
+      history.replaceState(null, "", base);
+    } else {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+    setRotaImportar(false);
+  }, [rotaImportar]);
+
   return (
     <div className={"app" + (sidebarOpen ? "" : " sidebar-closed") + (deusActive ? " deus" : "") + (selected && !sidebarOpen ? " chat-aberto" : "") + ((verQuadro || verGrafo || verTroca) ? " painel-colab" : "")} style={{ ["--sidebar-w" as any]: sidebarW + "px" }}>
       {deusActive && (
@@ -503,6 +524,8 @@ export function App({ authRole, authUid, authEmail, authNome, onSair }: { authRo
             conversationId={selected}
             bots={equipe}
             abaInicial={tela === "tarefas" || tela === "detalhe" ? "tarefas" : null}
+            abrirConectores={tela === "conectores"}
+            onModelosDeBots={() => setReceberLink("")}
             tarefaInicial={tela === "detalhe" ? "t-video" : null}
             colab={pacote ? {
               tarefas: pacote.tarefas,

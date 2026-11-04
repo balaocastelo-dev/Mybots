@@ -1,5 +1,24 @@
 # Progresso
 
+## 2026-11-04 — PRs #71 a #75 num só
+
+- Branch a partir da main (já com Receber por link do #70). Merge, sem force push, das branches dos PRs #71, #72, #73, #74 e #75.
+- Conflitos resolvidos sem perder feature: menu da conta, perfil do bot, 8Token com visão e navegação, os 20 ofícios e Conectar aplicativos.
+- Os 23 bots iniciais nascem no padrão da casa: 8Token `claude-fable-5.1`, visão e navegação ligadas. A chave continua só no `.env` do Hub.
+- "Modelos de Bots" abre o diálogo real de Receber por link. A rota `/bots/importar-link` também. A tela de fallback saiu.
+- `tests/pcs.test.ts`: a varredura de ociosidade é testada com `sempreLigado` desligado (o padrão do PC novo continua ligado) e o `docker run` espera `--restart unless-stopped`.
+- Ferramenta que existe no catálogo executa mesmo se o kit curto não a anunciou. Admin fora do kit continua recusada. Com isso o e2e de aprovação, `run_command`, `ask_bot` e `schedule` passa.
+- Imagem grátis sem chave (Pollinations) volta a ser a primeira da fila. A lista plana "Bots" é o que o teste da barra espera.
+- `npm test` e `npm run build:ui` passaram neste ambiente. Não há `EIGHTTOKEN_API_KEY`: o ensaio real com a API fica de fora. Não mexi nas portas 8787/8791.
+
+## 2026-11-04 — Conectar aplicativos (MCP por conta)
+
+- Clipe na caixa do chat abre o modal com as abas Todos, Gerenciadores de senha, Produtividade, Comunicação, Design, Código e Mais (Marketing / Finanças).
+- Catálogo declarativo. OAuth lê client id/secret do ambiente; chave vai por formulário. O token fica cifrado no cofre do Hub e não volta na API. A conexão é da conta e vale para os bots dela.
+- "Modelos de Bots" abre o fluxo real de Receber por link (prévia e confirmar), o mesmo do PR já mergeado. A rota `/bots/importar-link` também cai nesse diálogo, sem a tela de fallback.
+- Arquivos: `packages/hub/src/conectoresCatalogo.ts`, `conectores.ts`, `conectoresRotas.ts`, `mcp.ts`, `hub.ts`, `server.ts`, `packages/ui/src/conectores.tsx`, `importarLink.tsx`, `conversa.tsx`, `App.tsx`, `styles.css`, `tests/conectores.test.ts`.
+- Teste: `tests/conectores.test.ts` (isolamento de tenant e token fora da API).
+
 ## 2026-11-04 — Perfil do bot
 
 - Clicar no nome do bot no topo do chat abre um modal com Detalhes, Biblioteca e Computador.

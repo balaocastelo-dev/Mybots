@@ -17,6 +17,7 @@ import { PerfilDoBot } from "./perfilBot";
 import { QuadroKanban } from "./colab/kanban";
 import { tarefasDoBot } from "./colab/normalizar";
 import type { PacoteColab, Tarefa } from "./colab/tipos";
+import { ModalConectores } from "./conectores";
 
 export type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
 
@@ -34,6 +35,8 @@ export type ConvProps = {
   empresaNome?: string;
   abaInicial?: "tarefas" | null;
   tarefaInicial?: string | null;
+  abrirConectores?: boolean;
+  onModelosDeBots?: () => void;
   colab?: {
     tarefas: Tarefa[];
     fonte?: PacoteColab["fonte"];
@@ -45,8 +48,9 @@ export type ConvProps = {
   };
 };
 
-export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, onLinkDeBot, onAbrirEquipe, onAbrirBot, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, colab }: ConvProps) {
+export function Conversation({ target, conversationId, bots, messages, tools, approvals, questions, resolvedQuestions, routines, voice, tts, setTts, handsFree, setHandsFree, send, onEvent, onOpenSidebar, onAbrirTroca, onLinkDeBot, onAbrirEquipe, onAbrirBot, control, initialPanel, empresaNome = "", abaInicial = null, tarefaInicial = null, abrirConectores = false, onModelosDeBots, colab }: ConvProps) {
   const [text, setText] = useState("");
+  const [conectoresAberto, setConectoresAberto] = useState(abrirConectores);
   const [vozAberta, setVozAberta] = useState(true);
   const [listening, setListening] = useState(false);
   const [level, setLevel] = useState(0);
@@ -595,6 +599,9 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
       <footer className="composer">
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => { void onFiles(e.target.files); e.target.value = ""; }} />
         <button className="icon-btn mais" type="button" title="Anexar arquivo" aria-label="Anexar" onClick={() => fileRef.current?.click()}>+</button>
+        <button className="icon-btn clipe" type="button" title="Conectar aplicativos" aria-label="Conectar aplicativos" onClick={() => setConectoresAberto(true)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M21.4 11.6l-8.5 8.5a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" /></svg>
+        </button>
         <textarea
           ref={textRef}
           value={text}
@@ -637,6 +644,7 @@ export function Conversation({ target, conversationId, bots, messages, tools, ap
           </button>
         )}
       </footer>
+      {conectoresAberto && <ModalConectores onFechar={() => setConectoresAberto(false)} onModelos={() => onModelosDeBots?.()} />}
       {folha && <FolhaAbrirTroca trocas={folha} bots={bots} Avatar={Avatar} onEscolher={(t) => onAbrirTroca(t.conversationId)} onFechar={() => setFolha(null)} />}
       {arquivoAberto && <Visualizador files={arquivoAberto.files} index={arquivoAberto.index} onFechar={() => setArquivoAberto(null)} />}
       {desktopAberto && bot && <DesktopAoVivo bot={bot} empresaId={bot.empresaId ?? null} nome={empresaNome} onFechar={() => setDesktopAberto(false)} />}

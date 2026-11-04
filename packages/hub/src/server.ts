@@ -46,6 +46,7 @@ import { registerPainel } from "./painel.js";
 import { estadoDaChave } from "./chaves.js";
 import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
+import { registrarConectores } from "./conectoresRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
 import { authOnlineAtivo, cookieDe, emitirTicketWs, hubTokenLoopbackOk, lerTicketWs, registrarAuthOnline, rotaPublicaOnline, sessaoDoReq, sessaoValida, SESSION_COOKIE, setUsuariosRepo, ticketWsDoReq, usuarioDoReq } from "./authOnline.js";
 import { arquivoDoApk, fichaPublica } from "./casaArquivo.js";
@@ -2287,6 +2288,10 @@ export async function startServer(hub: Hub) {
 
 
   registrarCofre(app, hub);
+  registrarConectores(app, {
+    conectores: hub.conectores,
+    contaDe: (req) => (authOnlineAtivo() ? (usuarioDoReq(req)?.id ?? null) : "local"),
+  });
 
   // --- MCP (ferramentas para os Bots, usado pelo engine opencode) ---
   await registerMcp(app, hub);

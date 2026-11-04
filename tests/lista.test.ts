@@ -24,8 +24,7 @@ test("fixados saem da lista e o gerente fica no topo de cada empresa", () => {
     { id: "solto", nome: "Médico" },
   ], empresas);
   assert.deepEqual(r.fixados, ["ana"]);
-  assert.deepEqual(r.grupos.map((g) => g.titulo), ["Balão", "Outra Casa", "Sistema"]);
-  assert.deepEqual(r.grupos[0].ids, ["chefe", "heitor"]);
-  assert.deepEqual(r.grupos[1].ids, ["g2", "lia"]);
+  assert.deepEqual(r.grupos.map((g) => g.titulo), ["Bots"]);
+  assert.deepEqual(r.grupos[0].ids, ["g2", "chefe", "heitor", "lia", "solto"]);
   assert.equal(r.grupos[0].ids.includes("ana"), false);
 });

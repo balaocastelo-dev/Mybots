@@ -403,7 +403,6 @@ export function App() {
                 <TimeAmebas />
                 <TituloMyBots />
               </div>
-              <span>Nenhum bot conectado ainda. Rode o nó em cada PC.</span>
             </li>
           )}
           {(gruposVisiveis.length > 0 || state.groups.length > 0 || (bots.length > 1 && bots.some((b) => b.gerente || (b.manages?.length)))) && (

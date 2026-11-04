@@ -38,6 +38,10 @@ export type ManagedBotDef = {
   gerente?: boolean;
   /** cofre da empresa: preenche credencial e não revela o valor */
   cofre?: boolean;
+  /** Enxerga imagem (modelo com visão e a ferramenta de ler anexo). */
+  visao?: boolean;
+  /** A ferramenta navegador entra no kit deste bot. */
+  navegacao?: boolean;
   ownerUserId?: string;
   /** alma com que nasceu, se nasceu com uma */
   alma?: string;
@@ -159,6 +163,8 @@ export class BotManager {
       alma: plano?.id || undefined,
       autoStart: input.autoStart ?? true,
       controlMode: isControlMode(input.controlMode) ? input.controlMode : "supervisionado",
+      ...(input.visao ? { visao: true } : {}),
+      ...(input.navegacao ? { navegacao: true } : {}),
       opencodePort: port,
       ownerUserId: input.ownerUserId,
       createdAt: Date.now(),
@@ -267,6 +273,8 @@ export class BotManager {
       workspace: "./workspace",
       personaFile: "./persona.md",
       provider: { kind: d.provider.kind, model: d.provider.model, ...(d.provider.baseURL ? { baseURL: d.provider.baseURL } : {}) },
+      ...(d.visao ? { visao: true } : {}),
+      ...(d.navegacao ? { navegacao: true } : {}),
       opencode: { port: d.opencodePort, spawn: true, manageConfig: true, hubHttp: `http://127.0.0.1:${config.port}` },
       approval: { mode: d.controlMode ?? "supervisionado" },
     };
@@ -429,6 +437,8 @@ export class BotManager {
           color: cfg.bot?.color,
           engine: cfg.engine === "opencode" ? "opencode" : "direct",
           provider: { kind, model: cfg.provider?.model || PROVIDERS.find((p) => p.kind === kind)?.defaultModel || PADRAO_DA_CASA.model, apiKey: env[KEY_ENV[kind] ?? "MYBOTS_API_KEY"], baseURL: cfg.provider?.baseURL },
+          ...(cfg.visao === true || cfg.provider?.visao === true ? { visao: true } : {}),
+          ...(cfg.navegacao === true || cfg.provider?.navegacao === true ? { navegacao: true } : {}),
           persona: fs.existsSync(personaFile) ? fs.readFileSync(personaFile, "utf8").replace(/^\uFEFF/, "") : defaultPersona(cfg.bot?.name ?? name, cfg.bot?.role ?? "Assistente"),
           autoStart: true,
           opencodePort: cfg.opencode?.port ?? 4096,

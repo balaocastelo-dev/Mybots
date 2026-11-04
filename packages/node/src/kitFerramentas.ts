@@ -40,7 +40,7 @@ export type KitInfo = { defs: ToolDef[]; incluidas: string[]; cortadas: string[]
  */
 export function selecionarKitFerramentas(
   todas: ToolDef[],
-  opts: { role?: string; botId?: string; persona?: string } = {},
+  opts: { role?: string; botId?: string; persona?: string; visao?: boolean; navegacao?: boolean } = {},
 ): KitInfo {
   const texto = [opts.role, opts.botId, opts.persona].filter(Boolean).join("\n");
   const adminLivre = process.env.MYBOTS_KIT_ADMIN === "1";
@@ -54,6 +54,17 @@ export function selecionarKitFerramentas(
       teto = k.teto;
       break;
     }
+  }
+  // Visão e navegação pedidas no nascimento (ou no padrão da casa, quando ele passar a ligar).
+  // Sem o flag, o kit continua o de hoje.
+  if (opts.navegacao) {
+    extras = [...new Set([...extras, "navegador", "fetch_url", "screenshot"])];
+    teto = Math.max(teto, NUCLEO.length + 4);
+    if (especialidade === "geral") especialidade = "navegacao";
+  }
+  if (opts.visao) {
+    extras = [...new Set([...extras, "read_attachment"])];
+    teto = Math.max(teto, NUCLEO.length + 5);
   }
   const envTeto = Number(process.env.MYBOTS_KIT_MAX);
   if (Number.isFinite(envTeto) && envTeto >= 5) teto = envTeto;

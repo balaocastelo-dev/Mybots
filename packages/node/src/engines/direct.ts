@@ -398,6 +398,8 @@ export class DirectEngine implements Engine {
         role: this.cfg.bot.role,
         botId: this.cfg.bot.id,
         persona: readPersona(this.cfg),
+        visao: this.cfg.visao === true || (this.cfg.provider as { visao?: boolean }).visao === true,
+        navegacao: this.cfg.navegacao === true || (this.cfg.provider as { navegacao?: boolean }).navegacao === true,
       });
       const corte = ferramentasQueCabem(kit.defs, Math.max(700, teto - gastoFixo - 400));
       if (corte.cortadas.length && !avisados.has(this.provider.kind)) {

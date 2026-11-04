@@ -181,7 +181,7 @@ export function BotForm({ value, onChange, providers, voices, isNew, etapa = "tu
           <label>Nome<input value={value.name} onChange={(e) => set({ name: e.target.value, ...(isNew && !value.personaTouched ? { persona: personaTemplate(e.target.value, value.role, especialidades.find((x) => x.id === value.especialidadeId) || null) } : {}) })} placeholder="Ex.: Malaquias Marketing" /></label>
             <div className="ameba-picker">
               <div className="ameba-picker-topo">
-                <RetratoPreview id={value.id ?? value.name ?? "novo"} avatar={value.avatar} size={64} />
+                <RetratoPreview id={value.id ?? value.name ?? "novo"} avatar={value.avatar} size={64} cor={value.color} />
                 <div className="ameba-picker-acoes">
                   <b>Ameba</b>
                   <small className="muted">So as amebas novas. Sorteie ou escolha uma.</small>

@@ -271,9 +271,11 @@ export function Avatar({ bot, size = 88, falando = false, cutucadas = 0, forceAn
 }
 
 /** Previa do retrato no formulario: so ameba v2. */
-export function RetratoPreview({ id, avatar, size = 56 }: { id: string; avatar?: string; size?: number }) {
-  const url = amebaV2Url(id, avatar) || sortearAmebaV2(id || "novo");
-  return <img className="retrato-previa" src={url} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }} />;
+export function RetratoPreview({ id, avatar, size = 56, cor }: { id: string; avatar?: string; size?: number; cor?: string }) {
+  const remoto = avatarRemoto(avatar);
+  const url = remoto || amebaV2Url(id, avatar) || sortearAmebaV2(id || "novo");
+  const anel = cor && /^#[0-9a-f]{3,8}$/i.test(cor) ? cor : "";
+  return <img className="retrato-previa" src={url} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", boxShadow: anel ? `0 0 0 3px ${anel}` : undefined }} />;
 }
 
 export function colorFor(id: string) {

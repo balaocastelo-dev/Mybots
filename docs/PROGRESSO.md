@@ -1,5 +1,16 @@
 # Progresso
 
+## 2026-11-04 — 20 bots iniciais em toda conta
+
+- Toda conta nova nasce com os 20 ofícios além de PROGRAMADOR, SEO & AEO Desk e Director. O id continua `receita-sufixo` (8 caracteres do usuário, sem `usr_`, ou o id da empresa).
+- Conta ou empresa que já existe recebe só o que falta, uma vez. Bot que já está lá não é reescrito, mesmo se o dono editou. Apagar depois não faz o bot voltar.
+- Cada um tem nome em pt-BR, foto e cor lidas das páginas `https://x.ai/bot/…` com o parser do importar-link, e instruções em pt-BR (papel, o que faz, passo a passo, limites, tom), adaptadas a R$, WhatsApp, Mercado Livre e Google Ads Brasil.
+- Regra em todos: nada de enviar mensagem, comprar, postar ou apagar sem o dono pedir com as próprias palavras.
+- Provedor 8token / claude-fable-5.1, visão e navegação ligadas. O padrão da casa (zai) segue para os três que já existiam. Se o padrão da casa passar a trazer esses flags, o nascimento lê os dois lugares.
+- Arquivos: `receitas/_base/equipe-inicial.json`, `receitas/*.json` dos 20, `packages/hub/src/equipeInicial.ts`, `server.ts`, `receitas.ts`, `botManager.ts`, `importarLink.ts`, `packages/node/src/kitFerramentas.ts`, `config.ts`, `engines/direct.ts`, `packages/ui/src/avatar.tsx`, `dialogos.tsx`, `tests/equipeInicial.test.ts`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `node --import tsx --test tests/equipeInicial.test.ts tests/importarLink.test.ts` passou (catálogo, seed idempotente, isolamento por tenant, kit de visão/navegação).
+
 ## 2026-11-04 — Receber bot por link
 
 - `POST /api/bots/importar-link` com `modo: preview` (só lê) e `modo: confirmar` (cria o managed bot do usuário logado). Só aceita `https://x.ai/bot/<id>`, busca com timeout de 8s e teto de 1 MB, e não segue redirect para outro domínio.

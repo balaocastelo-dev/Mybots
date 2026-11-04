@@ -53,6 +53,15 @@ export type Receita = {
   mcps?: Array<{ id: string; nome?: string }>;
   gettingStarted?: string;
   especialidadeId?: string;
+  /** Revisão do conteúdo da receita (sobe a cada reescrita). */
+  revisao?: number;
+  /** Memórias aplicadas só nas empresas de `empresasDono` (contexto do dono original). */
+  memoriaDoDono?: ReceitaMemory[];
+  empresasDono?: string[];
+  /** Textos de memória de revisões antigas: o reaplicar apaga só estes (memórias aprendidas ficam). */
+  substitui?: string[];
+  /** Nomes de skills de revisões antigas que o reaplicar remove. */
+  substituiSkills?: string[];
 };
 
 export type Fato = {
@@ -215,7 +224,11 @@ export function aplicarReceitaNoNascimento(
   let rotinas = 0;
   const { botId, empresaId, receita } = opts;
 
-  for (const m of receita.memory || []) {
+  const memoriasDaReceita = [
+    ...(receita.memory || []),
+    ...((receita.empresasDono || []).includes(empresaId) ? receita.memoriaDoDono || [] : []),
+  ];
+  for (const m of memoriasDaReceita) {
     try {
       const text = String(m.content || "").trim();
       if (!text) continue;
@@ -398,4 +411,46 @@ export function idsEquipeInicial(): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Reaplica a receita (revisão atual) num bot que já existe, sem perder o que ele aprendeu:
+ * - apaga só as memórias cujo texto é da receita (antiga em `substitui` ou atual) e regrava as atuais;
+ * - apaga as skills de origem "receita" deste bot e regrava as atuais;
+ * - cria as rotinas que faltam (por nome), sempre PAUSADAS; rotinas existentes ficam como estão.
+ * Memórias do tipo diário, fatos aprendidos, saberes de equipe e conversas não são tocados.
+ */
+export function reaplicarReceitaEmBot(
+  db: Db,
+  opts: { botId: string; botName: string; empresaId: string; receita: Receita },
+): AplicarResultado & { memoriasRemovidas: number; skillsRemovidas: number } {
+  const { botId, receita } = opts;
+  const textos = new Set<string>(
+    [
+      ...(receita.substitui || []),
+      ...(receita.memory || []).map((m) => m.content),
+      ...(receita.memoriaDoDono || []).map((m) => m.content),
+    ].map((t) => String(t || "").trim()).filter(Boolean),
+  );
+  let memoriasRemovidas = 0;
+  for (const f of db.listarFatos(botId)) {
+    if (f.tipo !== "diario" && (textos.has(f.text.trim()) || f.text.startsWith("Banco de capacidades"))) {
+      db.apagarFato(f.id);
+      memoriasRemovidas++;
+    }
+  }
+  let skillsRemovidas = 0;
+  for (const s of db.listSaberesTodos()) {
+    if ((s as any).origem === "receita" && (s.bots || []).includes(botId) && (s.tags || []).includes("skill")) {
+      db.deleteSaber(s.id);
+      skillsRemovidas++;
+    }
+  }
+  const existentes = new Set(db.listRoutines(botId).map((r) => r.name));
+  const r2: Receita = {
+    ...receita,
+    routines: (receita.routines || []).filter((r) => !existentes.has(r.name)).map((r) => ({ ...r, created: "paused" as const })),
+  };
+  const res = aplicarReceitaNoNascimento(db, { ...opts, receita: r2 });
+  return { ...res, memoriasRemovidas, skillsRemovidas };
 }

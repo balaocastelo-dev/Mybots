@@ -1089,7 +1089,7 @@ export async function startServer(hub: Hub) {
     const passo = String(b.passo ?? "");
     if (!passo) return reply.code(400).send({ error: "diga o passo: imagem, pdf, video ou link" });
     const salvar = (nome: string, mime: string, data: Buffer) => {
-      const f = hub.saveFile("user", nome, mime, data);
+      const f = hub.saveFile("user", nome, mime, data, authOnlineAtivo() ? usuarioDoReq(req)?.id ?? null : null);
       return { url: f.url, name: f.name };
     };
     try {
@@ -1759,21 +1759,30 @@ export async function startServer(hub: Hub) {
   app.delete("/api/routines/:id", async (req) => { hub.deleteRoutine((req.params as any).id); return { ok: true }; });
 
   // --- arquivos ---
-  app.get("/api/files/:id/:name?", async (req, reply) => {
-    if (authOnlineAtivo()) {
-      const user = usuarioDoReq(req);
-      const f0 = hub.db.getFile((req.params as any).id) as any;
-      if (f0) {
-        const ou = f0.owner_user_id || null;
-        const botOwner = f0.bot_id ? usuarios.ownerUserIdDoBot(f0.bot_id) : null;
-        const dono = ou || botOwner;
-        if (user?.role === "cliente" && dono && dono !== user.id) {
-          return reply.code(404).send({ error: "arquivo nao encontrado" });
-        }
-      }
+  // Regra: ninguem ve arquivo de outro usuario. Dono = owner_user_id do arquivo, senao o dono do bot.
+  // Owner ve tudo. Online sem sessao nao ve nada. Token de bot ve so arquivos do mesmo dono do bot.
+  // Bearer MYBOTS_HUB_TOKEN so vale em loopback (processos locais).
+  const donoDoArquivo = (f: { owner_user_id?: string | null; bot_id?: string | null }): string | null =>
+    (f.owner_user_id ? String(f.owner_user_id) : null) || (f.bot_id ? usuarios.ownerUserIdDoBot(f.bot_id) : null);
+  const podeVerDono = (req: any, dono: string | null): boolean => {
+    if (!authOnlineAtivo()) return true;
+    if (hubTokenLoopbackOk(req)) return true;
+    const user = sessaoValida(req) ? usuarioDoReq(req) : null;
+    if (user) return user.role === "owner" || (!!dono && dono === user.id);
+    const bot = nodeAuthorized(req);
+    if (bot) {
+      const donoBot = usuarios.ownerUserIdDoBot(bot);
+      if (!donoBot) return false;
+      if (donoBot === dono) return true;
+      return usuarios.getById(donoBot)?.role === "owner";
     }
+    return false;
+  };
+  app.get("/api/files/:id/:name?", async (req, reply) => {
     const f = hub.db.getFile((req.params as any).id);
-    if (!f || !fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo não encontrado" });
+    // 404 igual para "nao existe" e "nao e seu": nada de adivinhar id.
+    if (!f || !podeVerDono(req, donoDoArquivo(f))) return reply.code(404).send({ error: "arquivo nao encontrado" });
+    if (!fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo não encontrado" });
     // Foto e PDF seguem abertos (o chat já embute). Vídeo pede a senha da interface.
     if (videoExigeSenha(f.mime) && config.uiPassword && !uiAuthorized(req) && !nodeAuthorized(req)) {
       return reply.code(401).send({ error: "senha da interface inválida" });
@@ -1804,7 +1813,8 @@ export async function startServer(hub: Hub) {
     const conversationId = String(req.headers["x-conversation"] ?? "");
     const caption = req.headers["x-caption"] ? decodeURIComponent(String(req.headers["x-caption"])) : undefined;
     const data = Buffer.isBuffer(req.body) ? req.body : typeof req.body === "string" ? Buffer.from(req.body, "utf8") : Buffer.from(JSON.stringify(req.body ?? ""));
-    const f = hub.saveFile(botId, name, mime, data);
+    const quem = botId === "user" && authOnlineAtivo() ? usuarioDoReq(req)?.id ?? null : null;
+    const f = hub.saveFile(botId, name, mime, data, quem);
     if (conversationId && botId !== "user") hub.storeMessage(conversationId, hub.botSender(botId), caption ?? `Enviou ${f.name}`, { files: [{ id: f.id, name: f.name, url: f.url, mime: f.mime }] });
     return { ...f, publicUrl: `${config.publicUrl}${f.url}` };
   });
@@ -1900,11 +1910,11 @@ export async function startServer(hub: Hub) {
     const q = String((req.query as any).q ?? "").trim().toLowerCase();
     const tipo = String((req.query as any).tipo ?? "").trim();
     const bot = String((req.query as any).bot ?? "").trim();
-    const doBanco = hub.db.listFiles(5000).filter((f) => fs.existsSync(f.path)).map((f) => ({
+    const doBanco = hub.db.listFiles(5000).filter((f) => podeVerDono(req, donoDoArquivo(f)) && fs.existsSync(f.path)).map((f) => ({
       id: f.id, nome: f.name, mime: f.mime, tamanho: f.size, botId: f.bot_id, quando: f.created_at,
       tipo: tipoDoArquivo(f.name, f.mime), url: `/api/files/${f.id}/${encodeURIComponent(f.name)}`, origem: "chat", caminho: f.name,
     }));
-    const todos = [...doBanco, ...listarWorkspaces()].sort((a, b) => b.quando - a.quando);
+    const todos = [...doBanco, ...listarWorkspaces().filter((w) => podeVerDono(req, usuarios.ownerUserIdDoBot(w.botId)))].sort((a, b) => b.quando - a.quando);
     const contagem: Record<string, number> = {};
     for (const f of todos) contagem[f.tipo] = (contagem[f.tipo] ?? 0) + 1;
     const botIds = [...new Set(todos.map((f) => f.botId))].sort();
@@ -1914,7 +1924,7 @@ export async function startServer(hub: Hub) {
   app.get("/api/arquivos/ws/:bot/*", async (req, reply) => {
     const botId = String((req.params as any).bot ?? "");
     const rel = String((req.params as any)["*"] ?? "");
-    const real = caminhoDoWorkspace(botId, rel);
+    const real = podeVerDono(req, usuarios.ownerUserIdDoBot(botId)) ? caminhoDoWorkspace(botId, rel) : null;
     if (!real) return reply.code(404).send({ error: "arquivo nao encontrado" });
     const ext = (real.split(".").pop() ?? "").toLowerCase();
     const mime = mimeDaExt[ext] ?? "application/octet-stream";
@@ -1935,6 +1945,7 @@ export async function startServer(hub: Hub) {
     const limite = Math.min(Number((req.query as any).limite ?? 400) || 400, 2000);
     const contagem: Record<string, number> = {};
     const itens = hub.db.listFiles(limite)
+      .filter((f) => podeVerDono(req, donoDoArquivo(f)))
       .map((f) => ({
         id: f.id, nome: f.name, mime: f.mime, tamanho: f.size, botId: f.bot_id,
         quando: f.created_at, tipo: tipoDoArquivo(f.name, f.mime),

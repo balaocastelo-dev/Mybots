@@ -1964,7 +1964,8 @@ export class Hub {
   sendUserMessage(conversationId: string, text: string, attachments?: Array<{ name: string; mime: string; dataBase64: string }>, from: Sender = USER): StoredMessage {
     const files: Array<{ id: string; name: string; url: string; mime: string; size: number }> = [];
     for (const a of attachments ?? []) {
-      const f = this.saveFile(from.id, a.name, a.mime, Buffer.from(a.dataBase64, "base64"));
+      const donoConv = this.botsDaConversa(conversationId).map((id) => getUsuariosRepo()?.ownerUserIdDoBot(id)).find(Boolean) || null;
+      const f = this.saveFile(from.id, a.name, a.mime, Buffer.from(a.dataBase64, "base64"), donoConv);
       files.push({ id: f.id, name: f.name, url: f.url, mime: f.mime, size: f.size });
     }
     // Chefe falando na sala tem precedencia: a roda para e a palavra volta pra ele.
@@ -2069,14 +2070,16 @@ export class Hub {
   }
 
   /** Grava um arquivo em data/files e registra no banco. */
-  saveFile(botId: string, name: string, mime: string, data: Buffer): { id: string; name: string; mime: string; size: number; url: string; path: string } {
+  saveFile(botId: string, name: string, mime: string, data: Buffer, ownerUserId?: string | null): { id: string; name: string; mime: string; size: number; url: string; path: string } {
     const id = newId("f");
     const safe = name.replace(/[^\w.\-\u00C0-\u024F ]+/g, "_").slice(0, 120) || "arquivo";
     const dir = path.join(path.dirname(config.dbFile), "files");
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `${id}-${safe}`);
     fs.writeFileSync(file, data);
-    this.db.insertFile({ id, name: safe, mime, size: data.length, botId, path: file, createdAt: Date.now() });
+    // Todo arquivo nasce com dono: quem pediu, ou o dono do bot que gerou.
+    const dono = ownerUserId || getUsuariosRepo()?.ownerUserIdDoBot(botId) || null;
+    this.db.insertFile({ id, name: safe, mime, size: data.length, botId, path: file, createdAt: Date.now(), ownerUserId: dono });
     return { id, name: safe, mime, size: data.length, url: `/api/files/${id}/${encodeURIComponent(safe)}`, path: file };
   }
 

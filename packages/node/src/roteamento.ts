@@ -5,7 +5,7 @@ import { OPENAI_COMPAT_PRESETS } from "./config.js";
 export type AlvoRapido = { kind: string; model: string; baseURL: string; apiKey: string };
 
 const EFEITO = /\b(apagar|apague|excluir|exclua|deletar|delete|enviar|envie|mandar|mande|publicar|publique|pagar|pague|comprar|compre|agendar|agende|rodar|rode|executar|execute|instalar|instale|transferir|transfira|criar|crie|escrever|escreva|salvar|salve|gravar|grave|matar|mate|kill|formatar)\b/i;
-const FERRAMENTA = /\b(pre[cç]o|estoque|arquivo|pasta|comando|site|cliente|whatsapp|e-?mail|c[aâ]mera|agenda|cpf|cnpj|planilha|pdf|screenshot|fornecedor|documento)\b/i;
+const FERRAMENTA = /\b(pre[cç]o|estoque|arquivo|pasta|comando|site|cliente|whatsapp|e-?mail|c[âa]mera|agenda|cpf|cnpj|planilha|pdf|screenshot|fornecedor|documento|aprend|relat[oó]rio|conhecimento|mem[oó]ria|saber|ferramenta|tool)\b/i;
 const SENSIVEL = /(senha|password|\btoken\b|api[_ -]?key|\bsecret\b|\bchaves?\b|bearer|\bcpf\b|\bcnpj\b|cart[aã]o|\bcvv\b)/i;
 
 export function tarefaSimples(texto: string, env: NodeJS.ProcessEnv = process.env): boolean {
@@ -71,6 +71,6 @@ export function promptCurto(nome: string, id: string, persona: string): string {
     "",
     `Você é o Bot "${nome}" (id ${id}).`,
     "Responda em português, em uma ou duas frases, sem raciocínio visível.",
-    "Se a pergunta precisar de ferramenta, dado ao vivo, arquivo ou ação, diga isso em uma linha em vez de inventar.",
+    "Se a pergunta precisar de ferramenta, dado ao vivo, arquivo, memória ou ação, diga em uma linha que vai usar a ferramenta certa — NÃO diga que você não consegue aprender ou gerar relatório.",
   ].join("\n");
 }

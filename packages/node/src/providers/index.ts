@@ -24,7 +24,7 @@ export function createProvider(cfg: NodeConfig): Provider {
         throw new Error(`${preset?.label ?? p.kind} precisa de chave: defina ${preset?.keyEnv ?? "MYBOTS_API_KEY"}`);
       }
       const headers: Record<string, string> = {};
-      if (p.kind === "openrouter") { headers["HTTP-Referer"] = "https://exemplo.com.br"; headers["X-Title"] = "MyBots"; }
+      if (p.kind === "openrouter") { headers["HTTP-Referer"] = "https://www.balao.info/mybots"; headers["X-Title"] = "MyBots"; }
       return new OpenAICompatProvider(p.kind, p.model, baseURL, p.apiKey, headers);
     }
   }

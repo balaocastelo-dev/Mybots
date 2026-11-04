@@ -2,7 +2,11 @@ import { FormEvent, useState } from "react";
 import { api, UI_BASE } from "./api";
 import { TimeAmebas, TituloMyBots } from "./timeAmebas";
 
-type Props = { onOk: (usuario: string) => void };
+type Props = { onOk: (usuario: string, info?: { role?: string; uid?: string }) => void };
+
+// Login com Google sempre disponivel online; e-mail/senha continua para o dono.
+const google = true;
+const senhaOk = true;
 
 export function LoginOnline({ onOk }: Props) {
   const [usuario, setUsuario] = useState("");

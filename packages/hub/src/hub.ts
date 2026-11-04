@@ -10,6 +10,7 @@ import {
 } from "@mybots/shared";
 import { Db } from "./db.js";
 import { Cofre } from "./cofre.js";
+import { Conectores } from "./conectores.js";
 import { alvoDoNavegador } from "./cofreCdp.js";
 import { ehDocumentoLivel, ehImagem, extrairTextoDoArquivo } from "./extrairAnexo.js";
 import { redigir, semSegredo, textoSeguro } from "./redacao.js";
@@ -247,9 +248,13 @@ export class Hub {
   /** Credenciais cifradas. O valor não volta para bot nem para a interface. */
   readonly cofre: Cofre;
 
+  /** Aplicativos MCP da conta. O token fica no mesmo cofre e não volta para a interface. */
+  readonly conectores: Conectores;
+
   constructor(dbFile: string, public readonly userName = process.env.MYBOTS_USER_NAME ?? "o chefe") {
     this.db = new Db(dbFile);
     this.cofre = new Cofre(this.db.sqlite);
+    this.conectores = new Conectores(this.db.sqlite);
     this.whats = new WhatsAppDasEmpresas(path.dirname(dbFile), (estado) => this.broadcastUi({ type: "whatsapp", estado }));
     // Sessao ja escaneada volta sozinha quando o Hub sobe: ninguem escaneia duas vezes.
     setTimeout(() => { for (const id of this.whats.salvas()) void this.whats.conectar(id).catch(() => {}); }, 1500);

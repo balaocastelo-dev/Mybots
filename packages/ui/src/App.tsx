@@ -10,7 +10,7 @@ import { LendoSite } from "./lendo";
 import { ArteDoBot, EscolhaAparencia, lerAparencia } from "./aparencia";
 import { Abertura, PrimeiraEmpresa, EscolhaIdioma } from "./abertura";
 import { TelaLegal } from "./legal";
-import { TelaCreditos } from "./creditos";
+import { TelaCreditos } from "./creditos";
 import { usePainelPrefs, nomeNaTela, ChipTrocas, FolhaAbrirTroca, TrocaEntreBots, DialogoTexto, type Troca, type PrefDoBot } from "./painel";
 import { ehGerente, montarLista } from "./lista";
 import { lerLinkGuia } from "./guiaPainel";
@@ -31,6 +31,7 @@ import { useColab } from "./colab/estado";
 import { QuemFala } from "./colab/grafo";
 import { QuadroKanban } from "./colab/kanban";
 import { tarefasDaEmpresa, tarefasDoBot } from "./colab/normalizar";
+import { ehImportarPorLink, TelaImportarLink } from "./importarLink";
 
 type Target = { kind: "bot"; bot: BotSummary } | { kind: "group"; group: Group };
 
@@ -62,6 +63,13 @@ export function App({ authRole, authUid, authEmail, onSair }: { authRole?: strin
   const [escopoOwner, setEscopoOwner] = useState<"todos" | "meus" | "clientes">("todos");
   const exemplo = new URLSearchParams(location.search).get("colab") === "exemplo";
   const tela = new URLSearchParams(location.search).get("tela");
+  const [rotaImportar, setRotaImportar] = useState(ehImportarPorLink);
+  useEffect(() => {
+    const ao = () => setRotaImportar(ehImportarPorLink());
+    window.addEventListener("hashchange", ao);
+    window.addEventListener("popstate", ao);
+    return () => { window.removeEventListener("hashchange", ao); window.removeEventListener("popstate", ao); };
+  }, []);
   const pcDemo = useRef(false);
   if (exemplo && !pcDemo.current) {
     pcDemo.current = true;
@@ -304,6 +312,17 @@ export function App({ authRole, authUid, authEmail, onSair }: { authRole?: strin
   const fecharColab = () => { setVerQuadro(false); setVerGrafo(false); };
   const deusActive = state.control.global === "deus" || state.bots.some((b) => b.online && effectiveControl(state.control.global, b.controlMode) === "deus");
 
+  if (rotaImportar) {
+    return <TelaImportarLink onVoltar={() => {
+      if (location.pathname.replace(/\/+$/, "").endsWith("/bots/importar-link")) {
+        location.assign(`${UI_BASE}/`);
+        return;
+      }
+      history.pushState(null, "", location.pathname + location.search);
+      setRotaImportar(false);
+    }} />;
+  }
+
   return (
     <div className={"app" + (sidebarOpen ? "" : " sidebar-closed") + (deusActive ? " deus" : "") + (selected && !sidebarOpen ? " chat-aberto" : "") + ((verQuadro || verGrafo || verTroca) ? " painel-colab" : "")} style={{ ["--sidebar-w" as any]: sidebarW + "px" }}>
       {deusActive && (
@@ -500,6 +519,7 @@ export function App({ authRole, authUid, authEmail, onSair }: { authRole?: strin
             conversationId={selected}
             bots={equipe}
             abaInicial={tela === "tarefas" || tela === "detalhe" ? "tarefas" : null}
+            abrirConectores={tela === "conectores"}
             tarefaInicial={tela === "detalhe" ? "t-video" : null}
             colab={pacote ? {
               tarefas: pacote.tarefas,

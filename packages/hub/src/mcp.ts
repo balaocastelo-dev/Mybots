@@ -9,6 +9,7 @@ import { tipoDeAprovacao } from "@mybots/shared";
 import { botForToken, config, tokenAllows } from "./config.js";
 import type { Hub } from "./hub.js";
 import { chamarColabLocal } from "./colab/cliente.js";
+import { contaDoBot } from "./conectores.js";
 
 export async function registerMcp(app: FastifyInstance, hub: Hub) {
   app.all("/mcp", async (req, reply) => {
@@ -196,6 +197,30 @@ export function buildMcpServer(hub: Hub, botId: string) {
   }, async ({ taskId, motivo }) => {
     const r = await chamarColabLocal(botId, "POST", `/api/colab/tarefas/${encodeURIComponent(taskId)}/cancelar`, motivo ? { motivo } : {});
     return text(r.status >= 400 ? `Falhou: ${r.corpo?.error ?? r.status}` : JSON.stringify(r.corpo));
+  });
+
+  server.registerTool("listar_aplicativos", {
+    description: "Lista os aplicativos MCP conectados na conta deste bot (Drive, Gmail, GitHub e outros). Não devolve token nem chave.",
+    inputSchema: {},
+  }, async () => {
+    const conta = contaDoBot(botId);
+    if (!conta) return text("Este bot não está ligado a uma conta.");
+    const lista = hub.conectores.listar(conta).conectores.filter((c) => c.conectado).map((c) => ({ id: c.id, nome: c.nome, rotulo: c.rotulo }));
+    return text(lista.length ? JSON.stringify(lista) : "Nenhum aplicativo conectado nesta conta.");
+  });
+
+  server.registerTool("chamar_aplicativo", {
+    description: "Chama uma ferramenta MCP de um aplicativo já conectado na conta. O token fica no servidor. Gerenciador de senha não entrega segredo. Pagar, reembolsar e enviar continuam pedindo o chefe.",
+    inputSchema: {
+      aplicativo: z.string().describe("id: google-drive, gmail, notion, slack, github, vercel, cloudflare, figma, stripe, shopify"),
+      ferramenta: z.string().describe("nome da ferramenta no MCP do aplicativo"),
+      argumentos: z.record(z.string(), z.unknown()).optional(),
+    },
+  }, async ({ aplicativo, ferramenta, argumentos }) => {
+    const conta = contaDoBot(botId);
+    if (!conta) return text("Este bot não está ligado a uma conta.");
+    const r = await hub.conectores.chamar({ contaId: conta, aplicativo, ferramenta, argumentos: argumentos as Record<string, unknown> | undefined });
+    return text(r.ok ? r.texto : r.erro);
   });
 
   server.registerTool("cancel_routine", { description: "Cancela uma rotina sua pelo id.", inputSchema: { id: z.string() } }, async ({ id }) => {

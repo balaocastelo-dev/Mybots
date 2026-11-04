@@ -1,5 +1,13 @@
 # Progresso
 
+## 2026-11-04 — Conectar aplicativos (MCP por conta)
+
+- Clipe na caixa do chat abre o modal com as abas Todos, Gerenciadores de senha, Produtividade, Comunicação, Design, Código e Mais (Marketing / Finanças).
+- Catálogo declarativo. OAuth lê client id/secret do ambiente; chave vai por formulário. O token fica cifrado no cofre do Hub e não volta na API. A conexão é da conta e vale para os bots dela.
+- "Modelos de Bots" aponta para `/bots/importar-link`. A importação por link ainda não está na main; a rota abre o fallback.
+- Arquivos: `packages/hub/src/conectoresCatalogo.ts`, `conectores.ts`, `conectoresRotas.ts`, `mcp.ts`, `hub.ts`, `server.ts`, `packages/ui/src/conectores.tsx`, `importarLink.tsx`, `conversa.tsx`, `App.tsx`, `styles.css`, `tests/conectores.test.ts`.
+- Teste: `npm test` (inclui isolamento de tenant e token fora da API).
+
 ## 2026-11-01 — Casca Android (WebView) do painel público
 
 - App nativo em `android/`, pacote `info.balao.mybots`, minSdk 24. Abre `https://www.balao.info/mybots` com JavaScript, DOM storage, cookie de sessão (aceita cookie e cookie de terceiro, flush ao pausar), voltar no histórico, puxar no topo ou ícone para recarregar, tela “Sem conexão” com “Tentar novamente”, seletor de arquivo, download e link externo no navegador.

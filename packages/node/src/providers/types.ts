@@ -10,9 +10,11 @@ export type ChatMessage =
   | { role: "assistant"; content: string; toolCalls?: ToolCall[] }
   | { role: "tool"; toolCallId: string; name: string; content: string };
 
+export type JsonSchemaProp = { type: string; description?: string; enum?: string[]; items?: JsonSchemaProp; properties?: Record<string, JsonSchemaProp>; required?: string[]; default?: unknown };
+
 export type JsonSchema = {
   type: "object";
-  properties: Record<string, { type: string; description?: string; enum?: string[]; items?: { type: string }; default?: unknown }>;
+  properties: Record<string, JsonSchemaProp>;
   required?: string[];
 };
 

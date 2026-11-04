@@ -43,6 +43,7 @@ export const PROVIDERS = [
   { kind: "groq", label: "Groq — rapido, contexto pequeno", engines: ["direct"], needsKey: true, keyEnv: "GROQ_API_KEY", defaultModel: "qwen/qwen3.8-27b", defaultBaseURL: "https://api.groq.com/openai/v1", models: ["qwen/qwen3.8-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b"] },
   { kind: "cerebras", label: "Cerebras — muito rapido, 8K de contexto", engines: ["direct"], needsKey: true, keyEnv: "CEREBRAS_API_KEY", defaultModel: "llama-3.3-70b", defaultBaseURL: "https://api.cerebras.ai/v1", models: ["llama-3.3-70b", "qwen-3-32b"] },
   { kind: "mistral", label: "Mistral", engines: ["direct"], needsKey: true, keyEnv: "MISTRAL_API_KEY", defaultModel: "mistral-small-latest", defaultBaseURL: "https://api.mistral.ai/v1", models: ["mistral-small-latest"] },
+  { kind: "8token", label: "Claude via 8Token (pago, inteligente, mais lento)", engines: ["direct"], needsKey: true, keyEnv: "EIGHTTOKEN_API_KEY", defaultModel: "claude-sonnet-5", defaultBaseURL: "https://8token.tech", models: ["claude-sonnet-5", "claude-opus-5-5", "claude-fable-5.1"] },
   { kind: "anthropic", label: "Claude (Anthropic) — padrao da casa", engines: ["direct", "opencode"], needsKey: true, keyEnv: "ANTHROPIC_API_KEY", defaultModel: "claude-haiku-4-5", models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"] },
   { kind: "opencode", label: "OpenCode — modelos grátis", engines: ["opencode"], needsKey: false, keyEnv: "", defaultModel: "big-pickle", models: ["big-pickle", "glm-5.3-flash-free", "deepseek-v4.1-flash-free", "nemotron-3.5-lightning-free", "mimo-v2.6-flash-free", "flint-40b-free"] },
   { kind: "gemini", label: "Google Gemini", engines: ["direct", "opencode"], needsKey: true, keyEnv: "GEMINI_API_KEY", defaultModel: "gemini-3.8-flash", models: ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.0-flash"] },
@@ -56,7 +57,7 @@ export const PROVIDERS = [
  *  pequenos, entao nascer num provedor apertado e nascer quebrado. */
 export const PADRAO_DA_CASA = { engine: "direct" as const, provider: "zai", model: "glm-4.5-flash" };
 
-const KEY_ENV: Record<string, string> = { zai: "ZAI_API_KEY", groq: "GROQ_API_KEY", cerebras: "CEREBRAS_API_KEY", mistral: "MISTRAL_API_KEY", gemini: "GEMINI_API_KEY", anthropic: "ANTHROPIC_API_KEY", claude: "ANTHROPIC_API_KEY", nous: "NOUS_API_KEY", openrouter: "OPENROUTER_API_KEY", "opencode-zen": "OPENCODE_API_KEY" };
+const KEY_ENV: Record<string, string> = { zai: "ZAI_API_KEY", groq: "GROQ_API_KEY", cerebras: "CEREBRAS_API_KEY", mistral: "MISTRAL_API_KEY", gemini: "GEMINI_API_KEY", "8token": "EIGHTTOKEN_API_KEY", anthropic: "ANTHROPIC_API_KEY", claude: "ANTHROPIC_API_KEY", nous: "NOUS_API_KEY", openrouter: "OPENROUTER_API_KEY", "opencode-zen": "OPENCODE_API_KEY" };
 
 function defaultAmebaV2(id: string): string {
   let h = 2166136261;

@@ -120,7 +120,7 @@ export function loadConfig(argPath?: string): NodeConfig & { configDir: string }
   cfg.provider.model = process.env.MYBOTS_MODEL ?? cfg.provider.model;
   cfg.provider.apiKey = process.env.MYBOTS_API_KEY ?? cfg.provider.apiKey ?? keyFromEnv(cfg.provider.kind);
   cfg.provider.baseURL = process.env.MYBOTS_BASE_URL ?? cfg.provider.baseURL ?? OPENAI_COMPAT_PRESETS[cfg.provider.kind]?.baseURL
-    ?? (cfg.provider.kind === "gemini" ? "https://generativelanguage.googleapis.com/v1beta" : cfg.provider.kind === "anthropic" || cfg.provider.kind === "claude" ? "https://api.anthropic.com" : undefined);
+    ?? (cfg.provider.kind === "gemini" ? "https://generativelanguage.googleapis.com/v1beta" : cfg.provider.kind === "8token" ? (process.env.EIGHTTOKEN_BASE_URL ?? "https://8token.tech") : cfg.provider.kind === "anthropic" || cfg.provider.kind === "claude" ? "https://api.anthropic.com" : undefined);
   cfg.opencode.password = process.env.OPENCODE_SERVER_PASSWORD ?? cfg.opencode.password;
   const envMode = process.env.MYBOTS_CONTROL_MODE;
   if (isControlMode(envMode)) cfg.approval.mode = envMode;
@@ -133,6 +133,7 @@ export function loadConfig(argPath?: string): NodeConfig & { configDir: string }
 
 function keyFromEnv(kind: string): string | undefined {
   if (kind === "gemini") return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  if (kind === "8token") return process.env.EIGHTTOKEN_API_KEY;
   if (kind === "anthropic") return process.env.ANTHROPIC_API_KEY;
   const preset = OPENAI_COMPAT_PRESETS[kind];
   if (preset) return process.env[preset.keyEnv];

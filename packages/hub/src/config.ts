@@ -52,6 +52,13 @@ export const config = {
   senhaHash: process.env.MYBOTS_SENHA_HASH ?? "",
   /** Segredo HMAC dos cookies de sessao. */
   sessionSecret: process.env.MYBOTS_SESSION_SECRET ?? process.env.MYBOTS_HUB_TOKEN ?? "dev-inseguro",
+  /** Google OAuth (OpenID Connect). Sem CLIENT_ID o botao Google fica oculto. */
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  /** Redirect URI registrada no Google Cloud Console (ex.: https://www.soubots.com/app/api/auth/google/callback). */
+  googleRedirectUri: process.env.GOOGLE_REDIRECT_URI ?? "",
+  /** E-mail do dono (owner). So este Gmail vira role=owner; demais logins Google entram como cliente. */
+  ownerEmail: (process.env.MYBOTS_OWNER_EMAIL ?? process.env.MYBOTS_USUARIO ?? "").trim().toLowerCase(),
   dbFile: process.env.MYBOTS_DB ?? path.resolve(process.cwd(), "data", "mybots.sqlite"),
   uiDist: process.env.MYBOTS_UI_DIST ?? path.resolve(process.cwd(), "../ui/dist"),
   version: "0.1.0",

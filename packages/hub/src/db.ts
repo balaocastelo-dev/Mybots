@@ -79,7 +79,8 @@ function juntarFicha(anterior: FichaEmpresa | undefined, patch: FichaEmpresa | n
 }
 
 export class Db {
-  private db: Database.Database;
+  /** SQLite cru — UsuariosRepo e migracoes auxiliares. */
+  readonly db: Database.Database;
 
   constructor(file: string) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -461,8 +462,11 @@ export class Db {
     const r = this.db.prepare(`SELECT def FROM managed_bots WHERE id=?`).get(id) as any;
     return r ? JSON.parse(r.def) : undefined;
   }
-  upsertManaged(def: { id: string; createdAt: number }) {
+  upsertManaged(def: { id: string; createdAt: number; ownerUserId?: string }) {
     this.db.prepare(`INSERT INTO managed_bots (id, def, created_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET def=excluded.def`).run(def.id, JSON.stringify(def), def.createdAt);
+    if (def.ownerUserId) {
+      try { this.db.prepare(`UPDATE managed_bots SET owner_user_id=? WHERE id=?`).run(def.ownerUserId, def.id); } catch { /* coluna via UsuariosRepo.ensure */ }
+    }
   }
   deleteManaged(id: string) { this.db.prepare(`DELETE FROM managed_bots WHERE id=?`).run(id); }
 
@@ -526,7 +530,11 @@ export class Db {
     const rows = botId
       ? this.db.prepare(`SELECT * FROM routines WHERE bot_id=? ORDER BY created_at`).all(botId)
       : this.db.prepare(`SELECT * FROM routines ORDER BY created_at`).all();
-    return (rows as any[]).map((r) => ({ id: r.id, botId: r.bot_id, name: r.name, cron: r.cron, prompt: r.prompt, enabled: !!r.enabled, lastRun: r.last_run ?? undefined, nextRun: r.next_run ?? undefined, createdAt: r.created_at }));
+    return (rows as any[]).map((r) => ({
+      id: r.id, botId: r.bot_id, name: r.name, cron: r.cron, prompt: r.prompt, enabled: !!r.enabled,
+      lastRun: r.last_run ?? undefined, nextRun: r.next_run ?? undefined, createdAt: r.created_at,
+      ...(r.owner_user_id ? { ownerUserId: String(r.owner_user_id) } as any : {}),
+    }));
   }
   insertRoutine(r: Routine) {
     this.db.prepare(`INSERT INTO routines (id, bot_id, name, cron, prompt, enabled, next_run, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(r.id, r.botId, r.name, r.cron, r.prompt, r.enabled ? 1 : 0, r.nextRun ?? null, r.createdAt);
@@ -546,11 +554,21 @@ export class Db {
 
   // ---- grupos ----
   listGroups(): Group[] {
-    return (this.db.prepare(`SELECT * FROM groups ORDER BY created_at`).all() as any[]).map((g) => ({ id: g.id, name: g.name, members: JSON.parse(g.members), createdAt: g.created_at }));
+    return (this.db.prepare(`SELECT * FROM groups ORDER BY created_at`).all() as any[]).map((g) => ({
+      id: g.id,
+      name: g.name,
+      members: JSON.parse(g.members),
+      createdAt: g.created_at,
+      ...(g.owner_user_id ? { ownerUserId: String(g.owner_user_id) } as any : {}),
+    }));
   }
   getGroup(id: string): Group | undefined { return this.listGroups().find((g) => g.id === id); }
   upsertGroup(g: Group) {
     this.db.prepare(`INSERT INTO groups (id, name, members, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, members=excluded.members`).run(g.id, g.name, JSON.stringify(g.members), g.createdAt);
+    const ou = (g as any).ownerUserId;
+    if (ou) {
+      try { this.db.prepare(`UPDATE groups SET owner_user_id=? WHERE id=?`).run(ou, g.id); } catch { /* ensure usuarios.ensure() cria a coluna */ }
+    }
   }
   deleteGroup(id: string) { this.db.prepare(`DELETE FROM groups WHERE id=?`).run(id); }
 
@@ -561,7 +579,7 @@ export class Db {
   getFile(id: string) { return this.db.prepare(`SELECT * FROM files WHERE id=?`).get(id) as { id: string; name: string; mime: string; size: number; bot_id: string; path: string; created_at: number } | undefined; }
   /** Tudo que os bots produziram, do mais novo para o mais velho. A tela "Trabalhos feitos" vive disto. */
   listFiles(limite = 500) {
-    return this.db.prepare(`SELECT * FROM files ORDER BY created_at DESC LIMIT ?`).all(limite) as Array<{ id: string; name: string; mime: string; size: number; bot_id: string; path: string; created_at: number }>;
+    return this.db.prepare(`SELECT * FROM files ORDER BY created_at DESC LIMIT ?`).all(limite) as Array<{ id: string; name: string; mime: string; size: number; bot_id: string; path: string; created_at: number; owner_user_id?: string }>;
   }
 
   upsertBot(bot: BotInfo, extra: { engine?: string; provider?: string; model?: string }) {
@@ -583,12 +601,13 @@ export class Db {
     this.db.prepare(`UPDATE bots SET last_seen=? WHERE id=?`).run(Date.now(), id);
   }
 
-  listBots(): Array<BotInfo & { engine?: string; provider?: string; model?: string; lastSeen?: number; empresaId?: string; ponte?: boolean }> {
+  listBots(): Array<BotInfo & { engine?: string; provider?: string; model?: string; lastSeen?: number; empresaId?: string; ponte?: boolean; ownerUserId?: string }> {
     return this.db.prepare(`SELECT * FROM bots ORDER BY name`).all().map((r: any) => ({
       id: r.id, name: r.name, role: r.role, avatar: r.avatar ?? undefined, color: r.color ?? undefined,
       voice: r.voice ?? undefined, engine: r.engine ?? undefined, provider: r.provider ?? undefined,
       model: r.model ?? undefined, lastSeen: r.last_seen ?? undefined,
       empresaId: r.empresa_id ?? undefined, ponte: !!r.ponte,
+      ownerUserId: r.owner_user_id ? String(r.owner_user_id) : undefined,
     }));
   }
 

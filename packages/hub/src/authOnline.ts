@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "./config.js";
+import type { RoleUsuario, Usuario } from "./usuarios.js";
+import type { UsuariosRepo } from "./usuarios.js";
 
 export const SESSION_COOKIE = "mybots_session";
 const MAX_TENTATIVAS = 8;
@@ -8,15 +10,40 @@ const JANELA_MS = 15 * 60 * 1000;
 const BLOQUEIO_MS = 15 * 60 * 1000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+export type SessaoOnline = {
+  u: string;
+  uid: string;
+  role: RoleUsuario;
+  exp: number;
+};
+
 type Tentativa = { n: number; desde: number; bloqueadoAte: number };
 const tentativas = new Map<string, Tentativa>();
+
+/** Injetado em server.ts apos criar o Hub/DB. */
+let usuariosRepo: UsuariosRepo | null = null;
+export function setUsuariosRepo(repo: UsuariosRepo) {
+  usuariosRepo = repo;
+}
+export function getUsuariosRepo(): UsuariosRepo | null {
+  return usuariosRepo;
+}
 
 function ipDe(req: FastifyRequest): string {
   const xf = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
   return xf || req.ip || "local";
 }
 
+/** Auth online: senha (MYBOTS_USUARIO+HASH) e/ou Google OAuth. */
 export function authOnlineAtivo(): boolean {
+  return !!(config.usuarioOnline && config.senhaHash) || googleOAuthAtivo();
+}
+
+export function googleOAuthAtivo(): boolean {
+  return !!(config.googleClientId && config.googleClientSecret && config.googleRedirectUri);
+}
+
+export function senhaOnlineAtiva(): boolean {
   return !!(config.usuarioOnline && config.senhaHash);
 }
 
@@ -39,7 +66,7 @@ function assinar(payload: string): string {
   return `${payload}.${sig}`;
 }
 
-function lerSessao(token: string): { u: string; exp: number } | null {
+function lerSessao(token: string): SessaoOnline | null {
   const i = token.lastIndexOf(".");
   if (i < 0) return null;
   const payload = token.slice(0, i);
@@ -49,9 +76,18 @@ function lerSessao(token: string): { u: string; exp: number } | null {
   const b = Buffer.from(esperado);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   try {
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { u: string; exp: number };
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<SessaoOnline> & { k?: string };
+    if (data?.k === "ws") return null;
     if (!data?.u || !data?.exp || Date.now() > data.exp) return null;
-    return data;
+    // Sessao legada (so u/exp): promove para owner se bater com MYBOTS_USUARIO.
+    let uid = data.uid || "";
+    let role: RoleUsuario = data.role === "owner" || data.role === "cliente" ? data.role : "cliente";
+    if (!uid && config.usuarioOnline && data.u === config.usuarioOnline) {
+      const owner = usuariosRepo?.ensureOwner(config.ownerEmail || config.usuarioOnline, config.usuarioOnline);
+      if (owner) { uid = owner.id; role = "owner"; }
+    }
+    if (!uid) return null;
+    return { u: String(data.u), uid, role, exp: Number(data.exp) };
   } catch {
     return null;
   }
@@ -69,34 +105,36 @@ export function cookieDe(req: FastifyRequest, nome: string): string {
   return "";
 }
 
-
 const WS_TICKET_TTL_MS = 90_000;
 
-/** Ticket curto para abrir /ws/ui cross-origin (cookie nao cruza o tunel). Nunca e o Bearer do hub. */
-export function emitirTicketWs(usuario: string): { ticket: string; expiresIn: number } {
+export function emitirTicketWs(sessao: SessaoOnline): { ticket: string; expiresIn: number } {
   const exp = Date.now() + WS_TICKET_TTL_MS;
-  const payload = Buffer.from(JSON.stringify({ u: usuario, exp, k: "ws" }), "utf8").toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ u: sessao.u, uid: sessao.uid, role: sessao.role, exp, k: "ws" }), "utf8").toString("base64url");
   return { ticket: assinar(payload), expiresIn: Math.floor(WS_TICKET_TTL_MS / 1000) };
 }
 
-export function ticketWsValido(ticket: string): boolean {
-  if (!authOnlineAtivo() || !ticket) return false;
+export function lerTicketWs(ticket: string): SessaoOnline | null {
+  if (!authOnlineAtivo() || !ticket) return null;
   const i = ticket.lastIndexOf(".");
-  if (i < 0) return false;
+  if (i < 0) return null;
   const payload = ticket.slice(0, i);
   const sig = ticket.slice(i + 1);
   const esperado = crypto.createHmac("sha256", config.sessionSecret).update(payload).digest("base64url");
   const aBuf = Buffer.from(sig);
   const bBuf = Buffer.from(esperado);
-  if (aBuf.length !== bBuf.length || !crypto.timingSafeEqual(aBuf, bBuf)) return false;
+  if (aBuf.length !== bBuf.length || !crypto.timingSafeEqual(aBuf, bBuf)) return null;
   try {
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { u: string; exp: number; k?: string };
-    if (data?.k !== "ws") return false;
-    if (!data?.u || !data?.exp || Date.now() > data.exp) return false;
-    return data.u === config.usuarioOnline;
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as SessaoOnline & { k?: string };
+    if (data?.k !== "ws") return null;
+    if (!data?.u || !data?.uid || !data?.exp || Date.now() > data.exp) return null;
+    return { u: data.u, uid: data.uid, role: data.role === "owner" ? "owner" : "cliente", exp: data.exp };
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function ticketWsValido(ticket: string): boolean {
+  return !!lerTicketWs(ticket);
 }
 
 export function ticketWsDoReq(req: FastifyRequest): boolean {
@@ -105,12 +143,21 @@ export function ticketWsDoReq(req: FastifyRequest): boolean {
   return ticketWsValido(String(q));
 }
 
-export function sessaoValida(req: FastifyRequest): boolean {
-  if (!authOnlineAtivo()) return false;
+export function sessaoDoReq(req: FastifyRequest): SessaoOnline | null {
+  if (!authOnlineAtivo()) return null;
   const tok = cookieDe(req, SESSION_COOKIE);
-  if (!tok) return false;
-  const s = lerSessao(tok);
-  return !!s && s.u === config.usuarioOnline;
+  if (!tok) return null;
+  return lerSessao(tok);
+}
+
+export function sessaoValida(req: FastifyRequest): boolean {
+  return !!sessaoDoReq(req);
+}
+
+export function usuarioDoReq(req: FastifyRequest): Usuario | null {
+  const s = sessaoDoReq(req);
+  if (!s || !usuariosRepo) return null;
+  return usuariosRepo.getById(s.uid) ?? null;
 }
 
 /** Bearer MYBOTS_HUB_TOKEN so para processos locais (key watcher). Recusa se veio pelo tunel. */
@@ -118,7 +165,6 @@ export function hubTokenLoopbackOk(req: FastifyRequest): boolean {
   if (!config.hubToken) return false;
   const token = String(req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
   if (!token || token !== config.hubToken) return false;
-  // Pedido pelo tunel/proxy: nunca aceitar o token do hub remotamente
   if (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.headers["x-real-ip"]) return false;
   const peer = String((req.raw as any)?.socket?.remoteAddress ?? req.socket?.remoteAddress ?? req.ip ?? "")
     .replace(/^::ffff:/i, "")
@@ -126,19 +172,26 @@ export function hubTokenLoopbackOk(req: FastifyRequest): boolean {
   return peer === "127.0.0.1" || peer === "::1" || peer === "localhost";
 }
 
-function setSessionCookie(reply: FastifyReply, usuario: string) {
+function appendSetCookie(reply: FastifyReply, cookie: string) {
+  const prev = reply.getHeader("set-cookie");
+  if (!prev) { reply.header("set-cookie", cookie); return; }
+  const arr = Array.isArray(prev) ? prev.map(String) : [String(prev)];
+  arr.push(cookie);
+  reply.header("set-cookie", arr);
+}
+
+export function setSessionCookie(reply: FastifyReply, sessao: { u: string; uid: string; role: RoleUsuario }) {
   const exp = Date.now() + SESSION_TTL_MS;
-  const payload = Buffer.from(JSON.stringify({ u: usuario, exp }), "utf8").toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ u: sessao.u, uid: sessao.uid, role: sessao.role, exp }), "utf8").toString("base64url");
   const token = assinar(payload);
-  const secure = true;
-  reply.header(
-    "set-cookie",
+  appendSetCookie(
+    reply,
     `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
   );
 }
 
 function clearSessionCookie(reply: FastifyReply) {
-  reply.header("set-cookie", `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+  appendSetCookie(reply, `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
 function rateLimitOk(ip: string): { ok: true } | { ok: false; retryAfter: number } {
@@ -172,27 +225,25 @@ function limparFalhas(ip: string) {
   tentativas.delete(ip);
 }
 
-/** Rotas públicas mesmo com auth online ligado. */
+/** Rotas publicas mesmo com auth online ligado. */
 export function rotaPublicaOnline(url: string): boolean {
   const caminho = url.split("?")[0];
   if (caminho === "/api/health") return true;
   if (caminho === "/api/login" || caminho === "/api/logout" || caminho === "/api/me") return true;
+  if (caminho === "/api/auth/google" || caminho === "/api/auth/google/callback") return true;
   if (caminho === "/api/channels/incoming") return true;
-  // Telas remotas do bot: NUNCA tratar .js/.css/.png sob /pc/ ou /android/
-  // como assets publicos da UI. Se o onRequest sair cedo, o proxy da Selkies
-  // nao roda e a aba Meu PC fica branca.
   if (caminho.startsWith("/pc/") || caminho.startsWith("/android/")) return false;
-  // static assets of the UI
   if (caminho === "/" || caminho === "/index.html") return true;
   if (caminho.startsWith("/assets/") || caminho.startsWith("/amebas/") || caminho.startsWith("/icon") || caminho.endsWith(".svg") || caminho.endsWith(".png") || caminho.endsWith(".webmanifest") || caminho.endsWith(".css") || caminho.endsWith(".js") || caminho.endsWith(".map") || caminho.endsWith(".woff2")) return true;
   if (caminho.startsWith("/mybots/assets/") || caminho === "/mybots" || caminho === "/mybots/" || caminho === "/mybots/index.html") return true;
+  if (caminho.startsWith("/app/assets/") || caminho === "/app" || caminho === "/app/" || caminho === "/app/index.html") return true;
   return false;
 }
 
 export function registrarAuthOnline(app: FastifyInstance) {
   app.post("/api/login", async (req, reply) => {
-    if (!authOnlineAtivo()) {
-      return reply.code(400).send({ error: "login online nao configurado" });
+    if (!senhaOnlineAtiva()) {
+      return reply.code(400).send({ error: "login com senha nao configurado" });
     }
     const ip = ipDe(req);
     const lim = rateLimitOk(ip);
@@ -211,8 +262,12 @@ export function registrarAuthOnline(app: FastifyInstance) {
       return reply.code(401).send({ error: "usuario ou senha invalidos" });
     }
     limparFalhas(ip);
-    setSessionCookie(reply, config.usuarioOnline);
-    return { ok: true, usuario: config.usuarioOnline };
+    const ownerEmail = (config.ownerEmail || config.usuarioOnline).toLowerCase();
+    const owner = usuariosRepo?.ensureOwner(ownerEmail, config.usuarioOnline);
+    if (!owner) return reply.code(500).send({ error: "falha ao criar usuario owner" });
+    usuariosRepo?.touchLogin(owner.id);
+    setSessionCookie(reply, { u: owner.email, uid: owner.id, role: "owner" });
+    return { ok: true, usuario: owner.email, uid: owner.id, role: "owner" as const };
   });
 
   app.post("/api/logout", async (_req, reply) => {
@@ -221,9 +276,20 @@ export function registrarAuthOnline(app: FastifyInstance) {
   });
 
   app.get("/api/me", async (req) => {
-    if (!authOnlineAtivo()) return { autenticado: true, modo: "local" };
-    if (sessaoValida(req)) return { autenticado: true, usuario: config.usuarioOnline };
-    return { autenticado: false };
+    if (!authOnlineAtivo()) return { autenticado: true, modo: "local", google: false, senha: false };
+    const s = sessaoDoReq(req);
+    if (s) {
+      const u = usuariosRepo?.getById(s.uid);
+      return {
+        autenticado: true,
+        usuario: s.u,
+        uid: s.uid,
+        role: s.role,
+        name: u?.name ?? s.u,
+        google: googleOAuthAtivo(),
+        senha: senhaOnlineAtiva(),
+      };
+    }
+    return { autenticado: false, google: googleOAuthAtivo(), senha: senhaOnlineAtiva() };
   });
 }
-

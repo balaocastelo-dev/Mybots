@@ -34,6 +34,7 @@ export type ManagedBotDef = {
   gerente?: boolean;
   /** cofre da empresa: preenche credencial e não revela o valor */
   cofre?: boolean;
+  ownerUserId?: string;
 };
 
 export type ManagedBotStatus = ManagedBotDef & { running: boolean; pid?: number; restarts: number; lastExit?: number | null };
@@ -145,6 +146,7 @@ export class BotManager {
       autoStart: input.autoStart ?? true,
       controlMode: isControlMode(input.controlMode) ? input.controlMode : "supervisionado",
       opencodePort: port,
+      ownerUserId: input.ownerUserId,
       createdAt: Date.now(),
       protegido: input.protegido === true || undefined,
       gerente: input.gerente === true || undefined,

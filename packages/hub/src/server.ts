@@ -43,10 +43,19 @@ import { estadoDaChave } from "./chaves.js";
 import { registerColabRoutes, registrarRotasColab } from "./colab/rotas.js";
 import { registrarCofre } from "./cofreRotas.js";
 import { instalarRedacao, redigir } from "./redacao.js";
-import { authOnlineAtivo, cookieDe, emitirTicketWs, hubTokenLoopbackOk, registrarAuthOnline, rotaPublicaOnline, sessaoValida, SESSION_COOKIE, ticketWsDoReq } from "./authOnline.js";
+import { authOnlineAtivo, cookieDe, emitirTicketWs, hubTokenLoopbackOk, lerTicketWs, registrarAuthOnline, rotaPublicaOnline, sessaoDoReq, sessaoValida, SESSION_COOKIE, setUsuariosRepo, ticketWsDoReq, usuarioDoReq } from "./authOnline.js";
+import { registrarAuthGoogle } from "./authGoogle.js";
+import { UsuariosRepo } from "./usuarios.js";
+import { escopoDeQuery, filtrarBotsPorUsuario, filtrarPorOwnerUserId, podeAcessarBot } from "./isolamento.js";
+import { config as hubConfig } from "./config.js";
 
 export async function startServer(hub: Hub) {
   instalarRedacao();
+  const usuarios = new UsuariosRepo(hub.db.db);
+  usuarios.ensure();
+  const ownerEmail = (hubConfig.ownerEmail || hubConfig.usuarioOnline || "").toLowerCase();
+  if (ownerEmail) usuarios.ensureOwner(ownerEmail, hubConfig.usuarioOnline || ownerEmail);
+  setUsuariosRepo(usuarios);
   const app = Fastify({
     logger: false,
     bodyLimit: 60 * 1024 * 1024,
@@ -59,6 +68,8 @@ export async function startServer(hub: Hub) {
       const query = q >= 0 ? bruto.slice(q) : "";
       if (caminho === "/mybots" || caminho === "/mybots/") return "/" + query.replace(/^\?/, "?");
       if (caminho.startsWith("/mybots/")) return caminho.slice("/mybots".length) + query;
+      if (caminho === "/app" || caminho === "/app/") return "/" + query.replace(/^\?/, "?");
+      if (caminho.startsWith("/app/")) return caminho.slice("/app".length) + query;
       return bruto;
     },
   });
@@ -242,7 +253,10 @@ export async function startServer(hub: Hub) {
 
   // --- WebSockets ---
   app.get("/ws/node", { websocket: true }, (socket) => hub.handleNodeConnection(socket as any));
-  app.get("/ws/ui", { websocket: true }, (socket) => hub.handleUiConnection(socket as any));
+  app.get("/ws/ui", { websocket: true }, (socket, req) => {
+    const s = sessaoDoReq(req as any) || lerTicketWs(String((req.query as any)?.ticket || ""));
+    hub.handleUiConnection(socket as any, s ? { uid: s.uid, role: s.role, u: s.u } : null);
+  });
   // Ponte VNC: o navegador fala noVNC por este WebSocket e o Hub repassa os bytes.
   // Destinos: "mac" (host fixo) ou "empresa:<id>" (127.0.0.1 na porta que o Hub
   // publicou). Qualquer outro destino fecha. A senha da interface já passou no hook.
@@ -337,6 +351,7 @@ export async function startServer(hub: Hub) {
 
   // --- API REST ---
   registrarAuthOnline(app);
+  registrarAuthGoogle(app);
   app.get("/api/health", async () => ({ ok: true, version: config.version, online: hub.onlineBots(), chaveDaCasa: estadoDaChave() }));
   // o painel mostra a reserva do sistema (percentual desta maquina): numero real, lido na hora
   app.get("/api/maquina", async () => ({ ...(await lerMaquina()), saberes: hub.db.contarSaberes() }));
@@ -353,7 +368,14 @@ export async function startServer(hub: Hub) {
     });
   });
   registerPainel(app, hub);
-  app.get("/api/bots", async () => hub.summaries());
+  app.get("/api/bots", async (req) => {
+    const user = usuarioDoReq(req);
+    if (authOnlineAtivo()) {
+      const escopo = escopoDeQuery(req.query as any, user);
+      return hub.summariesPara(user ? { uid: user.id, role: user.role } : null, escopo);
+    }
+    return hub.summaries();
+  });
   app.get("/api/conversations", async () => hub.db.listConversations());
   app.get("/api/conversations/:id/messages", async (req) => {
     const { id } = req.params as { id: string };
@@ -372,16 +394,23 @@ export async function startServer(hub: Hub) {
   });
 
   // Snapshot HTTP: lista + aprovacoes quando o WS nao sobe (rewrite Vercel nao faz upgrade).
-  app.get("/api/ui/snapshot", async () => ({
-    type: "snapshot" as const,
-    bots: hub.summaries(),
-    approvals: hub.db.pendingApprovals(),
-    questions: hub.db.pendingQuestions(),
-    groups: hub.db.listGroups(),
-    routines: hub.db.listRoutines(),
-    voice: voiceConfig(),
-    control: hub.control(),
-  }));
+  app.get("/api/ui/snapshot", async (req) => {
+    const user = usuarioDoReq(req);
+    if (authOnlineAtivo()) {
+      const escopo = escopoDeQuery(req.query as any, user);
+      return hub.snapshotPara(user ? { uid: user.id, role: user.role } : null, escopo);
+    }
+    return {
+      type: "snapshot" as const,
+      bots: hub.summaries(),
+      approvals: hub.db.pendingApprovals(),
+      questions: hub.db.pendingQuestions(),
+      groups: hub.db.listGroups(),
+      routines: hub.db.listRoutines(),
+      voice: voiceConfig(),
+      control: hub.control(),
+    };
+  });
 
   // Origem do tunel para a UI abrir WS direto (cookie nao sobe; use ticket).
   app.get("/api/ui/ws-url", async () => {
@@ -396,8 +425,9 @@ export async function startServer(hub: Hub) {
   // Ticket de sessao curto (90s). Exige cookie mybots_session no mesmo host (via rewrite).
   app.post("/api/ui/ws-ticket", async (req, reply) => {
     if (authOnlineAtivo()) {
-      if (!sessaoValida(req)) return reply.code(401).send({ error: "nao autenticado" });
-      return emitirTicketWs(config.usuarioOnline);
+      const s = sessaoDoReq(req);
+      if (!s) return reply.code(401).send({ error: "nao autenticado" });
+      return emitirTicketWs(s);
     }
     return { ticket: "", expiresIn: 0 };
   });
@@ -1251,9 +1281,24 @@ export async function startServer(hub: Hub) {
     };
   });
 
-  app.get("/api/managed", async () => manager.list());
-  app.get("/api/managed/:id", async (req, reply) => manager.get((req.params as any).id) ?? reply.code(404).send({ error: "bot não encontrado" }));
-  app.post("/api/managed", async (req, reply) => {
+  app.get("/api/managed", async (req) => {
+    const all = manager.list();
+    if (!authOnlineAtivo()) return all;
+    const user = usuarioDoReq(req);
+    const escopo = escopoDeQuery(req.query as any, user);
+    return filtrarBotsPorUsuario(all.map((d: any) => ({ ...d, ownerUserId: d.ownerUserId || usuarios.ownerUserIdDoBot(d.id) })), user, escopo);
+  });
+  app.get("/api/managed/:id", async (req, reply) => {
+    const id = (req.params as any).id;
+    const bot = manager.get(id);
+    if (!bot) return reply.code(404).send({ error: "bot nao encontrado" });
+    if (authOnlineAtivo()) {
+      const user = usuarioDoReq(req);
+      if (!podeAcessarBot(user, id)) return reply.code(404).send({ error: "bot nao encontrado" });
+    }
+    return bot;
+  });
+    app.post("/api/managed", async (req, reply) => {
     const b = req.body as any;
     if (!b?.name?.trim()) return reply.code(400).send({ error: "name é obrigatório" });
     // Especialidade obrigatória: nunca nasce vazio. Default = Assistente geral.
@@ -1287,8 +1332,15 @@ export async function startServer(hub: Hub) {
         error: "Crie a primeira empresa antes: todo bot pertence a uma empresa.",
       });
     }
+    const userCriador = usuarioDoReq(req);
+    if (authOnlineAtivo() && userCriador) {
+      b.ownerUserId = userCriador.id;
+    } else if (authOnlineAtivo() && !userCriador && !criador) {
+      return reply.code(401).send({ error: "nao autenticado" });
+    }
     const r = manager.create(b);
     if ("error" in r) return reply.code(400).send(r);
+    if (b.ownerUserId) usuarios.setOwnerUserIdManaged(r.id, b.ownerUserId);
     hub.db.setEmpresaDoBot(r.id, r.name, empresa, false);
     // seed-especialidade: skills da especialidade viram saberes deste bot
     try {
@@ -1365,6 +1417,15 @@ export async function startServer(hub: Hub) {
     return r;
   });
   app.patch("/api/managed/:id", async (req, reply) => {
+    if (authOnlineAtivo()) {
+      const user = usuarioDoReq(req);
+      if (!podeAcessarBot(user, (req.params as any).id)) return reply.code(404).send({ error: "bot nao encontrado" });
+      if (user?.role === "cliente") {
+        // cliente nao troca de dono
+        const body = req.body as any;
+        if (body) delete body.ownerUserId;
+      }
+    }
     const r = manager.update((req.params as any).id, req.body as any);
     if (!r) return reply.code(404).send({ error: "bot não encontrado" });
     return "error" in r ? reply.code(400).send(r) : r;
@@ -1385,6 +1446,10 @@ export async function startServer(hub: Hub) {
   });
   app.get("/api/managed/:id/logs", async (req) => ({ log: manager.logs((req.params as any).id, Number((req.query as any).lines ?? 200)) }));
   app.delete("/api/managed/:id", async (req, reply) => {
+    if (authOnlineAtivo()) {
+      const user = usuarioDoReq(req);
+      if (!podeAcessarBot(user, (req.params as any).id)) return reply.code(404).send({ error: "bot nao encontrado" });
+    }
     const r = await manager.remove((req.params as any).id, (req.query as any).purge === "1");
     return r?.error ? reply.code(400).send(r) : { ok: true };
   });
@@ -1395,17 +1460,41 @@ export async function startServer(hub: Hub) {
   ]);
 
   // --- grupos ---
-  app.get("/api/groups", async () => hub.db.listGroups());
+  app.get("/api/groups", async (req) => {
+    const groups = hub.db.listGroups();
+    if (!authOnlineAtivo()) return groups;
+    const user = usuarioDoReq(req);
+    const escopo = escopoDeQuery(req.query as any, user);
+    return filtrarPorOwnerUserId(groups as any[], user, escopo);
+  });
   app.post("/api/groups", async (req, reply) => {
     const b = req.body as { name?: string; members?: string[] };
-    if (!b?.members?.length) return reply.code(400).send({ error: "members é obrigatório" });
-    return hub.createGroup(b.name ?? "Grupo", b.members);
+    if (!b?.members?.length) return reply.code(400).send({ error: "members e obrigatorio" });
+    const user = usuarioDoReq(req);
+    return hub.createGroup(b.name ?? "Grupo", b.members, user?.id);
   });
   app.patch("/api/groups/:id", async (req, reply) => {
+    if (authOnlineAtivo()) {
+      const user = usuarioDoReq(req);
+      const g0 = hub.db.getGroup((req.params as any).id) as any;
+      if (!g0) return reply.code(404).send({ error: "grupo nao encontrado" });
+      const ou = g0.ownerUserId || g0.owner_user_id || null;
+      if (user?.role === "cliente" && ou && ou !== user.id) return reply.code(404).send({ error: "grupo nao encontrado" });
+    }
     const g = hub.updateGroup((req.params as any).id, req.body as any);
-    return g ?? reply.code(404).send({ error: "grupo não encontrado" });
+    return g ?? reply.code(404).send({ error: "grupo nao encontrado" });
   });
-  app.delete("/api/groups/:id", async (req) => { hub.deleteGroup((req.params as any).id); return { ok: true }; });
+  app.delete("/api/groups/:id", async (req, reply) => {
+    if (authOnlineAtivo()) {
+      const user = usuarioDoReq(req);
+      const g0 = hub.db.getGroup((req.params as any).id) as any;
+      if (!g0) return reply.code(404).send({ error: "grupo nao encontrado" });
+      const ou = g0.ownerUserId || g0.owner_user_id || null;
+      if (user?.role === "cliente" && ou && ou !== user.id) return reply.code(404).send({ error: "grupo nao encontrado" });
+    }
+    hub.deleteGroup((req.params as any).id);
+    return { ok: true };
+  });
 
   // --- sala: os bots conversando entre si ---
   app.get("/api/salas", async () => hub.sala.ativas());
@@ -1606,6 +1695,18 @@ export async function startServer(hub: Hub) {
 
   // --- arquivos ---
   app.get("/api/files/:id/:name?", async (req, reply) => {
+    if (authOnlineAtivo()) {
+      const user = usuarioDoReq(req);
+      const f0 = hub.db.getFile((req.params as any).id) as any;
+      if (f0) {
+        const ou = f0.owner_user_id || null;
+        const botOwner = f0.bot_id ? usuarios.ownerUserIdDoBot(f0.bot_id) : null;
+        const dono = ou || botOwner;
+        if (user?.role === "cliente" && dono && dono !== user.id) {
+          return reply.code(404).send({ error: "arquivo nao encontrado" });
+        }
+      }
+    }
     const f = hub.db.getFile((req.params as any).id);
     if (!f || !fs.existsSync(f.path)) return reply.code(404).send({ error: "arquivo não encontrado" });
     // Foto e PDF seguem abertos (o chat já embute). Vídeo pede a senha da interface.

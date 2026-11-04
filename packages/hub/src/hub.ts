@@ -107,6 +107,8 @@ export class Hub {
     anotar: (conversationId, texto) => { this.marcador(conversationId, texto, { sala: true }); },
   });
   private uis = new Set<WebSocket>();
+  /** Sessao online por socket da UI (multi-tenant). */
+  private uiSessoes = new WeakMap<WebSocket, { uid: string; role: "owner" | "cliente"; u: string }>();
   private chamadaAtiva = new Set<string>();
   private streams = new Map<string, { conversationId: string; botId: string; text: string; createdAt: number; tools: ToolRecord[]; /** o que já foi mandado para a voz (chamada de voz: ele fala enquanto escreve) */ falado?: string; /** o que a interface já está mostrando, já sem pensamento */ mostrado?: string }>();
 
@@ -487,7 +489,39 @@ export class Hub {
 
   broadcastUi(msg: HubToUi) {
     const data = JSON.stringify(msg);
-    for (const ws of this.uis) if (ws.readyState === ws.OPEN) ws.send(data);
+    for (const ws of this.uis) {
+      if (ws.readyState !== ws.OPEN) continue;
+      const sess = this.uiSessoes.get(ws);
+      if (!sess) { ws.send(data); continue; }
+      // Filtra eventos de bot/grupo para o dono do socket
+      const botId = (msg as any).botId || (msg as any).bot?.id || (msg as any).message?.sender?.id;
+      if ((msg as any).type === "groups") {
+        const groups = ((msg as any).groups || []).filter((g: any) => {
+          const ou = g.ownerUserId || g.owner_user_id || null;
+          if (sess.role === "owner") return true;
+          if (ou) return ou === sess.uid;
+          return true;
+        });
+        ws.send(JSON.stringify({ ...msg, groups }));
+        continue;
+      }
+      if ((msg as any).type === "snapshot") {
+        ws.send(JSON.stringify(this.snapshotPara(sess, "todos")));
+        continue;
+      }
+      if (botId && typeof botId === "string" && botId !== "system" && botId !== "user") {
+        const { getUsuariosRepo } = require("./authOnline.js") as typeof import("./authOnline.js");
+        const owner = getUsuariosRepo()?.ownerUserIdDoBot(botId) || null;
+        if (sess.role !== "owner" && owner && owner !== sess.uid) continue;
+      }
+      if ((msg as any).type === "bot.update" && (msg as any).bot) {
+        const id = (msg as any).bot.id;
+        const { getUsuariosRepo } = require("./authOnline.js") as typeof import("./authOnline.js");
+        const owner = getUsuariosRepo()?.ownerUserIdDoBot(id) || (msg as any).bot.ownerUserId || null;
+        if (sess.role !== "owner" && owner && owner !== sess.uid) continue;
+      }
+      ws.send(data);
+    }
   }
 
   /**
@@ -820,7 +854,14 @@ export class Hub {
   }
 
   summaries(): BotSummary[] {
-    return this.db.listBots().map((b) => ({ ...this.summary(b), empresaId: b.empresaId ?? null, ponte: !!b.ponte }));
+    const { getUsuariosRepo } = require("./authOnline.js") as typeof import("./authOnline.js");
+    const repo = getUsuariosRepo();
+    return this.db.listBots().map((b) => ({
+      ...this.summary(b),
+      empresaId: b.empresaId ?? null,
+      ponte: !!b.ponte,
+      ownerUserId: (b as any).ownerUserId || repo?.ownerUserIdDoBot(b.id) || null,
+    }));
   }
 
   /** A empresa de um bot. null = acima das empresas (o chefe e o Medico do Sistema). */
@@ -1818,22 +1859,80 @@ export class Hub {
 
   // ---------- interface ----------
 
-  handleUiConnection(ws: WebSocket) {
+  handleUiConnection(ws: WebSocket, sessao?: { uid: string; role: "owner" | "cliente"; u: string } | null) {
     this.uis.add(ws);
+    if (sessao?.uid) this.uiSessoes.set(ws, sessao);
     ws.on("message", (raw) => {
       let msg: UiToHub;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
       try { this.onUiMessage(ws, msg); }
       catch (e) { console.error(`[hub] erro ao processar ${msg.type} da interface: ${(e as Error).message}`); }
     });
-    ws.on("close", () => this.uis.delete(ws));
+    ws.on("close", () => { this.uis.delete(ws); this.uiSessoes.delete(ws); });
+  }
+
+  /** Snapshot filtrado para um usuario (REST e WS). */
+  snapshotPara(user: { uid: string; role: "owner" | "cliente" } | null | undefined, escopo: "meus" | "clientes" | "todos" = "todos") {
+    const bots = this.summariesPara(user, escopo);
+    const botIds = new Set(bots.map((b) => b.id));
+    const groups = this.db.listGroups().filter((g: any) => {
+      if (!user) return false;
+      if (user.role === "owner") {
+        if (escopo === "todos") return true;
+        const ou = g.ownerUserId || g.owner_user_id || null;
+        if (escopo === "meus") return !ou || ou === user.uid;
+        return !!ou && ou !== user.uid;
+      }
+      const ou = g.ownerUserId || g.owner_user_id || null;
+      if (ou) return ou === user.uid;
+      // legado: grupo sem dono — so membros visiveis ao cliente
+      return (g.members || []).some((id: string) => botIds.has(id));
+    });
+    return {
+      type: "snapshot" as const,
+      bots,
+      approvals: this.db.pendingApprovals().filter((a: any) => !user || user.role === "owner" || botIds.has(a.botId)),
+      questions: this.db.pendingQuestions().filter((q: any) => !user || user.role === "owner" || botIds.has(q.botId)),
+      groups,
+      routines: this.db.listRoutines().filter((r: any) => {
+        if (!user) return false;
+        if (user.role === "owner" && escopo === "todos") return true;
+        const ou = r.ownerUserId || r.owner_user_id || null;
+        if (user.role === "owner" && escopo === "meus") return !ou || ou === user.uid;
+        if (user.role === "owner" && escopo === "clientes") return !!ou && ou !== user.uid;
+        return ou === user.uid;
+      }),
+      voice: voiceConfig(),
+      control: this.control(),
+      importFile: this.pendingImport,
+    };
+  }
+
+  summariesPara(user: { uid: string; role: "owner" | "cliente" } | null | undefined, escopo: "meus" | "clientes" | "todos" = "todos") {
+    const all = this.summaries();
+    if (!user) return all;
+    // lazy require evita ciclo no load
+    const { getUsuariosRepo } = require("./authOnline.js") as typeof import("./authOnline.js");
+    const repo = getUsuariosRepo();
+    return all.filter((b) => {
+      const owner = (b as any).ownerUserId || repo?.ownerUserIdDoBot(b.id) || null;
+      if (user.role === "owner") {
+        if (escopo === "todos") return true;
+        if (escopo === "meus") return !owner || owner === user.uid;
+        return !!owner && owner !== user.uid;
+      }
+      return owner === user.uid;
+    });
   }
 
   private onUiMessage(ws: WebSocket, msg: UiToHub) {
     switch (msg.type) {
-      case "subscribe":
-        ws.send(JSON.stringify({ type: "snapshot", bots: this.summaries(), approvals: this.db.pendingApprovals(), questions: this.db.pendingQuestions(), groups: this.db.listGroups(), routines: this.db.listRoutines(), voice: voiceConfig(), control: this.control(), importFile: this.pendingImport } satisfies HubToUi));
+      case "subscribe": {
+        const sess = this.uiSessoes.get(ws);
+        const snap = this.snapshotPara(sess ?? null, "todos");
+        ws.send(JSON.stringify({ ...snap, importFile: this.pendingImport } satisfies HubToUi));
         return;
+      }
       case "send":
         this.sendUserMessage(msg.conversationId, msg.text, msg.attachments);
         return;
@@ -1986,9 +2085,12 @@ export class Hub {
 
   // ---------- grupos ----------
 
-  createGroup(name: string, members: string[]): Group {
-    const g: Group = { id: newId("g"), name: name.trim() || "Grupo", members: [...new Set(members)], createdAt: Date.now() };
+  createGroup(name: string, members: string[], ownerUserId?: string): Group {
+    const g: Group = { id: newId("g"), name: name.trim() || "Grupo", members: [...new Set(members)], createdAt: Date.now(), ...(ownerUserId ? { ownerUserId } as any : {}) };
     this.db.upsertGroup(g);
+    if (ownerUserId) {
+      try { (this.db as any).db.prepare("UPDATE groups SET owner_user_id=? WHERE id=?").run(ownerUserId, g.id); } catch { /* coluna pode faltar ate ensure */ }
+    }
     this.db.audit(null, "group.created", { id: g.id, name: g.name, members: g.members });
     this.broadcastUi({ type: "groups", groups: this.db.listGroups() });
     return g;

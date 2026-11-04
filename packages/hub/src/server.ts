@@ -1761,7 +1761,7 @@ export async function startServer(hub: Hub) {
     const bot = hub.summaries().find((x) => x.id === b.botId);
     try {
       const { audio, mime, vel } = await synthesize(b.text, b.voice ?? pickVoice(b.botId ?? "bot", bot?.voice), b.vel);
-      reply.header("content-type", mime).header("cache-control", "no-store").header("x-fala-vel", String(vel));
+      reply.header("content-type", mime).header("cache-control", "private, max-age=86400").header("x-fala-vel", String(vel));
       return reply.send(audio);
     } catch (e) {
       return reply.code(503).send({ error: (e as Error).message });

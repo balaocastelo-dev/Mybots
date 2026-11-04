@@ -112,7 +112,7 @@ export class MediaService {
         const file = this.saveFile(botId, name, out.mime, out.data);
         this.db.mediaUsageAdd(today(), botId, provider, kind, amount);
         this.db.audit(botId, "media.generated", { kind, provider, prompt: prompt.slice(0, 300), seconds: seconds || undefined, file: file.name, size: file.size });
-        return { ok: true, provider, file: { id: file.id, name: file.name, mime: file.mime, url: file.url, size: file.size }, seconds: seconds || undefined, note: out.note };
+        return { ok: true, provider, file: { id: file.id, name: file.name, mime: file.mime, url: file.url, size: file.size, path: (file as { path?: string }).path }, seconds: seconds || undefined, note: out.note };
       } catch (e) {
         tried.push({ provider, reason: (e as Error).message.slice(0, 300) });
       }

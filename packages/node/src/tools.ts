@@ -273,6 +273,21 @@ function textoDoHub(r: { ok: boolean; data: unknown }): string {
   return typeof d === "string" ? d : JSON.stringify(d, null, 2);
 }
 
+
+/** Confere campos required do JSON Schema da ferramenta antes de executar. */
+export function validarArgsFerramenta(name: string, args: Record<string, unknown>, defs: ToolDef[] = TOOL_DEFS): string | null {
+  const def = defs.find((d) => d.name === name);
+  if (!def) return `Ferramenta desconhecida: ${name}`;
+  const required = (def.parameters as { required?: string[] } | undefined)?.required ?? [];
+  const faltando: string[] = [];
+  for (const r of required) {
+    const v = args?.[r];
+    if (v === undefined || v === null || v === "") faltando.push(r);
+  }
+  if (!faltando.length) return null;
+  return `Parâmetros inválidos em ${name}: faltou ${faltando.join(", ")}. Envie um objeto JSON com os campos obrigatórios.`;
+}
+
 export async function runTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<{ output: string; ok: boolean }> {
   try {
     switch (name) {
@@ -794,9 +809,10 @@ async function gerarPdf(args: Record<string, any>, ctx: ToolContext) {
   const aviso = modelo === "orcamento" && args.interno === true
     ? "\nATENÇÃO: esta via mostra o custo e a margem. É sua e do chefe — para o cliente, gere outra com interno=false e ofereça essa."
     : "";
-  if (args.mandar === false) return { output: r.output + aviso, ok: true };
+  const meta = JSON.stringify({ status: "concluido", file_path: saida });
+  if (args.mandar === false) return { output: r.output + "\n" + meta + aviso, ok: true };
   const foi = await sendFileToChief(saida, String(args.legenda ?? titulo), ctx);
-  return { output: r.output + (foi ? "\nJá mandei o PDF no chat do chefe." : "\nO PDF ficou pronto, mas não consegui mandar no chat.") + aviso, ok: true };
+  return { output: r.output + (foi ? "\nJá mandei o PDF no chat do chefe." : "\nO PDF ficou pronto, mas não consegui mandar no chat.") + "\n" + meta + aviso, ok: true };
 }
 
 

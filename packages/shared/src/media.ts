@@ -73,7 +73,7 @@ export type MediaUsage = {
 };
 
 export type MediaResult =
-  | { ok: true; provider: MediaProvider; file: { id: string; name: string; mime: string; url: string; size: number }; seconds?: number; note?: string }
+  | { ok: true; provider: MediaProvider; file: { id: string; name: string; mime: string; url: string; size: number; path?: string }; seconds?: number; note?: string }
   | { ok: false; error: string; tried: Array<{ provider: MediaProvider; reason: string }> };
 
 /** Dentro do limite? (amount = 1 imagem ou N segundos de vídeo) */

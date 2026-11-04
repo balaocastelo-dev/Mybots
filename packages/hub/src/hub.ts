@@ -1365,7 +1365,20 @@ export class Hub {
         return;
       case "generate_media": {
         void this.generateMedia(botId, msg.conversationId, msg.kind, msg.prompt, { refFileId: msg.refFileId, seconds: msg.seconds, aspect: msg.aspect })
-          .then((r) => this.sendNode(botId, { type: "result", callId: msg.callId, ok: r.ok, data: r.ok ? `${msg.kind === "image" ? "Imagem" : "Vídeo"} gerado por ${r.provider} e enviado ao chat: ${r.file.name} (${config.publicUrl}${r.file.url})${r.note ? ` — ${r.note}` : ""}` : r.error }));
+          .then((r) => {
+            if (!r.ok) return this.sendNode(botId, { type: "result", callId: msg.callId, ok: false, data: r.error });
+            const abs = (r.file as { path?: string }).path || r.file.url;
+            const payload = {
+              status: "concluido" as const,
+              file_path: abs,
+              name: r.file.name,
+              url: `${config.publicUrl}${r.file.url}`,
+              provider: r.provider,
+              note: r.note,
+            };
+            const texto = `${msg.kind === "image" ? "Imagem" : "Vídeo"} gerado por ${r.provider} e enviado ao chat: ${r.file.name} (${payload.url})${r.note ? ` — ${r.note}` : ""}\n${JSON.stringify(payload)}`;
+            return this.sendNode(botId, { type: "result", callId: msg.callId, ok: true, data: texto });
+          })
         return;
       }
       case "status":
@@ -1968,7 +1981,7 @@ export class Hub {
     const file = path.join(dir, `${id}-${safe}`);
     fs.writeFileSync(file, data);
     this.db.insertFile({ id, name: safe, mime, size: data.length, botId, path: file, createdAt: Date.now() });
-    return { id, name: safe, mime, size: data.length, url: `/api/files/${id}/${encodeURIComponent(safe)}` };
+    return { id, name: safe, mime, size: data.length, url: `/api/files/${id}/${encodeURIComponent(safe)}`, path: file };
   }
 
   // ---------- grupos ----------

@@ -71,7 +71,7 @@ const DEFAULTS: NodeConfig = {
   engine: "direct",
   workspace: "./workspace",
   personaFile: "./persona.md",
-  provider: { kind: "ollama", model: "qwen3:30b" },
+  provider: { kind: "ollama", model: "qwen3:14b", temperature: 0.1, visionModel: "qwen2.5vl:7b" },
   opencode: { bin: "opencode", port: 4096, spawn: true, manageConfig: true },
   approval: {
     autoAllow: ["^(dir|ls|git status|git log|git diff|type|cat|echo|whoami|hostname|ipconfig|ifconfig|pwd|cd)\\b"],

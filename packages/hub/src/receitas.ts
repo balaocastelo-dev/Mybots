@@ -43,6 +43,8 @@ export type Receita = {
     name: string;
     description: string;
     ameba?: string;
+    /** Voz neural pt-BR padrão do bot (ex.: pt-BR-AntonioNeural). */
+    voice?: string;
   };
   memory: ReceitaMemory[];
   skills: ReceitaSkill[];
@@ -386,4 +388,14 @@ export function aplicarCapacidadesBase(db: Db): { skills: number; erros: string[
     }
   }
   return { skills, erros };
+}
+
+/** Equipe inicial (receitas/_base/equipe-inicial.json): ids de receitas com que toda conta nova nasce. */
+export function idsEquipeInicial(): string[] {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(pastaReceitas(), "_base", "equipe-inicial.json"), "utf8"));
+    return Array.isArray(raw?.receitas) ? raw.receitas.map(String).filter((id: string) => !!carregarReceita(id)) : [];
+  } catch {
+    return [];
+  }
 }

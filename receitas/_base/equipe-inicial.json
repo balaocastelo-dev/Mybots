@@ -1,0 +1,9 @@
+{
+  "versao": 1,
+  "descricao": "Equipe inicial: toda conta/empresa nova nasce com estes bots (importados dos bots PROGRAMADOR, SEO & AEO Desk e Director do Grok Bot).",
+  "receitas": [
+    "programador-pro",
+    "seo-aeo-desk",
+    "director"
+  ]
+}

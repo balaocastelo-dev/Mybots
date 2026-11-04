@@ -1,9 +1,29 @@
 {
   "versao": 1,
-  "descricao": "Equipe inicial: toda conta/empresa nova nasce com estes bots (importados dos bots PROGRAMADOR, SEO & AEO Desk e Director do Grok Bot).",
+  "descricao": "Equipe inicial: toda conta nova nasce com estes bots. PROGRAMADOR, SEO & AEO Desk e Director, mais os 20 ofícios (e-mail, venda, marketing, pesquisa e compras). O id é receita-sufixo, o mesmo sufixo dos iniciais.",
   "receitas": [
     "programador-pro",
     "seo-aeo-desk",
-    "director"
+    "director",
+    "secretaria-email",
+    "assistente-executiva",
+    "atendimento-cliente",
+    "tira-duvidas",
+    "prospeccao-clientes",
+    "vendedor",
+    "pos-atendimento",
+    "gestor-leads",
+    "depoimentos",
+    "revisor-textos",
+    "redator-textos",
+    "imagens-miniaturas",
+    "cortes-reels",
+    "vigia-anuncios",
+    "analista-marketing",
+    "vigia-concorrencia",
+    "monitor-marca",
+    "auditor-site",
+    "pesquisador-web",
+    "cacador-ofertas"
   ]
 }

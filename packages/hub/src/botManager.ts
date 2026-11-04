@@ -39,6 +39,10 @@ export type ManagedBotDef = {
   gerente?: boolean;
   /** cofre da empresa: preenche credencial e não revela o valor */
   cofre?: boolean;
+  /** Enxerga imagem (modelo com visão e a ferramenta de ler anexo). */
+  visao?: boolean;
+  /** A ferramenta navegador entra no kit deste bot. */
+  navegacao?: boolean;
   ownerUserId?: string;
   /** alma com que nasceu, se nasceu com uma */
   alma?: string;
@@ -176,6 +180,8 @@ export class BotManager {
       alma: plano?.id || undefined,
       autoStart: input.autoStart ?? true,
       controlMode: isControlMode(input.controlMode) ? input.controlMode : "supervisionado",
+      ...(input.visao ? { visao: true } : {}),
+      ...(input.navegacao ? { navegacao: true } : {}),
       opencodePort: port,
       ownerUserId: input.ownerUserId,
       createdAt: Date.now(),
@@ -291,6 +297,8 @@ export class BotManager {
         ...(d.provider.kind === "8token" || d.provider.baseURL ? { baseURL: d.provider.kind === "8token" ? baseDo8token(d.provider.baseURL) : d.provider.baseURL } : {}),
       },
       capacidades: { visao: d.capacidades?.visao !== false, navegacaoWeb: d.capacidades?.navegacaoWeb !== false },
+      ...(d.visao || d.capacidades?.visao !== false ? { visao: true } : {}),
+      ...(d.navegacao || d.capacidades?.navegacaoWeb !== false ? { navegacao: true } : {}),
       opencode: { port: d.opencodePort, spawn: true, manageConfig: true, hubHttp: `http://127.0.0.1:${config.port}` },
       approval: { mode: d.controlMode ?? "supervisionado" },
     };
@@ -457,7 +465,12 @@ export class BotManager {
           engine: cfg.engine === "opencode" ? "opencode" : "direct",
           provider: { kind, model, apiKey: env[KEY_ENV[kind] ?? "MYBOTS_API_KEY"], baseURL },
           providerEscolha: tinhaProvedor ? "manual" : "padrao",
-          capacidades: { visao: cfg.capacidades?.visao !== false, navegacaoWeb: cfg.capacidades?.navegacaoWeb !== false },
+          capacidades: {
+            visao: cfg.capacidades?.visao !== false && cfg.visao !== false,
+            navegacaoWeb: cfg.capacidades?.navegacaoWeb !== false && cfg.navegacao !== false,
+          },
+          ...(cfg.visao === true || cfg.capacidades?.visao !== false ? { visao: true } : {}),
+          ...(cfg.navegacao === true || cfg.capacidades?.navegacaoWeb !== false ? { navegacao: true } : {}),
           persona: fs.existsSync(personaFile) ? fs.readFileSync(personaFile, "utf8").replace(/^\uFEFF/, "") : defaultPersona(cfg.bot?.name ?? name, cfg.bot?.role ?? "Assistente"),
           autoStart: true,
           opencodePort: cfg.opencode?.port ?? 4096,

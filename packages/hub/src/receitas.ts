@@ -45,7 +45,18 @@ export type Receita = {
     ameba?: string;
     /** Voz neural pt-BR padrão do bot (ex.: pt-BR-AntonioNeural). */
     voice?: string;
+    /** Cor do link (acento do compartilhamento). */
+    cor?: string;
+    cores?: { accent?: string | null; coatLight?: string | null; coatDark?: string | null };
+    /** Página de origem, quando o bot veio de um link. */
+    link?: string;
   };
+  /** Instruções completas (system prompt). Sem isto, o nascimento usa a persona padrão. */
+  persona?: string;
+  /** Provedor deste bot. Sem isto, vale o padrão da casa. */
+  provedor?: { kind: string; model: string; visao?: boolean; navegacao?: boolean };
+  visao?: boolean;
+  navegacao?: boolean;
   memory: ReceitaMemory[];
   skills: ReceitaSkill[];
   routines: ReceitaRoutine[];

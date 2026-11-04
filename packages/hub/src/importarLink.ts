@@ -93,6 +93,49 @@ export function limparTituloOg(titulo: string): string {
   return sem || s;
 }
 
+const NOMES_DA_EQUIPE: Array<[string, string]> = [
+  ["Secretária de E-mail e Agenda", "secretaria-email"],
+  ["Tradbot", "secretaria-email"],
+  ["Assistente Executiva", "assistente-executiva"],
+  ["Executive Assistant", "assistente-executiva"],
+  ["Atendimento ao Cliente", "atendimento-cliente"],
+  ["Product Support Inbox Assistant", "atendimento-cliente"],
+  ["Tira-Dúvidas de Produtos", "tira-duvidas"],
+  ["Company Docs Q&A", "tira-duvidas"],
+  ["Prospecção de Clientes", "prospeccao-clientes"],
+  ["Outbound Prospecting", "prospeccao-clientes"],
+  ["Vendedor", "vendedor"],
+  ["Sell Bot", "vendedor"],
+  ["Pós-Atendimento", "pos-atendimento"],
+  ["Call Follow-Ups", "pos-atendimento"],
+  ["Gestor de Leads", "gestor-leads"],
+  ["Lead Pipeline Desk", "gestor-leads"],
+  ["Depoimentos de Clientes", "depoimentos"],
+  ["Customer Proof Desk", "depoimentos"],
+  ["Revisor de Textos", "revisor-textos"],
+  ["Copy Humanizer", "revisor-textos"],
+  ["Redator", "redator-textos"],
+  ["Writing Bot", "redator-textos"],
+  ["Imagens e Miniaturas", "imagens-miniaturas"],
+  ["Stills & Clips Desk", "imagens-miniaturas"],
+  ["Cortes para Reels", "cortes-reels"],
+  ["Clip Bot", "cortes-reels"],
+  ["Vigia de Anúncios", "vigia-anuncios"],
+  ["Ad Spend Watch", "vigia-anuncios"],
+  ["Analista de Marketing", "analista-marketing"],
+  ["Marketing Analyst", "analista-marketing"],
+  ["Vigia da Concorrência", "vigia-concorrencia"],
+  ["Competitor Watch", "vigia-concorrencia"],
+  ["Monitor de Marca", "monitor-marca"],
+  ["Overheard", "monitor-marca"],
+  ["Auditor de Site", "auditor-site"],
+  ["Site Audit", "auditor-site"],
+  ["Pesquisador", "pesquisador-web"],
+  ["Researchy", "pesquisador-web"],
+  ["Caçador de Ofertas", "cacador-ofertas"],
+  ["Deal Hunting", "cacador-ofertas"],
+];
+
 export function normalizarNomeBot(nome: string): string {
   return nome
     .normalize("NFD")
@@ -105,7 +148,9 @@ export function normalizarNomeBot(nome: string): string {
     .replace(/\s+bot$/, "");
 }
 
-/** Id da receita da equipe inicial, se o nome bater com Director, PROGRAMADOR ou SEO & AEO Desk. */
+for (const [nome, id] of NOMES_DA_EQUIPE) RECEITA_POR_NOME[normalizarNomeBot(nome)] = id;
+
+/** Id da receita da equipe inicial, se o nome bater com um bot que a conta já nasce tendo. */
 export function receitaInicialPorNome(nome: string): string | null {
   const n = normalizarNomeBot(nome);
   return RECEITA_POR_NOME[n] ?? null;

@@ -11,6 +11,8 @@ export const PADRAO_DA_CASA = {
   model: EIGHTTOKEN_MODEL,
   baseURL: EIGHTTOKEN_BASE_URL,
   keyEnv: EIGHTTOKEN_KEY_ENV,
+  visao: true,
+  navegacao: true,
 };
 
 /** O que a casa usava antes deste padrão. Migração trata isto como escolha automática. */
@@ -29,7 +31,14 @@ const MODELOS_DE_NASCIMENTO: Record<string, string[]> = {
   "8token": ["claude-sonnet-5"],
 };
 
-const RECEITAS_INICIAIS = ["programador-pro", "seo-aeo-desk", "director"];
+const RECEITAS_INICIAIS = [
+  "programador-pro", "seo-aeo-desk", "director",
+  "secretaria-email", "assistente-executiva", "atendimento-cliente", "tira-duvidas",
+  "prospeccao-clientes", "vendedor", "pos-atendimento", "gestor-leads", "depoimentos",
+  "revisor-textos", "redator-textos", "imagens-miniaturas", "cortes-reels", "vigia-anuncios",
+  "analista-marketing", "vigia-concorrencia", "monitor-marca", "auditor-site",
+  "pesquisador-web", "cacador-ofertas",
+];
 
 export type EscolhaProvedor = "manual" | "padrao";
 

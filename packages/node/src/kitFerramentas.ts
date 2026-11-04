@@ -44,13 +44,15 @@ export type KitInfo = { defs: ToolDef[]; incluidas: string[]; cortadas: string[]
  */
 export function selecionarKitFerramentas(
   todas: ToolDef[],
-  opts: { role?: string; botId?: string; persona?: string; visao?: boolean; navegacaoWeb?: boolean } = {},
+  opts: { role?: string; botId?: string; persona?: string; visao?: boolean; navegacaoWeb?: boolean; navegacao?: boolean } = {},
 ): KitInfo {
   const texto = [opts.role, opts.botId, opts.persona].filter(Boolean).join("\n");
   const adminLivre = process.env.MYBOTS_KIT_ADMIN === "1";
+  const visaoLigada = opts.visao !== false;
+  const webLigada = opts.navegacaoWeb !== false && opts.navegacao !== false;
   const ligadas = [
-    ...(opts.visao === false ? [] : VISÃO),
-    ...(opts.navegacaoWeb === false ? [] : WEB),
+    ...(visaoLigada ? VISÃO : []),
+    ...(webLigada ? WEB : []),
   ];
   let especialidade = "geral";
   let extras = PADRAO_EXTRA;
@@ -62,6 +64,17 @@ export function selecionarKitFerramentas(
       teto = k.teto;
       break;
     }
+  }
+  // Visão e navegação nascem ligadas. Flag explícito false tira. Flag true ainda
+  // pede o print da tela (screenshot) junto da navegação.
+  if (opts.navegacao) {
+    extras = [...new Set([...extras, "navegador", "fetch_url", "screenshot"])];
+    teto = Math.max(teto, NUCLEO.length + 4);
+    if (especialidade === "geral") especialidade = "navegacao";
+  }
+  if (opts.visao) {
+    extras = [...new Set([...extras, "read_attachment"])];
+    teto = Math.max(teto, NUCLEO.length + 5);
   }
   const envTeto = Number(process.env.MYBOTS_KIT_MAX);
   if (Number.isFinite(envTeto) && envTeto >= 5) teto = envTeto;

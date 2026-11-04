@@ -1,5 +1,16 @@
 # Progresso
 
+## 2026-11-04 — 20 bots iniciais em toda conta
+
+- Toda conta nova nasce com os 20 ofícios além de PROGRAMADOR, SEO & AEO Desk e Director. O id continua `receita-sufixo` (8 caracteres do usuário, sem `usr_`, ou o id da empresa).
+- Conta ou empresa que já existe recebe só o que falta, uma vez. Bot que já está lá não é reescrito, mesmo se o dono editou. Apagar depois não faz o bot voltar.
+- Cada um tem nome em pt-BR, foto e cor lidas das páginas `https://x.ai/bot/…` com o parser do importar-link, e instruções em pt-BR (papel, o que faz, passo a passo, limites, tom), adaptadas a R$, WhatsApp, Mercado Livre e Google Ads Brasil.
+- Regra em todos: nada de enviar mensagem, comprar, postar ou apagar sem o dono pedir com as próprias palavras.
+- Os 20 ofícios e os três que já existiam nascem no padrão da casa: 8Token (`claude-fable-5.1`), visão e navegação ligadas.
+- Arquivos: `receitas/_base/equipe-inicial.json`, `receitas/*.json` dos 20, `packages/hub/src/equipeInicial.ts`, `server.ts`, `receitas.ts`, `botManager.ts`, `importarLink.ts`, `packages/node/src/kitFerramentas.ts`, `config.ts`, `engines/direct.ts`, `packages/ui/src/avatar.tsx`, `dialogos.tsx`, `tests/equipeInicial.test.ts`.
+- `docs/HANDOFF.md` não está neste repositório; nada a marcar lá.
+- Teste: `node --import tsx --test tests/equipeInicial.test.ts tests/importarLink.test.ts` passou (catálogo, seed idempotente, isolamento por tenant, kit de visão/navegação).
+
 ## 2026-11-04 — 8Token, visão e navegação no nascimento
 
 - Todo bot novo (qualquer conta, inclusive gerente, cofre, receita e link) nasce no 8Token: base `https://8token.tech/v1` (OpenAI), modelo `claude-fable-5.1`. A chave é `EIGHTTOKEN_API_KEY` no `.env` do Hub.

@@ -65,6 +65,10 @@ export type NodeConfig = {
   };
   maxToolRounds: number;
   historyMessages: number;
+  /** Liga a visão deste bot (imagem no modelo e a ferramenta de ler anexo). */
+  visao?: boolean;
+  /** Liga a navegação: a ferramenta navegador entra no kit. */
+  navegacao?: boolean;
 };
 
 const DEFAULTS: NodeConfig = {

@@ -83,6 +83,17 @@ export class ServicoAndroid implements FonteDoProvedor {
     return this.pareamento.parear(botId, body);
   }
 
+  /** Serial já listado por `adb devices` como device. Não pareia e não reconecta. */
+  async adotar(botId: string, serial: string) {
+    if (!idDeBotValido(botId)) return { ok: false as const, erro: "id inválido" };
+    if (!this.deps.botExiste(botId)) return { ok: false as const, erro: "bot não encontrado" };
+    return this.pareamento.adotar(botId, serial);
+  }
+
+  aparelhosConectados() {
+    return this.pareamento.aparelhosConectados();
+  }
+
   async status(botId: string) {
     return this.pareamento.status(botId);
   }

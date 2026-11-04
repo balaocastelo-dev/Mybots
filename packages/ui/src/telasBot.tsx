@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { CartaoWhats } from "./whatsBot";
 
 /**
  * As duas telas do bot, no painel da direita.
@@ -216,6 +217,9 @@ export function TelasDoBot({ botId, nome, mostrarPareamento = false, modo = "amb
         <i className={"pc-luz" + (status.tipo === "ok" && status.conectado ? " on" : status.tipo === "ok" && status.cadastrado ? " frio" : "")} />
         <span>Android · {rotuloStatus(status)}</span>
       </div>}
+
+      {modo !== "pc" && <CartaoWhats botId={botId} onde="celular" />}
+      {modo === "pc" && <CartaoWhats botId={botId} onde="pc" />}
 
       {mostrarPareamento && modo !== "pc" && <ParearAndroid botId={botId} status={status} />}
 

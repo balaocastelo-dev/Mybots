@@ -37,10 +37,10 @@ export function validarPareamento(p: PedidoPareamento): string | null {
   if (!ipLocal(ip)) return "Use o IP da rede local.";
   const portaRuim = (n: number) => !Number.isInteger(n) || n < 1 || n > 65535;
   if (portaRuim(p.porta)) return "Porta de pareamento inválida.";
-  if (p.porta === 8787 || p.porta === 8791) return "Essa porta não entra no pareamento.";
+  if (p.porta === 8787 || p.porta === 8790 || p.porta === 8791) return "Essa porta não entra no pareamento.";
   if (p.portaConexao != null && p.portaConexao !== 0) {
     if (portaRuim(p.portaConexao)) return "Porta de conexão inválida.";
-    if (p.portaConexao === 8787 || p.portaConexao === 8791) return "Essa porta não entra no pareamento.";
+    if (p.portaConexao === 8787 || p.portaConexao === 8790 || p.portaConexao === 8791) return "Essa porta não entra no pareamento.";
   }
   if (!/^\d{6}$/.test(p.codigo.trim())) return "O código tem 6 dígitos.";
   return null;
@@ -66,6 +66,41 @@ export async function lerStatusPareamento(botId: string, transporte: Transporte 
     return { conectado: o.conectado === true, cadastrado: o.cadastrado === true, origem: "hub" };
   } catch {
     return { ...local, origem: "exemplo" };
+  }
+}
+
+const PORTA_RESERVADA = new Set([8787, 8790, 8791]);
+
+/** Serial já visto pelo adb, no formato IP:porta. Não é código de pareamento. */
+export function validarSerialConectado(serial: string): string | null {
+  const s = serial.trim();
+  const m = s.match(/^(\d{1,3}(?:\.\d{1,3}){3}):(\d+)$/);
+  if (!m || !ipLocal(m[1])) return "Use IP:porta da rede local, como 192.168.15.5:5555.";
+  const porta = Number(m[2]);
+  if (!Number.isInteger(porta) || porta < 1 || porta > 65535) return "Porta inválida.";
+  if (PORTA_RESERVADA.has(porta)) return "Essa porta não é de celular.";
+  return null;
+}
+
+export async function adotarCelular(botId: string, serial: string, transporte: Transporte = api): Promise<{ ok: boolean; erro?: string; origem: "hub" | "exemplo" }> {
+  const erro = validarSerialConectado(serial);
+  if (erro) return { ok: false, erro, origem: "exemplo" };
+  try {
+    const r = await transporte(`/bots/${encodeURIComponent(botId)}/android/adotar`, {
+      method: "POST",
+      body: JSON.stringify({ serial: serial.trim() }),
+    });
+    const bruto: unknown = await r.json().catch(() => null);
+    const o = bruto && typeof bruto === "object" ? bruto as Record<string, unknown> : {};
+    if (rotaAusente(r.status, bruto)) return { ok: false, erro: "O Hub ainda não aceita vincular o aparelho já conectado.", origem: "hub" };
+    if (!r.ok || o.ok === false) {
+      const msg = typeof o.erro === "string" ? o.erro.slice(0, 180) : "Não vinculei.";
+      return { ok: false, erro: msg, origem: "hub" };
+    }
+    memoria.set(botId, { cadastrado: true, conectado: true });
+    return { ok: true, origem: "hub" };
+  } catch {
+    return { ok: false, erro: "O Hub não respondeu.", origem: "hub" };
   }
 }
 

@@ -27,6 +27,7 @@ const MAC_VNC = { host: process.env.MYBOTS_MAC_IP || "192.168.15.9", porta: 5900
 import { PROVEDORES } from "@mybots/shared";
 import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
+import { registrarAlmas } from "./almas.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA, soulBlock } from "./botManager.js";
 import { listarEspecialidades, detectarEspecialidade, porId, montarPersonaComEspecialidade, idPadrao, categoriasDoCatalogo, resumoParaUi, carregarSkillsDaEspecialidade, recarregarEspecialidades } from "./especialidades.js";
 import { carregarReceita, idsEquipeInicial, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, reaplicarReceitaEmBot, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
@@ -617,6 +618,7 @@ export async function startServer(hub: Hub) {
 
   // --- bots criados pela interface (hospedados neste PC) ---
   const manager = new BotManager(hub);
+  registrarAlmas(app);
   hub.managedIds = () => new Set(manager.list().map((b) => b.id));
   hub.protegidosIds = () => new Set(manager.list().filter((b) => b.protegido).map((b) => b.id));
   // mesma regra que o nó usa no prompt: a persona diz se o bot fala outro idioma
@@ -630,6 +632,7 @@ export async function startServer(hub: Hub) {
     botExiste: botConhecido,
   });
   android.registrar();
+  hub.androidDoBot = (id) => android.cadastro(id);
   atenderAndroidHttp = (req, reply) => android.http(req, reply);
   atenderAndroidWs = (socket, req) => android.ws(socket, req);
   app.post("/api/bots/:id/android/pair", async (req, reply) => {
@@ -644,6 +647,18 @@ export async function startServer(hub: Hub) {
     if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
     const serial = String(((req.body ?? {}) as any).serial ?? "");
     return android.usar(id, serial);
+  });
+  app.get("/api/bots/:id/android/aparelhos", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    return { aparelhos: await android.aparelhosConectados() };
+  });
+  app.post("/api/bots/:id/android/adotar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ ok: false, erro: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ ok: false, erro: "bot não encontrado" });
+    return android.adotar(id, String((req.body as { serial?: unknown } | null)?.serial ?? ""));
   });
   app.get("/api/bots/:id/android/status", async (req, reply) => {
     const id = String((req.params as any).id ?? "");
@@ -1189,6 +1204,49 @@ export async function startServer(hub: Hub) {
     return { ok: true };
   });
 
+  // --- WhatsApp da conta (QR no Celular; todo bot da mesma conta usa; dono conferido) ---
+  app.get("/api/bots/:id/whatsapp", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    return hub.whatsBot.estado(hub.contaDoBot(id));
+  });
+  app.post("/api/bots/:id/whatsapp/conectar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const b = (req.body ?? {}) as { forcar?: boolean };
+    hub.db.audit(id, "whatsapp.bot.conectar", { forcar: !!b.forcar });
+    return hub.whatsBot.conectar(hub.contaDoBot(id), !!b.forcar);
+  });
+  app.post("/api/bots/:id/whatsapp/desligar", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const b = (req.body ?? {}) as { esquecer?: boolean };
+    await hub.whatsBot.desligar(hub.contaDoBot(id), !!b.esquecer);
+    hub.db.audit(id, "whatsapp.bot.desligar", { esquecer: !!b.esquecer });
+    return { ok: true };
+  });
+  app.get("/api/bots/:id/nascimento", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    return hub.nascimentoDe(id) ?? { botId: id, passo: null, gmail: "pendente", whatsapp: "pendente", pedidos: [] };
+  });
+  app.post("/api/bots/:id/nascimento/gmail", async (req, reply) => {
+    const id = String((req.params as any).id ?? "");
+    if (!idDeBotValido(id)) return reply.code(400).send({ error: "id inválido" });
+    if (!botConhecido(id)) return reply.code(404).send({ error: "bot não encontrado" });
+    if (authOnlineAtivo() && !podeAcessarBot(usuarioDoReq(req), id)) return reply.code(404).send({ error: "bot não encontrado" });
+    const e = await hub.nascimento.tentarGmail(id, true);
+    return e ?? { botId: id };
+  });
+
   // --- WhatsApp de cada empresa (conta propria, QR propria) ---
   app.get("/api/whatsapp", async () => hub.whats.todos());
   app.get("/api/empresas/:id/whatsapp", async (req) => hub.whats.estado((req.params as any).id));
@@ -1309,7 +1367,7 @@ export async function startServer(hub: Hub) {
       const esp = porId(espId) || porId(idPadrao());
       b.especialidadeId = esp?.id ?? idPadrao();
       if (!b.role?.trim()) b.role = esp?.nome || "Assistente geral";
-      if (!b.personaTouched || !String(b.persona || "").trim()) {
+      if (!b.alma && (!b.personaTouched || !String(b.persona || "").trim())) {
         b.persona = montarPersonaComEspecialidade(String(b.name).trim(), String(b.role || esp?.nome || "").trim(), esp, soulBlock());
       }
       if (!isControlMode(b.controlMode) || b.controlMode === "total" || b.controlMode === "deus") {

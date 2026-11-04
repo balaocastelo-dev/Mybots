@@ -1,0 +1,24 @@
+{
+  "nome": "balao-sistema",
+  "versaoContrato": "1.0.0",
+  "oQueE": "MCP do ERP próprio do Balão da Informática, loja e assistência técnica em Campinas. Não é o Bling (bling.com.br) nem o MCP https://mcp.bling.com.br/mcp.",
+  "comoOAppIntegra": "O repositório MyBots não chamava este sistema direto. A integração existente é o servidor MCP de nome balao-sistema. A ferramenta listar_endpoints descreve a API interna como MEU BLING: é o sistema da loja, com rotas /financeiro, /contas-receber e /contas-pagar.",
+  "ferramentas": [
+    "listar_endpoints", "consultar", "gravar", "excluir", "buscar_clientes", "historico_do_cliente",
+    "buscar_produtos", "listar_vendas", "ver_venda", "listar_ordens_servico", "ver_ordem_servico",
+    "resumo_financeiro", "situacoes", "buscar", "resumo_do_dia", "criar_cliente", "estoque_do_produto",
+    "criar_venda", "mudar_situacao", "abrir_ordem_servico", "contas_a_receber", "contas_a_pagar",
+    "contas_financeiras", "baixar_conta", "formas_pagamento", "vendedores_e_tecnicos", "enviar_whatsapp"
+  ],
+  "rotasDeLeitura": [
+    "GET /financeiro/resumo",
+    "GET /financeiro/fluxo-caixa",
+    "GET /financeiro/movimentos",
+    "GET /contas-receber",
+    "GET /contas-pagar",
+    "GET /contas-financeiras"
+  ],
+  "gravarExigeConfirmacao": ["baixar_conta", "gravar", "excluir", "criar_venda", "enviar_whatsapp", "criar_cliente"],
+  "segredos": ["balao.sistema.url", "balao.sistema.token"],
+  "pin": "Não há repositório público deste MCP neste workspace. O pin é esta versão de contrato mais o sha256 gravado na allowlist. A URL e o token só existem no cofre."
+}

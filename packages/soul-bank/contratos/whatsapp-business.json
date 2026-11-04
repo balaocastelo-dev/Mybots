@@ -1,0 +1,18 @@
+{
+  "nome": "WhatsApp Business Tools",
+  "oficial": true,
+  "fornecedor": "Meta",
+  "documentacao": "https://developers.facebook.com/documentation/mcp/whatsapp-business-tools-mcp",
+  "documentacaoAtualizada": "2026-09-03",
+  "transporte": "streamable-http",
+  "url": "https://mcp.facebook.com/whatsapp_business_tools",
+  "autenticacao": "oauth",
+  "oauth": {
+    "resource": "https://mcp.facebook.com/whatsapp_business_tools",
+    "authorizationServers": ["https://www.facebook.com/whatsapp_business_tools"],
+    "scopes": ["business_management", "whatsapp_business_management", "whatsapp_business_messaging"]
+  },
+  "status": "beta",
+  "verificadoEm": "2026-10-31",
+  "naoUsar": ["WhatsApp Web", "Baileys", "whatsapp-web.js", "lharries/whatsapp-mcp"]
+}

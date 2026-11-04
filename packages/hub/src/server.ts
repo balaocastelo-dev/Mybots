@@ -28,7 +28,7 @@ import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA, soulBlock } from "./botManager.js";
 import { listarEspecialidades, detectarEspecialidade, porId, montarPersonaComEspecialidade, idPadrao, categoriasDoCatalogo, resumoParaUi, carregarSkillsDaEspecialidade, recarregarEspecialidades } from "./especialidades.js";
-import { carregarReceita, idsEquipeInicial, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
+import { carregarReceita, idsEquipeInicial, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, reaplicarReceitaEmBot, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
 import { dmConversation, newId } from "@mybots/shared";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
 import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
@@ -1561,6 +1561,35 @@ export async function startServer(hub: Hub) {
     const r = carregarReceita((req.params as any).id);
     if (!r) return reply.code(404).send({ error: "receita não encontrada" });
     return r;
+  });
+  // Reaplicar receita em bots que já existem (ex.: depois de reescrever os modelos da equipe inicial).
+  // Body: { empresa: "balao-anchieta", bots?: ["id", ...], dryRun?: true }. Sem `bots`, pega os bots da
+  // empresa criados com essa receita. Mantém memórias aprendidas, diário, conversas e rotinas existentes.
+  app.post("/api/receitas/:id/reaplicar", async (req, reply) => {
+    const rid = String((req.params as any).id);
+    const receita = carregarReceita(rid);
+    if (!receita) return reply.code(404).send({ error: "receita não encontrada" });
+    const b = (req.body ?? {}) as { empresa?: string; bots?: string[]; dryRun?: boolean };
+    const empresa = String(b.empresa || "");
+    if (!empresa || !hub.db.getEmpresa(empresa)) return reply.code(400).send({ error: "empresa não encontrada" });
+    const alvos = hub.db.listBots().filter((bot) => bot.empresaId === empresa && (
+      b.bots?.length ? b.bots.includes(bot.id) : ((manager.get(bot.id) as any)?.receitaId === rid || bot.id === `${rid}-${empresa}`.slice(0, 40).replace(/-$/, ""))
+    ));
+    if (b.dryRun) return { receita: rid, empresa, bots: alvos.map((x) => x.id), dryRun: true };
+    const out: Array<Record<string, unknown>> = [];
+    for (const bot of alvos) {
+      try {
+        const res = reaplicarReceitaEmBot(hub.db, { botId: bot.id, botName: bot.name, empresaId: empresa, receita });
+        try { manager.update(bot.id, { role: receita.profile.description } as any); } catch {}
+        hub.db.audit(bot.id, "receita.reaplicar", { receita: rid, revisao: receita.revisao ?? 1, ...res });
+        hub.botUpdate(bot.id);
+        out.push({ bot: bot.id, ...res });
+      } catch (e) {
+        out.push({ bot: bot.id, erro: (e as Error).message });
+      }
+    }
+    hub.broadcastKnowledge();
+    return { receita: rid, revisao: receita.revisao ?? 1, empresa, bots: out };
   });
   app.post("/api/receitas/gerar", async () => gerarTodasReceitasDoCatalogo());
   app.post("/api/receitas/import", async (req, reply) => {

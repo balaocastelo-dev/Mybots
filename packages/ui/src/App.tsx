@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { BotSummary, ControlMode, ControlState, Group, PendingApproval, PendingQuestion, Routine, StoredMessage } from "@mybots/shared";
 import { CONTROL_DESCRIPTIONS, CONTROL_LABELS, CONTROL_MODES, dmConversation, effectiveControl, faseDoStatus, groupConversation } from "@mybots/shared";
 import { useHub, type ToolInfo } from "./hub";
@@ -23,6 +23,7 @@ import { BotMenu, ImportDialog } from "./menuBot";
 import { Ameba, Avatar, colorFor, definirTonsDaEquipe } from "./avatar";
 import { TimeAmebas, TituloMyBots } from "./timeAmebas";
 import { Conversation } from "./conversa";
+import { Trabalhos } from "./trabalhos";
 import { EmpresasDialog, ExcluirBotDialog, NewBotDialog, NewGerenteDialog, NewGroupDialog } from "./dialogos";
 import { Icone } from "./icones";
 import { BOTS_EXEMPLO, EMPRESA_EXEMPLO } from "./colab/amostra";
@@ -84,25 +85,39 @@ export function App() {
   const aoPuxarSidebar = (e: ReactPointerEvent) => {
     if (typeof window !== "undefined" && window.innerWidth < 768) return;
     e.preventDefault();
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* segue */ }
+    document.body.classList.add("puxando-sidebar");
     const inicioX = e.clientX;
     const inicioW = sidebarWRef.current;
     const mover = (ev: PointerEvent) => {
-      const max = Math.min(window.innerWidth * 0.5, Math.max(200, window.innerWidth - 420));
+      const max = Math.max(200, Math.min(900, window.innerWidth - 420));
       const w = Math.min(Math.max(200, inicioW + (ev.clientX - inicioX)), max);
       setSidebarW(w);
     };
     const soltar = () => {
       window.removeEventListener("pointermove", mover);
       window.removeEventListener("pointerup", soltar);
+      window.removeEventListener("pointercancel", soltar);
+      document.body.classList.remove("puxando-sidebar");
       try { localStorage.setItem("mybots-sidebar-largura", String(Math.round(sidebarWRef.current))); } catch { /* segue */ }
     };
     window.addEventListener("pointermove", mover);
     window.addEventListener("pointerup", soltar);
+    window.addEventListener("pointercancel", soltar);
+  };
+  const teclaSidebar = (e: ReactKeyboardEvent) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const max = Math.max(200, Math.min(900, window.innerWidth - 420));
+    const w = Math.min(Math.max(200, sidebarWRef.current + (e.key === "ArrowRight" ? 24 : -24)), max);
+    setSidebarW(w);
+    try { localStorage.setItem("mybots-sidebar-largura", String(Math.round(w))); } catch { /* segue */ }
   };
   const resetSidebarW = () => {
     setSidebarW(SIDEBAR_PADRAO);
     try { localStorage.setItem("mybots-sidebar-largura", String(SIDEBAR_PADRAO)); } catch { /* segue */ }
   };
+  const [verArquivos, setVerArquivos] = useState(false);
   const [newGroup, setNewGroup] = useState(false);
   const [newBot, setNewBot] = useState(false);
   const [nascendoId, setNascendoId] = useState<string | null>(null);
@@ -307,6 +322,9 @@ export function App() {
             <button className={"icon-btn canto" + (buscaAberta ? " on" : "")} type="button" title="Buscar" aria-label="Buscar" onClick={() => setBuscaAberta((v) => !v)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
             </button>
+            <button className={"icon-btn canto" + (verArquivos ? " on" : "")} type="button" title="Arquivos criados pelos bots" aria-label="Arquivos" onClick={() => setVerArquivos((v) => !v)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </button>
             <button className="icon-btn canto only-desktop" type="button" title="Novo" aria-label="Novo" onClick={() => setMais((v) => !v)}>+</button>
             <button className={"icon-btn canto head-overflow-btn" + (mais ? " on" : "")} type="button" title="Mais" aria-label="Mais opções" aria-haspopup="menu" aria-expanded={mais}
               onClick={() => setMais((v) => !v)}>⋮</button>
@@ -412,7 +430,8 @@ export function App() {
         </ul>
         <footer className="sidebar-foot only-desktop">{equipe.filter((b) => b.online).length} de {equipe.length} online · voz: {state.voice.tts ? state.voice.ttsEngine : "navegador"} / {state.voice.stt ? "whisper" : "navegador"}</footer>
         <div className="sidebar-pega only-desktop" role="separator" aria-orientation="vertical" title="Arraste para mudar a largura; clique duplo para voltar"
-          onPointerDown={aoPuxarSidebar} onDoubleClick={resetSidebarW} />
+          onPointerDown={aoPuxarSidebar} onDoubleClick={resetSidebarW} onKeyDown={teclaSidebar} tabIndex={0}
+          aria-label="Largura da lista de bots" aria-valuemin={200} aria-valuemax={900} aria-valuenow={Math.round(sidebarW)} />
       </aside>
 
       <main className="chat" style={target?.kind === "bot" ? ({ "--bot": colorFor(target.bot.id) } as any) : undefined}>
@@ -537,7 +556,15 @@ export function App() {
       {legalPara && <TelaLegal empresaId={legalPara} empresaNome={empresas.find((e) => e.id === legalPara)?.nome ?? legalPara}
         onClose={() => { setLegalPara(null); setVerEmpresas(true); }} />}
       {verEmpresas && <EmpresasDialog empresas={empresas} bots={state.bots} onClose={() => { setVerEmpresas(false); void carregarEmpresas(); }} />}
-      {newBot && <NewBotDialog empresas={empresas} empresaAtiva={empresaAtiva} onCriou={() => void carregarEmpresas()} onClose={() => setNewBot(false)} onCreated={(id) => { setNewBot(false); setNascendoId(id); window.setTimeout(() => setNascendoId((cur) => cur === id ? null : cur), 2800); setSelected(dmConversation(id)); if (window.innerWidth < 768) setSidebarOpen(true); }} />}
+      {verArquivos && (
+          <div className="modal-bg" onClick={() => setVerArquivos(false)}>
+            <div className="modal wide arquivos-modal" onClick={(e) => e.stopPropagation()}>
+              <Trabalhos bots={equipe} endpoint="/api/arquivos" titulo="Arquivos do MyBots" onClose={() => setVerArquivos(false)}
+                onAbrirBot={(id) => { setVerArquivos(false); fecharColab(); setSelected(dmConversation(id)); }} />
+            </div>
+          </div>
+        )}
+        {newBot && <NewBotDialog empresas={empresas} empresaAtiva={empresaAtiva} onCriou={() => void carregarEmpresas()} onClose={() => setNewBot(false)} onCreated={(id) => { setNewBot(false); setNascendoId(id); window.setTimeout(() => setNascendoId((cur) => cur === id ? null : cur), 2800); setSelected(dmConversation(id)); if (window.innerWidth < 768) setSidebarOpen(true); }} />}
 
       {dialogo?.tipo === "aparencia" && (
         <EscolhaAparencia id={dialogo.bot.id} valor={dialogo.bot.avatar} onFechar={() => setDialogo(null)}

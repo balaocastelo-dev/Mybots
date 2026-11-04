@@ -28,7 +28,7 @@ import { readFile as lerArq, writeFile as gravarArq } from "node:fs/promises";
 import { pickVoice, synthesize, transcribe, voiceConfig, EDGE_PT_BR_VOICES, VOZES_CLONADAS } from "./voice.js";
 import { BotManager, PROVIDERS, PADRAO_DA_CASA, soulBlock } from "./botManager.js";
 import { listarEspecialidades, detectarEspecialidade, porId, montarPersonaComEspecialidade, idPadrao, categoriasDoCatalogo, resumoParaUi, carregarSkillsDaEspecialidade, recarregarEspecialidades } from "./especialidades.js";
-import { carregarReceita, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
+import { carregarReceita, idsEquipeInicial, listarReceitas, listarIdsReceitas, aplicarReceitaNoNascimento, aplicarCapacidadesBase, exportarBotComoReceita, saudacaoDeReceita, gerarTodasReceitasDoCatalogo } from "./receitas.js";
 import { dmConversation, newId } from "@mybots/shared";
 import { previaDe, enderecoDe, enderecoDoInsta } from "./previa.js";
 import { estadoDa as estadoDaMaquina, ligar as ligarMaquina, desligar as desligarMaquina, apagar as apagarMaquina, recriar as recriarMaquina, garantirDesktopNaRaiz, imagemPronta } from "./maquinas.js";
@@ -1112,7 +1112,9 @@ export async function startServer(hub: Hub) {
     catch (e) { console.error(`[pc] não registrei o PC de ${gerente.id}: ${(e as Error).message}`); }
     hub.broadcastKnowledge();
     hub.apresentarEmpresa(gerente.id, e.nome);
-    return { ...e, gerente: gerente.id };
+    // Equipe inicial: PROGRAMADOR, SEO & AEO Desk e Director nascem com a conta.
+    const equipe = await provisionarEquipeInicial(id, req.headers as Record<string, unknown>);
+    return { ...e, gerente: gerente.id, equipeInicial: equipe };
   });
   app.patch("/api/empresas/:id", async (req, reply) => {
     const id = (req.params as any).id;
@@ -1424,6 +1426,36 @@ export async function startServer(hub: Hub) {
 
   // --- rotinas ---
 
+  // Equipe inicial: cria os bots de receitas/_base/equipe-inicial.json que a empresa ainda não tem.
+  // Idempotente: serve para contas novas (chamado no POST /api/empresas) e para oferecer à conta do dono.
+  // Repassa só a autenticação de quem pediu (cookie/chave/token) para a chamada interna.
+  function repassarAuth(h: Record<string, unknown>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const k of ["cookie", "authorization", "x-mybots-key", "x-hub-token"]) if (typeof h[k] === "string") out[k] = h[k] as string;
+    return out;
+  }
+  async function provisionarEquipeInicial(empresa: string, auth: Record<string, unknown> = {}): Promise<Array<{ receita: string; bot?: string; status: string }>> {
+    const out: Array<{ receita: string; bot?: string; status: string }> = [];
+    const doEmpresa = hub.db.listBots().filter((b) => b.empresaId === empresa);
+    for (const rid of idsEquipeInicial()) {
+      const botId = `${rid}-${empresa}`.slice(0, 40).replace(/-$/, "");
+      if (doEmpresa.some((b) => b.id === botId)) { out.push({ receita: rid, bot: botId, status: "ja_existe" }); continue; }
+      try {
+        const res = await app.inject({ method: "POST", url: "/api/receitas/import", headers: { ...repassarAuth(auth), "x-mybots-interno": "equipe-inicial" }, payload: { receita: carregarReceita(rid), id: botId, empresa } });
+        out.push({ receita: rid, bot: botId, status: res.statusCode === 200 ? "criado" : `erro ${res.statusCode}: ${res.body.slice(0, 200)}` });
+      } catch (err) {
+        out.push({ receita: rid, status: `erro: ${(err as Error).message}` });
+      }
+    }
+    hub.db.audit(null, "empresa.equipe-inicial", { empresa, out });
+    return out;
+  }
+  app.get("/api/equipe-inicial", async () => ({ receitas: idsEquipeInicial() }));
+  app.post("/api/equipe-inicial", async (req, reply) => {
+    const empresa = String((req.body as any)?.empresa || hub.db.listEmpresas()[0]?.id || "");
+    if (!empresa || !hub.db.getEmpresa(empresa)) return reply.code(400).send({ error: "empresa não encontrada" });
+    return { empresa, bots: await provisionarEquipeInicial(empresa, req.headers as Record<string, unknown>) };
+  });
   app.get("/api/receitas", async () => ({
     receitas: listarReceitas().map((r) => ({
       id: r.id,
@@ -1463,6 +1495,7 @@ export async function startServer(hub: Hub) {
       name,
       role: receita.profile.description || receita.profile.name,
       avatar: receita.profile.ameba,
+      voice: body.voice || receita.profile.voice,
       especialidadeId: espId,
       receitaId: receita.id,
       receita,

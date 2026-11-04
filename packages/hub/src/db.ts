@@ -573,10 +573,13 @@ export class Db {
   deleteGroup(id: string) { this.db.prepare(`DELETE FROM groups WHERE id=?`).run(id); }
 
   // ---- arquivos ----
-  insertFile(f: { id: string; name: string; mime: string; size: number; botId: string; path: string; createdAt: number }) {
+  insertFile(f: { id: string; name: string; mime: string; size: number; botId: string; path: string; createdAt: number; ownerUserId?: string | null }) {
     this.db.prepare(`INSERT INTO files (id, name, mime, size, bot_id, path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(f.id, f.name, f.mime, f.size, f.botId, f.path, f.createdAt);
+    if (f.ownerUserId) {
+      try { this.db.prepare(`UPDATE files SET owner_user_id=? WHERE id=?`).run(f.ownerUserId, f.id); } catch { /* coluna via UsuariosRepo.ensure */ }
+    }
   }
-  getFile(id: string) { return this.db.prepare(`SELECT * FROM files WHERE id=?`).get(id) as { id: string; name: string; mime: string; size: number; bot_id: string; path: string; created_at: number } | undefined; }
+  getFile(id: string) { return this.db.prepare(`SELECT * FROM files WHERE id=?`).get(id) as { id: string; name: string; mime: string; size: number; bot_id: string; path: string; created_at: number; owner_user_id?: string } | undefined; }
   /** Tudo que os bots produziram, do mais novo para o mais velho. A tela "Trabalhos feitos" vive disto. */
   listFiles(limite = 500) {
     return this.db.prepare(`SELECT * FROM files ORDER BY created_at DESC LIMIT ?`).all(limite) as Array<{ id: string; name: string; mime: string; size: number; bot_id: string; path: string; created_at: number; owner_user_id?: string }>;
